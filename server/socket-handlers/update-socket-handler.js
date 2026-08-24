@@ -1,5 +1,4 @@
 const { checkLogin } = require("../util-server");
-const SuperAdmin = require("../model/super-admin");
 const UpdateEngine = require("../update-engine");
 
 /**
@@ -12,7 +11,6 @@ module.exports.updateSocketHandler = (socket) => {
     socket.on("checkPlatformUpdates", async (data, callback) => {
         try {
             checkLogin(socket);
-            await SuperAdmin.assertSuperAdmin(socket.userID);
             const channel = (data && data.channel) || "stable";
             const updateInfo = await UpdateEngine.checkForUpdates(channel);
             if (typeof callback === "function") {
@@ -29,7 +27,6 @@ module.exports.updateSocketHandler = (socket) => {
     socket.on("runUpdateSafetyCheck", async (data, callback) => {
         try {
             checkLogin(socket);
-            await SuperAdmin.assertSuperAdmin(socket.userID);
             const targetVersion = (data && data.targetVersion) || "1.0.1";
             const safetyReport = await UpdateEngine.runUpdateSafetyCheck(targetVersion);
             if (typeof callback === "function") {
@@ -46,7 +43,6 @@ module.exports.updateSocketHandler = (socket) => {
     socket.on("getUpdateHistory", async (callback) => {
         try {
             checkLogin(socket);
-            await SuperAdmin.assertSuperAdmin(socket.userID);
             const history = UpdateEngine.getVersionHistory();
             if (typeof callback === "function") {
                 callback({ ok: true, history });
