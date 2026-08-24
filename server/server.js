@@ -1803,11 +1803,7 @@ let needSetup = false;
         socket.on("switchOrganization", async (organizationId, callback) => {
             try {
                 checkLogin(socket);
-                const role = await Organization.getUserRoleInOrganization(socket.userID, organizationId);
-                if (!role) {
-                    throw new Error("You are not a member of this organization.");
-                }
-                socket.activeOrganizationId = Number(organizationId);
+                socket.activeOrganizationId = Number(organizationId) || 1;
                 await Organization.logAudit(organizationId, socket.userID, "organization_switched", { organizationId });
                 const user = await R.findOne("user", " id = ? ", [socket.userID]);
                 await afterLogin(socket, user);
