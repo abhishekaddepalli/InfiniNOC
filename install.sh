@@ -82,11 +82,13 @@ fi
 
 # Clone or Update Repository
 echo -e "${BLUE}[4/6] Setting up InfiniNOC at ${INSTALL_DIR}...${NC}"
-if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}Directory ${INSTALL_DIR} exists. Updating codebase...${NC}"
+if [ -d "$INSTALL_DIR/.git" ]; then
+    echo -e "${YELLOW}Directory ${INSTALL_DIR} exists. Syncing latest codebase...${NC}"
     cd "$INSTALL_DIR"
-    git pull origin main || true
+    git fetch origin main
+    git reset --hard origin/main
 else
+    rm -rf "$INSTALL_DIR"
     git clone "$REPO_URL" "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 fi
