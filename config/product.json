@@ -1,0 +1,18 @@
+{
+    "productName": "InfiniNOC",
+    "companyName": "Infiniforge Technologies",
+    "tagline": "Know Your Network. Before Your Customers Do.",
+    "website": "https://infiniforge.com",
+    "supportEmail": "support@infiniforge.com",
+    "logo": "/icon.svg",
+    "favicon": "/favicon.ico",
+    "copyright": "© Infiniforge Technologies. Powered by Abhishek A.",
+    "theme": {
+        "darkNavy": "#0f172a",
+        "navyBlue": "#1e293b",
+        "saffron": "#ff9933",
+        "saffronHover": "#e68a2e",
+        "green": "#2ecc71",
+        "white": "#ffffff"
+    }
+}

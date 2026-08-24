@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  infininoc-probe:
+    build: .
+    image: infininoc-probe:1.0.0
+    container_name: infininoc-probe
+    restart: always
+    environment:
+      - PROBE_CLOUD_URL=https://noc.infiniforge.com
+      - PROBE_ID=1
+      - PROBE_REGISTRATION_TOKEN=your_one_time_token_here
+    volumes:
+      - probe-data:/app/data
+
+volumes:
+  probe-data:

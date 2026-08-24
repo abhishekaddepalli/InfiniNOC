@@ -1,0 +1,16 @@
+{
+  "name": "infininoc-probe",
+  "version": "1.0.0",
+  "description": "InfiniNOC Remote Distributed Monitoring Probe",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "socket.io-client": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

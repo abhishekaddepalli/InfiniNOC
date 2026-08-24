@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  infininoc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: infiniforge/infininoc:1.0.0
+    container_name: infininoc-app
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    volumes:
+      - infininoc-data:/app/data
+
+volumes:
+  infininoc-data:
+    driver: local
