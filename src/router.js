@@ -275,7 +275,6 @@ const routes = [
         path: "/signup",
         component: () => import("./pages/NocSaaSSignup.vue"),
     },
-    },
     {
         path: "/setup",
         component: Setup,
