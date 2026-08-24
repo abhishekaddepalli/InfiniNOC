@@ -171,22 +171,6 @@ UPTIME_KUMA_PORT=3001
 
 ---
 
-## 🏛️ Super Admin Portal Guide
-
-- **Route**: `/super-admin`
-- **First-Time Super Admin Setup**: Sign up for an account on initial launch. Account #1 is automatically granted `is_super_admin = 1`.
-- **Super Admin Features**:
-  - Manage Organizations (`/super-admin/organizations`)
-  - Impersonate Tenant Accounts (`/super-admin/organizations`)
-  - SaaS Plans & Quotas (`/super-admin/plans`)
-  - GST Invoices (`/super-admin/invoices`)
-  - Razorpay Gateway Setup (`/super-admin/gateways`)
-  - White Label Branding (`/super-admin/branding`)
-  - SMTP Email Configuration (`/super-admin/email`)
-  - Platform Maintenance & Signups (`/super-admin/settings`)
-
----
-
 ## 📄 License & Ownership
 
 Copyright © 2026 **Infiniforge Technologies**. All Rights Reserved.  

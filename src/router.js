@@ -275,55 +275,6 @@ const routes = [
         path: "/signup",
         component: () => import("./pages/NocSaaSSignup.vue"),
     },
-    {
-        path: "/super-admin",
-        component: () => import("./layouts/SuperAdminLayout.vue"),
-        children: [
-            {
-                path: "",
-                component: () => import("./pages/super-admin/SuperAdminOverview.vue"),
-            },
-            {
-                path: "organizations",
-                component: () => import("./pages/super-admin/SuperAdminOrganizations.vue"),
-            },
-            {
-                path: "plans",
-                component: () => import("./pages/super-admin/SuperAdminPlans.vue"),
-            },
-            {
-                path: "invoices",
-                component: () => import("./pages/super-admin/SuperAdminInvoices.vue"),
-            },
-            {
-                path: "coupons",
-                component: () => import("./pages/super-admin/SuperAdminCoupons.vue"),
-            },
-            {
-                path: "gateways",
-                component: () => import("./pages/super-admin/SuperAdminGateways.vue"),
-            },
-            {
-                path: "branding",
-                component: () => import("./pages/super-admin/SuperAdminBranding.vue"),
-            },
-            {
-                path: "system-health",
-                component: () => import("./pages/super-admin/SuperAdminSystemHealth.vue"),
-            },
-            {
-                path: "audit-logs",
-                component: () => import("./pages/super-admin/SuperAdminAuditLogs.vue"),
-            },
-            {
-                path: "email",
-                component: () => import("./pages/super-admin/SuperAdminEmail.vue"),
-            },
-            {
-                path: "settings",
-                component: () => import("./pages/super-admin/SuperAdminSettings.vue"),
-            },
-        ],
     },
     {
         path: "/setup",
