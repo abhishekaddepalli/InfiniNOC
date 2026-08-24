@@ -256,10 +256,6 @@ const routes = [
                         component: () => import("./pages/BillingDashboard.vue"),
                     },
                     {
-                        path: "/admin",
-                        component: () => import("./pages/SuperAdminDashboard.vue"),
-                    },
-                    {
                         path: "/welcome",
                         component: () => import("./pages/NocOnboardingWizard.vue"),
                     },

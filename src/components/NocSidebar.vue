@@ -272,21 +272,6 @@
                         </li>
                     </ul>
                 </div>
-
-                <!-- Super Admin Section -->
-                <div v-if="isSuperAdmin" class="noc-nav-group mt-2">
-                    <ul class="nav flex-column gap-1">
-                        <li class="nav-item">
-                            <router-link to="/admin" class="nav-link d-flex align-items-center justify-content-between text-purple" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="user-shield" class="nav-icon text-purple" />
-                                    <span class="fw-bold">Super Admin</span>
-                                </div>
-                                <span class="badge bg-purple text-white">SAAS</span>
-                            </router-link>
-                        </li>
-                    </ul>
-                </div>
             </nav>
         </div>
     </div>
