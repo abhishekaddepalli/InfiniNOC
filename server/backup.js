@@ -385,6 +385,17 @@ class BackupEngine {
             await tar.x({
                 file: tempTarPath,
                 cwd: tempFolder,
+                filter: (entryPath, entry) => {
+                    // Prevent directory traversal or symbolic link escape
+                    if (entryPath.includes("..") || path.isAbsolute(entryPath)) {
+                        return false;
+                    }
+                    if (entry.type === "SymbolicLink" || entry.type === "Link") {
+                        return false;
+                    }
+                    const topLevel = entryPath.split(/[/\\]/)[0];
+                    return ["manifest.json", "kuma.db", "upload"].includes(topLevel);
+                },
             });
 
             const manifestPath = path.join(tempFolder, "manifest.json");
@@ -459,6 +470,17 @@ class BackupEngine {
             await tar.x({
                 file: tempTarPath,
                 cwd: restoreTempFolder,
+                filter: (entryPath, entry) => {
+                    // Prevent directory traversal or symbolic link escape
+                    if (entryPath.includes("..") || path.isAbsolute(entryPath)) {
+                        return false;
+                    }
+                    if (entry.type === "SymbolicLink" || entry.type === "Link") {
+                        return false;
+                    }
+                    const topLevel = entryPath.split(/[/\\]/)[0];
+                    return ["manifest.json", "kuma.db", "upload"].includes(topLevel);
+                },
             });
 
             // 4. Overwrite Database File (`kuma.db`)
