@@ -95,18 +95,19 @@ class SetupDatabase {
             dbConfig = {};
         }
 
-        if (process.env.UPTIME_KUMA_DB_TYPE) {
+        const dbType = process.env.INFININOC_DB_TYPE || process.env.UPTIME_KUMA_DB_TYPE;
+        if (dbType) {
             this.needSetup = false;
-            log.info("setup-database", "UPTIME_KUMA_DB_TYPE is provided by env, try to override db-config.json");
-            dbConfig.type = process.env.UPTIME_KUMA_DB_TYPE;
-            dbConfig.hostname = process.env.UPTIME_KUMA_DB_HOSTNAME;
-            dbConfig.port = process.env.UPTIME_KUMA_DB_PORT;
-            dbConfig.dbName = process.env.UPTIME_KUMA_DB_NAME;
-            dbConfig.username = getEnvOrFile("UPTIME_KUMA_DB_USERNAME");
-            dbConfig.password = getEnvOrFile("UPTIME_KUMA_DB_PASSWORD");
-            dbConfig.socketPath = process.env.UPTIME_KUMA_DB_SOCKET?.trim();
-            dbConfig.ssl = getEnvOrFile("UPTIME_KUMA_DB_SSL")?.toLowerCase() === "true";
-            dbConfig.ca = getEnvOrFile("UPTIME_KUMA_DB_CA");
+            log.info("setup-database", "Database configuration is provided by environment variables, overriding db-config.json");
+            dbConfig.type = dbType;
+            dbConfig.hostname = process.env.INFININOC_DB_HOSTNAME || process.env.UPTIME_KUMA_DB_HOSTNAME;
+            dbConfig.port = process.env.INFININOC_DB_PORT || process.env.UPTIME_KUMA_DB_PORT;
+            dbConfig.dbName = process.env.INFININOC_DB_NAME || process.env.UPTIME_KUMA_DB_NAME;
+            dbConfig.username = getEnvOrFile("INFININOC_DB_USERNAME") || getEnvOrFile("UPTIME_KUMA_DB_USERNAME");
+            dbConfig.password = getEnvOrFile("INFININOC_DB_PASSWORD") || getEnvOrFile("UPTIME_KUMA_DB_PASSWORD");
+            dbConfig.socketPath = (process.env.INFININOC_DB_SOCKET || process.env.UPTIME_KUMA_DB_SOCKET)?.trim();
+            dbConfig.ssl = (getEnvOrFile("INFININOC_DB_SSL") || getEnvOrFile("UPTIME_KUMA_DB_SSL"))?.toLowerCase() === "true";
+            dbConfig.ca = getEnvOrFile("INFININOC_DB_CA") || getEnvOrFile("UPTIME_KUMA_DB_CA");
             Database.writeDBConfig(dbConfig);
         }
     }

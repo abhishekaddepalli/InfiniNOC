@@ -48,7 +48,7 @@ const config = require("./config");
 const { RBAC } = require("./middleware/rbac");
 const SuperAdmin = require("./model/super-admin");
 
-process.title = "uptime-kuma";
+process.title = "infininoc";
 
 log.debug("server", "Arguments");
 log.debug("server", args);
@@ -57,15 +57,18 @@ if (!process.env.NODE_ENV) {
     process.env.NODE_ENV = "production";
 }
 
-if (!process.env.UPTIME_KUMA_WS_ORIGIN_CHECK) {
+if (!process.env.INFININOC_WS_ORIGIN_CHECK && !process.env.UPTIME_KUMA_WS_ORIGIN_CHECK) {
+    process.env.INFININOC_WS_ORIGIN_CHECK = "cors-like";
     process.env.UPTIME_KUMA_WS_ORIGIN_CHECK = "cors-like";
+} else if (process.env.INFININOC_WS_ORIGIN_CHECK && !process.env.UPTIME_KUMA_WS_ORIGIN_CHECK) {
+    process.env.UPTIME_KUMA_WS_ORIGIN_CHECK = process.env.INFININOC_WS_ORIGIN_CHECK;
 }
 
 log.info("server", "Env: " + process.env.NODE_ENV);
-log.debug("server", "Inside Container: " + (process.env.UPTIME_KUMA_IS_CONTAINER === "1"));
+log.debug("server", "Inside Container: " + ((process.env.INFININOC_IS_CONTAINER || process.env.UPTIME_KUMA_IS_CONTAINER) === "1"));
 
-if (process.env.UPTIME_KUMA_WS_ORIGIN_CHECK === "bypass") {
-    log.warn("server", "WebSocket Origin Check: " + process.env.UPTIME_KUMA_WS_ORIGIN_CHECK);
+if (process.env.INFININOC_WS_ORIGIN_CHECK === "bypass" || process.env.UPTIME_KUMA_WS_ORIGIN_CHECK === "bypass") {
+    log.warn("server", "WebSocket Origin Check: " + (process.env.INFININOC_WS_ORIGIN_CHECK || process.env.UPTIME_KUMA_WS_ORIGIN_CHECK));
 }
 
 if (isDev || process.env.UPTIME_KUMA_DEBUG_INSPECTOR === "1") {
@@ -87,7 +90,7 @@ if (isDev || process.env.UPTIME_KUMA_DEBUG_INSPECTOR === "1") {
 }
 
 const checkVersion = require("./check-version");
-log.info("server", "Uptime Kuma Version:", checkVersion.version);
+log.info("server", "InfiniNOC Version:", checkVersion.version);
 
 log.info("server", "Loading modules");
 
