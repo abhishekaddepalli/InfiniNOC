@@ -1,48 +1,102 @@
 const { R } = require("redbean-node");
 const crypto = require("crypto");
+const Database = require("../database");
 
 class Organization {
     /**
-     * Initialize sub-teams and alerts tables if they do not exist
+     * Determine if current active database engine is MySQL or MariaDB
+     * @param {string} [overrideType] Optional override for testing
+     * @returns {boolean} True if MySQL/MariaDB
      */
-    static async initTables() {
+    static isMySQL(overrideType = null) {
+        if (overrideType) {
+            const type = overrideType.toLowerCase();
+            return type === "mariadb" || type === "mysql" || type === "embedded-mariadb" || type.endsWith("mariadb");
+        }
+        if (Database && Database.dbConfig && Database.dbConfig.type) {
+            const type = Database.dbConfig.type.toLowerCase();
+            return type === "mariadb" || type === "mysql" || type === "embedded-mariadb" || type.endsWith("mariadb");
+        }
+        const envType = (process.env.INFININOC_DB_TYPE || process.env.UPTIME_KUMA_DB_TYPE || "").toLowerCase();
+        if (envType) {
+            return envType === "mariadb" || envType === "mysql" || envType === "embedded-mariadb" || envType.endsWith("mariadb");
+        }
         try {
-            await R.exec(`
-                CREATE TABLE IF NOT EXISTS organization_sub_team (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    organization_id INTEGER NOT NULL,
-                    name TEXT NOT NULL,
-                    description TEXT,
-                    lead_user_id INTEGER,
-                    alert_policy TEXT DEFAULT 'Default Escalation',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-            `);
+            const config = Database.readDBConfig();
+            if (config && config.type) {
+                const type = config.type.toLowerCase();
+                return type === "mariadb" || type === "mysql" || type === "embedded-mariadb" || type.endsWith("mariadb");
+            }
+        } catch (_) {}
+        return false;
+    }
 
-            await R.exec(`
-                CREATE TABLE IF NOT EXISTS organization_sub_team_member (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sub_team_id INTEGER NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    role TEXT DEFAULT 'member',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-            `);
+    /**
+     * Get database-portable auto-increment primary key definition
+     * @param {string} [overrideType] Optional override for testing
+     * @returns {string} DDL fragment for auto-increment primary key
+     */
+    static getAutoIncrementPrimaryKeySql(overrideType = null) {
+        return this.isMySQL(overrideType) ? "INT AUTO_INCREMENT PRIMARY KEY" : "INTEGER PRIMARY KEY AUTOINCREMENT";
+    }
 
-            await R.exec(`
-                CREATE TABLE IF NOT EXISTS organization_sub_team_alert (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    organization_id INTEGER NOT NULL,
-                    sub_team_id INTEGER,
-                    name TEXT NOT NULL,
-                    channel_type TEXT NOT NULL,
-                    config_json TEXT,
-                    is_active INTEGER DEFAULT 1,
-                    quiet_hours TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                );
-            `);
+    /**
+     * Get database-portable SQL expression for current timestamp
+     * @returns {string} SQL timestamp expression
+     */
+    static getTimestampSql() {
+        return "CURRENT_TIMESTAMP";
+    }
+
+    /**
+     * Get DDL statements for sub-team and alert tables
+     * @param {string} [dbType] Optional database type override
+     * @returns {string[]} Array of CREATE TABLE SQL statements
+     */
+    static getSubTeamTableDDLs(dbType = null) {
+        const pk = this.getAutoIncrementPrimaryKeySql(dbType);
+        return [
+            `CREATE TABLE IF NOT EXISTS organization_sub_team (
+                id ${pk},
+                organization_id INTEGER NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                lead_user_id INTEGER,
+                alert_policy VARCHAR(255) DEFAULT 'Default Escalation',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS organization_sub_team_member (
+                id ${pk},
+                sub_team_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                role VARCHAR(50) DEFAULT 'member',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS organization_sub_team_alert (
+                id ${pk},
+                organization_id INTEGER NOT NULL,
+                sub_team_id INTEGER,
+                name VARCHAR(255) NOT NULL,
+                channel_type VARCHAR(50) NOT NULL,
+                config_json TEXT,
+                is_active INTEGER DEFAULT 1,
+                quiet_hours VARCHAR(100),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`
+        ];
+    }
+
+    /**
+     * Initialize sub-teams and alerts tables if they do not exist
+     * @param {string} [dbType] Optional database dialect override
+     */
+    static async initTables(dbType = null) {
+        try {
+            const ddls = this.getSubTeamTableDDLs(dbType);
+            for (const ddl of ddls) {
+                await R.exec(ddl);
+            }
         } catch (e) {
             console.error("Failed to init organization sub-team tables:", e);
         }
@@ -60,7 +114,7 @@ class Organization {
         try {
             const detailsStr = typeof details === "object" ? JSON.stringify(details) : details;
             await R.exec(
-                "INSERT INTO organization_audit_log (organization_id, user_id, event, details, created_at) VALUES (?, ?, ?, ?, DATETIME('now'))",
+                "INSERT INTO organization_audit_log (organization_id, user_id, event, details, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
                 [ organizationId, userId, event, detailsStr ]
             );
         } catch (e) {
@@ -110,14 +164,14 @@ class Organization {
         const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
         
         await R.exec(
-            "INSERT INTO organization (name, slug, status, created_at, updated_at) VALUES (?, ?, 'active', DATETIME('now'), DATETIME('now'))",
+            "INSERT INTO organization (name, slug, status, created_at, updated_at) VALUES (?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
             [ name, cleanSlug ]
         );
         const orgId = await R.getCell("SELECT id FROM organization WHERE slug = ?", [ cleanSlug ]);
 
         if (creatorUserId) {
             await R.exec(
-                "INSERT INTO organization_user (organization_id, user_id, role, status, created_at, updated_at) VALUES (?, ?, 'owner', 'active', DATETIME('now'), DATETIME('now'))",
+                "INSERT INTO organization_user (organization_id, user_id, role, status, created_at, updated_at) VALUES (?, ?, 'owner', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 [ orgId, creatorUserId ]
             );
         }
@@ -220,7 +274,7 @@ class Organization {
         await R.exec(
             `INSERT INTO organization_invitation (
                 organization_id, email, role, token_hash, expires_at, invited_by, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, DATETIME('now'))`,
+            ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
             [ orgId, cleanEmail, validRole, tokenHash, expiresAt, invitedByUserId || null ]
         );
 
@@ -262,7 +316,7 @@ class Organization {
         }
 
         await R.exec(
-            "UPDATE organization_user SET role = ?, updated_at = DATETIME('now') WHERE organization_id = ? AND user_id = ?",
+            "UPDATE organization_user SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE organization_id = ? AND user_id = ?",
             [ validRole, orgId, targetUserId ]
         );
 
@@ -291,7 +345,7 @@ class Organization {
         }
 
         await R.exec(
-            "UPDATE organization_user SET status = 'suspended', updated_at = DATETIME('now') WHERE organization_id = ? AND user_id = ?",
+            "UPDATE organization_user SET status = 'suspended', updated_at = CURRENT_TIMESTAMP WHERE organization_id = ? AND user_id = ?",
             [ orgId, targetUserId ]
         );
 
@@ -308,7 +362,7 @@ class Organization {
     static async activateMember(organizationId, targetUserId, performedByUserId) {
         const orgId = organizationId || 1;
         await R.exec(
-            "UPDATE organization_user SET status = 'active', updated_at = DATETIME('now') WHERE organization_id = ? AND user_id = ?",
+            "UPDATE organization_user SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE organization_id = ? AND user_id = ?",
             [ orgId, targetUserId ]
         );
         await Organization.logAudit(orgId, performedByUserId, "member_activated", { targetUserId });
@@ -376,7 +430,7 @@ class Organization {
 
         await R.exec(
             `INSERT INTO organization_sub_team (organization_id, name, description, lead_user_id, alert_policy, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, DATETIME('now'), DATETIME('now'))`,
+             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
             [ orgId, cleanName, description || "", leadUserId || null, alertPolicy || "Default Escalation" ]
         );
 
@@ -384,7 +438,7 @@ class Organization {
 
         if (leadUserId) {
             await R.exec(
-                "INSERT INTO organization_sub_team_member (sub_team_id, user_id, role, created_at) VALUES (?, ?, 'lead', DATETIME('now'))",
+                "INSERT INTO organization_sub_team_member (sub_team_id, user_id, role, created_at) VALUES (?, ?, 'lead', CURRENT_TIMESTAMP)",
                 [ subTeamId, leadUserId ]
             );
         }
@@ -412,10 +466,10 @@ class Organization {
         const rows = await R.getAll(
             `SELECT st.*, u.username as lead_username, u.email as lead_email,
                     (SELECT COUNT(*) FROM organization_sub_team_member WHERE sub_team_id = st.id) as member_count
-             FROM organization_sub_team st
-             LEFT JOIN user u ON st.lead_user_id = u.id
-             WHERE st.organization_id = ?
-             ORDER BY st.id ASC`,
+              FROM organization_sub_team st
+              LEFT JOIN user u ON st.lead_user_id = u.id
+              WHERE st.organization_id = ?
+              ORDER BY st.id ASC`,
             [ orgId ]
         );
         return rows;
@@ -453,7 +507,7 @@ class Organization {
 
         await R.exec(
             `INSERT INTO organization_sub_team_alert (organization_id, sub_team_id, name, channel_type, config_json, is_active, quiet_hours, created_at)
-             VALUES (?, ?, ?, ?, ?, 1, ?, DATETIME('now'))`,
+             VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)`,
             [ orgId, subTeamId || null, name, channelType, configJson, quietHours || "None" ]
         );
 
