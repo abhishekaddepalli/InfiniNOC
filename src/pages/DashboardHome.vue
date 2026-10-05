@@ -9,7 +9,7 @@
                         <span>Network Operations Center</span>
                     </h1>
                     <p class="text-secondary small mb-0">
-                        Real-time Telemetry Scoped to <span class="text-warning fw-bold">{{ activeOrgName }}</span>
+                        Real-time Telemetry & Infrastructure Operations
                     </p>
                 </div>
 

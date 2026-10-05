@@ -13,10 +13,10 @@ class Splunk extends NotificationProvider {
     async send(notification, msg, monitorJSON = null, heartbeatJSON = null) {
         try {
             if (heartbeatJSON == null) {
-                const title = "Uptime Kuma Alert";
+                const title = "InfiniNOC Alert";
                 const monitor = {
                     type: "ping",
-                    url: "Uptime Kuma Test Button",
+                    url: "InfiniNOC Test Button",
                 };
                 return this.postNotification(notification, title, msg, monitor, "trigger");
             }
@@ -88,7 +88,7 @@ class Splunk extends NotificationProvider {
             data: {
                 message_type: eventAction,
                 state_message: `[${title}] [${monitorUrl}] ${body}`,
-                entity_display_name: "Uptime Kuma Alert: " + monitorInfo.name,
+                entity_display_name: "InfiniNOC Alert: " + monitorInfo.name,
                 routing_key: notification.pagerdutyIntegrationKey,
                 entity_id: "Uptime Kuma/" + monitorInfo.id,
             },
@@ -96,7 +96,7 @@ class Splunk extends NotificationProvider {
 
         const baseURL = await Settings.get("primaryBaseURL");
         if (baseURL && monitorInfo) {
-            options.client = "Uptime Kuma";
+            options.client = "InfiniNOC";
             options.client_url = baseURL + getMonitorRelativeURL(monitorInfo.id);
         }
 

@@ -8,8 +8,10 @@
     <p>
         <a href="#-quick-start--installation"><img src="https://img.shields.io/badge/Deployment-Production_Ready-brightgreen?style=for-the-badge&logo=docker" alt="Deployment Ready"></a>
         <a href="#-indian-saas--commerce-architecture"><img src="https://img.shields.io/badge/Currency-INR_(%E2%82%B9)-orange?style=for-the-badge" alt="INR Currency"></a>
-        <a href="#-carrier-grade-telemetry"><img src="https://img.shields.io/badge/GST-18%25_Tax_Compliant-blue?style=for-the-badge" alt="GST Compliant"></a>
-        <a href="#-super-admin-control-plane"><img src="https://img.shields.io/badge/SuperAdmin-Server_Side_Protected-red?style=for-the-badge" alt="Super Admin"></a>
+    <p>
+        <a href="#-quick-start--installation"><img src="https://img.shields.io/badge/Deployment-Production_Ready-brightgreen?style=for-the-badge&logo=docker" alt="Deployment Ready"></a>
+        <a href="#-carrier-grade-telemetry"><img src="https://img.shields.io/badge/Telemetry-SNMP_MikroTik_OLT-orange?style=for-the-badge" alt="Carrier Grade Telemetry"></a>
+        <a href="#-carrier-grade-telemetry"><img src="https://img.shields.io/badge/PWA-Mobile_Installable-blue?style=for-the-badge" alt="PWA Ready"></a>
     </p>
 </div>
 
@@ -17,22 +19,13 @@
 
 ## 🚀 Welcome to InfiniNOC
 
-**InfiniNOC** is a high-performance, multi-tenant enterprise **Network Operations Center (NOC)** monitoring, telemetry, and SaaS platform designed specifically for Internet Service Providers (ISPs), Managed Service Providers (MSPs), Telecom Engineers, and Enterprise IT infrastructure teams.
+**InfiniNOC** is a high-performance enterprise **Network Operations Center (NOC)** monitoring, telemetry, and infrastructure management platform designed specifically for Internet Service Providers (ISPs), Managed Service Providers (MSPs), Telecom Engineers, and Enterprise IT infrastructure teams.
 
-Built with real-time WebSocket telemetry, reactive Vue 3 dashboards, SQLite/MySQL persistence, and first-class **Indian B2B SaaS architecture**.
+Built with real-time WebSocket telemetry, reactive Vue 3 dashboards, and carrier-grade monitoring engines.
 
 ---
 
 ## ⭐ Core Enterprise Features
-
-### 🏢 1. Platform Super Admin Control Plane (`/super-admin`)
-- **Separate Super Admin Portal**: Complete separation between platform administrators and organization tenants.
-- **Tenant Management**: Create, edit, upgrade, suspend, or delete tenant organizations.
-- **Organization Impersonation**: One-click secure Super Admin session impersonation with real-time banner notice.
-- **SaaS Tier Pricing Builder**: Configure limits (*Max Monitors, Max Devices, Max Members, Status Pages*).
-- **System Telemetry**: Real-time Node.js process RAM %, CPU load, database connections, and uptime diagnostics.
-- **Platform Audit Logs**: Append-only security audit trail tracking admin impersonations and plan changes.
-- **Global Governance**: Platform maintenance mode toggle, public self-serve signup switcher (`/signup`), and default trial period controls.
 
 ### 🇮🇳 2. Indian B2B SaaS & Commerce Engine
 - **Indian Rupee (`₹`) Localization**: MRR, ARR, and plan pricing rendered natively in `₹` (INR) with `en-IN` numeric formatting.

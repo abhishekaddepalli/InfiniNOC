@@ -38,12 +38,12 @@ class WeCom extends NotificationProvider {
      * @returns {object} Message
      */
     composeMessage(notification, heartbeatJSON, msg) {
-        let title = "UptimeKuma Message";
+        let title = "InfiniNOC Message";
         if (msg != null && heartbeatJSON != null && heartbeatJSON["status"] === UP) {
-            title = "UptimeKuma Monitor Up";
+            title = "InfiniNOC Monitor Up";
         }
         if (msg != null && heartbeatJSON != null && heartbeatJSON["status"] === DOWN) {
-            title = "UptimeKuma Monitor Down";
+            title = "InfiniNOC Monitor Down";
         }
 
         let textObj = {

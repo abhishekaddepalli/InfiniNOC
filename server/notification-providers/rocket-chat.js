@@ -27,7 +27,7 @@ class RocketChat extends NotificationProvider {
             }
 
             let data = {
-                text: "Uptime Kuma Alert",
+                text: "InfiniNOC Alert",
                 channel: notification.rocketchannel,
                 username: notification.rocketusername,
                 icon_emoji: notification.rocketiconemo,
