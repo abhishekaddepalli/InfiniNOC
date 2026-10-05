@@ -1,10 +1,16 @@
 {
-    "name": "uptime-kuma",
+    "name": "infininoc",
     "version": "2.5.0",
+    "description": "Enterprise Network Operations Center (NOC) & Infrastructure Telemetry Platform",
+    "homepage": "https://monitor.infiniforge.cloud",
+    "author": "Infiniforge Technologies",
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/louislam/uptime-kuma.git"
+        "url": "https://github.com/abhishekaddepalli/InfiniNOC.git"
+    },
+    "bugs": {
+        "url": "https://github.com/abhishekaddepalli/InfiniNOC/issues"
     },
     "engines": {
         "node": ">= 20.4.0"
