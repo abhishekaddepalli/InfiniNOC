@@ -89,7 +89,7 @@ async function runTarSecurityTests() {
             if (entryPath.includes("..") || path.isAbsolute(entryPath)) return false;
             if (entry.type === "SymbolicLink" || entry.type === "Link") return false;
             const topLevel = entryPath.split(/[/\\]/)[0];
-            return ["manifest.json", "kuma.db", "upload"].includes(topLevel);
+            return ["manifest.json", "kuma.db", "database.sql", "upload"].includes(topLevel);
         };
 
         assert.strictEqual(testFilter("../../../etc/passwd", { type: "File" }), false);
@@ -97,6 +97,8 @@ async function runTarSecurityTests() {
         assert.strictEqual(testFilter("evil/../manifest.json", { type: "File" }), false);
         assert.strictEqual(testFilter("manifest.json", { type: "File" }), true);
         assert.strictEqual(testFilter("kuma.db", { type: "File" }), true);
+        assert.strictEqual(testFilter("database.sql", { type: "File" }), true);
+        assert.strictEqual(testFilter("../database.sql", { type: "File" }), false);
         assert.strictEqual(testFilter("upload/logo.png", { type: "File" }), true);
         assert.strictEqual(testFilter("unauthorized.exe", { type: "File" }), false);
 
@@ -114,11 +116,13 @@ async function runTarSecurityTests() {
             if (entryPath.includes("..") || path.isAbsolute(entryPath)) return false;
             if (entry.type === "SymbolicLink" || entry.type === "Link") return false;
             const topLevel = entryPath.split(/[/\\]/)[0];
-            return ["manifest.json", "kuma.db", "upload"].includes(topLevel);
+            return ["manifest.json", "kuma.db", "database.sql", "upload"].includes(topLevel);
         };
 
         assert.strictEqual(testFilter("kuma.db", { type: "SymbolicLink" }), false);
         assert.strictEqual(testFilter("kuma.db", { type: "Link" }), false);
+        assert.strictEqual(testFilter("database.sql", { type: "SymbolicLink" }), false);
+        assert.strictEqual(testFilter("database.sql", { type: "Link" }), false);
         assert.strictEqual(testFilter("upload", { type: "SymbolicLink" }), false);
         assert.strictEqual(testFilter("manifest.json", { type: "Link" }), false);
         assert.strictEqual(testFilter("manifest.json", { type: "File" }), true);
@@ -129,11 +133,102 @@ async function runTarSecurityTests() {
         console.error("Test 5 Failed:", e.message);
     }
 
+    // 6. MySQL Backup Creation & Verification Test
+    try {
+        console.log("Test 6: MySQL logical dump backup creation and verification...");
+        const mockTables = [{ Tables_in_kuma: "monitor" }, { Tables_in_kuma: "user" }];
+        const mockSchema = [{ "Create Table": "CREATE TABLE `monitor` (`id` int(11) NOT NULL AUTO_INCREMENT, `name` varchar(255), PRIMARY KEY (`id`)) ENGINE=InnoDB;" }];
+        const mockRows = [{ id: 1, name: "InfiniNOC Core Engine" }];
+
+        let executedStatements = [];
+        const mockConnection = {
+            query: async (sql, params) => {
+                executedStatements.push(sql);
+                if (sql.includes("SHOW FULL TABLES") || sql.includes("SHOW TABLES")) {
+                    return [mockTables];
+                }
+                if (sql.includes("SHOW CREATE TABLE")) {
+                    return [mockSchema];
+                }
+                if (sql.includes("SELECT * FROM")) {
+                    return [mockRows];
+                }
+                return [{ affectedRows: 1 }];
+            },
+            end: async () => {},
+        };
+
+        const mysqlBackupRes = await BackupEngine.createBackup({
+            userId: 1,
+            type: "mysql-test",
+            databaseType: "mariadb",
+            dbConfig: {
+                type: "mariadb",
+                hostname: "127.0.0.1",
+                port: 3306,
+                dbName: "kuma",
+                username: "kuma_user",
+            },
+            connection: mockConnection,
+        });
+
+        assert(mysqlBackupRes && mysqlBackupRes.ok === true, "MySQL backup creation must succeed");
+        assert.strictEqual(mysqlBackupRes.manifest.databaseType, "mariadb", "Manifest must record databaseType as mariadb");
+
+        // Verify the created backup
+        const verifyMySQLRes = await BackupEngine.verifyBackup(mysqlBackupRes.fileName);
+        assert(verifyMySQLRes && verifyMySQLRes.valid === true, "MySQL backup verification must succeed");
+        assert.strictEqual(verifyMySQLRes.manifest.databaseType, "mariadb");
+        console.log("✓ Test 6 Passed: MySQL logical dump backup created and verified successfully");
+        testsPassed++;
+
+        // 7. MySQL Backup Restoration Test (Restores through connection, not replacing SQLite file)
+        console.log("Test 7: MySQL backup restore through database connection...");
+        let restoreExecutedSql = [];
+        const restoreMockConnection = {
+            query: async (sql) => {
+                restoreExecutedSql.push(sql);
+                if (sql.includes("SHOW FULL TABLES") || sql.includes("SHOW TABLES")) {
+                    return [[{ Tables_in_kuma: "monitor" }]];
+                }
+                if (sql.includes("SHOW CREATE TABLE")) {
+                    return [[{ "Create Table": "CREATE TABLE `monitor` (id INT)" }]];
+                }
+                if (sql.includes("SELECT * FROM")) {
+                    return [[]];
+                }
+                return [{ affectedRows: 1 }];
+            },
+            end: async () => {},
+        };
+
+        const restoreRes = await BackupEngine.restoreBackup(mysqlBackupRes.fileName, "", {
+            userId: 1,
+            databaseType: "mariadb",
+            connection: restoreMockConnection,
+        });
+
+        assert(restoreRes && restoreRes.ok === true, "MySQL backup restore must succeed");
+        assert(restoreExecutedSql.length > 0, "Restore must execute SQL through the connection");
+        assert(restoreExecutedSql.some((s) => s.includes("CREATE TABLE `monitor`")), "Restored SQL must contain monitor table DDL");
+        console.log("✓ Test 7 Passed: MySQL backup restored through connection without touching SQLite");
+        testsPassed++;
+
+        // Clean up
+        if (fs.existsSync(mysqlBackupRes.filePath)) fs.unlinkSync(mysqlBackupRes.filePath);
+        if (restoreRes.safetyBackupCreated) {
+            const safetyPath = path.join(backupDir, restoreRes.safetyBackupCreated);
+            if (fs.existsSync(safetyPath)) fs.unlinkSync(safetyPath);
+        }
+    } catch (e) {
+        console.error("Test 6/7 Failed:", e);
+    }
+
     // Clean scratch test dir
     if (fs.existsSync(testDir)) fs.rmSync(testDir, { recursive: true, force: true });
 
-    console.log(`=== TAR SECURITY TEST RESULTS: ${testsPassed}/5 TESTS PASSED ===`);
-    return testsPassed === 5;
+    console.log(`=== BACKUP & SECURITY TEST RESULTS: ${testsPassed}/7 TESTS PASSED ===`);
+    return testsPassed === 7;
 }
 
 runTarSecurityTests().then((ok) => {

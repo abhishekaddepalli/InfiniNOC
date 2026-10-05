@@ -3,6 +3,8 @@ const fsAsync = fs.promises;
 const path = require("path");
 const crypto = require("crypto");
 const tar = require("tar");
+const mysql = require("mysql2/promise");
+const SqlString = require("sqlstring");
 const Database = require("./database");
 const { log } = require("../src/util");
 const productConfig = require("../config/product.json");
@@ -28,6 +30,242 @@ class BackupEngine {
     static getSanitizedFilePath(fileName) {
         const safeName = path.basename(fileName);
         return path.join(this.getBackupDir(), safeName);
+    }
+
+    /**
+     * Resolve database configuration from runtime or config file
+     * @returns {object} Database configuration object
+     */
+    static getDatabaseConfig() {
+        if (Database.dbConfig && Database.dbConfig.type) {
+            return Database.dbConfig;
+        }
+        try {
+            const config = Database.readDBConfig();
+            if (config && config.type) {
+                return config;
+            }
+        } catch (_) {}
+
+        const envType = process.env.INFININOC_DB_TYPE || process.env.UPTIME_KUMA_DB_TYPE;
+        if (envType) {
+            return {
+                type: envType,
+                hostname: process.env.INFININOC_DB_HOSTNAME || process.env.UPTIME_KUMA_DB_HOSTNAME || "localhost",
+                port: process.env.INFININOC_DB_PORT || process.env.UPTIME_KUMA_DB_PORT || 3306,
+                dbName: process.env.INFININOC_DB_NAME || process.env.UPTIME_KUMA_DB_NAME || "kuma",
+                username: process.env.INFININOC_DB_USERNAME || process.env.UPTIME_KUMA_DB_USERNAME,
+                password: process.env.INFININOC_DB_PASSWORD || process.env.UPTIME_KUMA_DB_PASSWORD,
+                socketPath: (process.env.INFININOC_DB_SOCKET || process.env.UPTIME_KUMA_DB_SOCKET)?.trim(),
+            };
+        }
+
+        return { type: "sqlite" };
+    }
+
+    /**
+     * Get active database dialect / engine type
+     * @returns {string} Database type ('sqlite', 'mariadb', 'mysql', etc.)
+     */
+    static getDatabaseType() {
+        const config = this.getDatabaseConfig();
+        return (config.type || "sqlite").toLowerCase();
+    }
+
+    /**
+     * Check if a given database type is a MySQL/MariaDB variant
+     * @param {string} dbType Database type string
+     * @returns {boolean} True if MySQL or MariaDB
+     */
+    static isMySQLFamily(dbType) {
+        if (!dbType) return false;
+        const normalized = dbType.toLowerCase();
+        return normalized === "mariadb" || normalized === "mysql" || normalized === "embedded-mariadb" || normalized.endsWith("mariadb");
+    }
+
+    /**
+     * Establish a dedicated MySQL/MariaDB connection for backup/restore operations
+     * @param {object} [customConfig] Optional custom connection parameters
+     * @returns {Promise<object>} mysql2 connection instance
+     */
+    static async getMySQLConnection(customConfig = null) {
+        const cfg = customConfig || this.getDatabaseConfig();
+        const connConfig = {
+            host: cfg.hostname || "localhost",
+            port: parseInt(cfg.port) || 3306,
+            user: cfg.username,
+            password: cfg.password,
+            database: cfg.dbName || cfg.database || "kuma",
+            socketPath: cfg.socketPath,
+            multipleStatements: true,
+            ...(cfg.ssl
+                ? {
+                      ssl: {
+                          rejectUnauthorized: true,
+                          ...(cfg.ca && cfg.ca.trim() !== "" ? { ca: [cfg.ca] } : {}),
+                      },
+                  }
+                : {}),
+        };
+
+        if (cfg.type === "embedded-mariadb") {
+            try {
+                const { EmbeddedMariaDB } = require("./embedded-mariadb");
+                const embedded = EmbeddedMariaDB.getInstance();
+                connConfig.socketPath = embedded.socketPath;
+                connConfig.user = embedded.username;
+                connConfig.database = "kuma";
+                delete connConfig.host;
+                delete connConfig.port;
+            } catch (_) {}
+        }
+
+        return await mysql.createConnection(connConfig);
+    }
+
+    /**
+     * Generate a logical SQL dump of the MySQL/MariaDB database
+     * @param {string} targetSqlPath Output SQL file path
+     * @param {object} [options] Custom options or connection override
+     * @returns {Promise<void>}
+     */
+    static async dumpMySQLDatabase(targetSqlPath, options = {}) {
+        let connection = options.connection;
+        let shouldClose = false;
+
+        if (!connection) {
+            connection = await this.getMySQLConnection(options.dbConfig);
+            shouldClose = true;
+        }
+
+        try {
+            let dumpContent = "";
+            dumpContent += "-- =============================================================\n";
+            dumpContent += "-- InfiniNOC Logical MySQL Database Backup\n";
+            dumpContent += `-- Generated: ${new Date().toISOString()}\n`;
+            dumpContent += `-- Product: ${productConfig.productName || "InfiniNOC"}\n`;
+            dumpContent += "-- =============================================================\n\n";
+            dumpContent += "SET FOREIGN_KEY_CHECKS = 0;\n";
+            dumpContent += "SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';\n";
+            dumpContent += "SET AUTOCOMMIT = 0;\n";
+            dumpContent += "START TRANSACTION;\n\n";
+
+            let tables = [];
+            if (typeof options.getTables === "function") {
+                tables = await options.getTables(connection);
+            } else {
+                try {
+                    const rawTables = await connection.query("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'");
+                    const tablesResult = Array.isArray(rawTables) ? (Array.isArray(rawTables[0]) ? rawTables[0] : rawTables) : [];
+                    tables = tablesResult.map((row) => (typeof row === "object" ? Object.values(row)[0] : row)).filter(Boolean);
+                } catch (_) {
+                    try {
+                        const rawTables = await connection.query("SHOW TABLES");
+                        const tablesResult = Array.isArray(rawTables) ? (Array.isArray(rawTables[0]) ? rawTables[0] : rawTables) : [];
+                        tables = tablesResult.map((row) => (typeof row === "object" ? Object.values(row)[0] : row)).filter(Boolean);
+                    } catch (_) {
+                        tables = [];
+                    }
+                }
+            }
+
+            for (const tableName of tables) {
+                dumpContent += `-- -------------------------------------------------------------\n`;
+                dumpContent += `-- Table structure & data for \`${tableName}\`\n`;
+                dumpContent += `-- -------------------------------------------------------------\n`;
+                dumpContent += `DROP TABLE IF EXISTS \`${tableName}\`;\n`;
+
+                let createTableSql = "";
+                if (typeof options.getCreateTable === "function") {
+                    createTableSql = await options.getCreateTable(tableName, connection);
+                } else {
+                    const rawCreate = await connection.query(`SHOW CREATE TABLE \`${tableName}\``);
+                    const createResult = Array.isArray(rawCreate) ? (Array.isArray(rawCreate[0]) ? rawCreate[0] : rawCreate) : [];
+                    if (createResult.length > 0 && typeof createResult[0] === "object") {
+                        createTableSql = createResult[0]["Create Table"] || Object.values(createResult[0])[1] || "";
+                    }
+                }
+                if (createTableSql) {
+                    dumpContent += `${createTableSql};\n\n`;
+                }
+
+                let rows = [];
+                if (typeof options.getRows === "function") {
+                    rows = await options.getRows(tableName, connection);
+                } else {
+                    const rawRows = await connection.query(`SELECT * FROM \`${tableName}\``);
+                    rows = Array.isArray(rawRows) ? (Array.isArray(rawRows[0]) ? rawRows[0] : rawRows) : [];
+                }
+
+                if (rows && rows.length > 0) {
+                    const batchSize = 100;
+                    for (let i = 0; i < rows.length; i += batchSize) {
+                        const batch = rows.slice(i, i + batchSize);
+                        const valuesList = batch.map((row) => {
+                            const vals = Object.values(row).map((v) => SqlString.escape(v));
+                            return `(${vals.join(", ")})`;
+                        });
+                        dumpContent += `INSERT INTO \`${tableName}\` VALUES\n  ${valuesList.join(",\n  ")};\n`;
+                    }
+                    dumpContent += "\n";
+                }
+            }
+
+            dumpContent += "COMMIT;\n";
+            dumpContent += "SET FOREIGN_KEY_CHECKS = 1;\n";
+
+            await fsAsync.writeFile(targetSqlPath, dumpContent, "utf8");
+        } finally {
+            if (shouldClose && connection && typeof connection.end === "function") {
+                try {
+                    await connection.end();
+                } catch (_) {}
+            }
+        }
+    }
+
+    /**
+     * Restore MySQL/MariaDB database from logical SQL dump through database connection
+     * @param {string} sqlPath Path to logical SQL dump file
+     * @param {object} [options] Custom options or connection override
+     * @returns {Promise<void>}
+     */
+    static async restoreMySQLDatabase(sqlPath, options = {}) {
+        let connection = options.connection;
+        let shouldClose = false;
+
+        if (!connection) {
+            connection = await this.getMySQLConnection(options.dbConfig);
+            shouldClose = true;
+        }
+
+        try {
+            const sqlContent = await fsAsync.readFile(sqlPath, "utf8");
+
+            if (typeof options.executeSql === "function") {
+                await options.executeSql(sqlContent, connection);
+            } else {
+                try {
+                    await connection.query(sqlContent);
+                } catch (err) {
+                    // Fallback statement-by-statement execution if multipleStatements is restricted
+                    const statements = sqlContent
+                        .split(/;\s*[\r\n]+/)
+                        .map((s) => s.trim())
+                        .filter((s) => s.length > 0 && !s.startsWith("--"));
+
+                    for (const stmt of statements) {
+                        await connection.query(stmt);
+                    }
+                }
+            }
+        } finally {
+            if (shouldClose && connection && typeof connection.end === "function") {
+                try {
+                    await connection.end();
+                } catch (_) {}
+            }
+        }
     }
 
     /**
@@ -166,14 +404,25 @@ class BackupEngine {
         try {
             await fsAsync.mkdir(tempFolder, { recursive: true });
 
-            // 1. Copy database file if exists
-            const dbPath = Database.sqlitePath || path.join(Database.dataDir, "kuma.db");
-            if (fs.existsSync(dbPath)) {
-                await fsAsync.copyFile(dbPath, path.join(tempFolder, "kuma.db"));
+            const dbConfig = options.dbConfig || this.getDatabaseConfig();
+            const dbType = (options.databaseType || dbConfig.type || "sqlite").toLowerCase();
+            const isMySQL = this.isMySQLFamily(dbType);
+
+            // 1. Dump or copy database
+            if (isMySQL) {
+                log.info("backup-engine", `Creating logical MySQL/MariaDB dump of '${dbConfig.dbName || "kuma"}'...`);
+                const sqlPath = path.join(tempFolder, "database.sql");
+                await this.dumpMySQLDatabase(sqlPath, options);
+                log.info("backup-engine", "Logical MySQL dump generated successfully.");
+            } else {
+                const dbPath = Database.sqlitePath || path.join(Database.dataDir || "./data", "kuma.db");
+                if (fs.existsSync(dbPath)) {
+                    await fsAsync.copyFile(dbPath, path.join(tempFolder, "kuma.db"));
+                }
             }
 
             // 2. Copy uploads folder if exists
-            const uploadDir = Database.uploadDir || path.join(Database.dataDir, "upload");
+            const uploadDir = Database.uploadDir || path.join(Database.dataDir || "./data", "upload");
             if (fs.existsSync(uploadDir)) {
                 const tempUpload = path.join(tempFolder, "upload");
                 await fsAsync.cp(uploadDir, tempUpload, { recursive: true });
@@ -184,6 +433,7 @@ class BackupEngine {
                 product: productConfig.productName || "InfiniNOC",
                 backupVersion: "1",
                 applicationVersion: productConfig.version || "1.0.0",
+                databaseType: dbType,
                 databaseVersion: Database.patched ? "knex-migrated" : "v10",
                 createdAt: new Date().toISOString(),
                 createdBy: userId,
@@ -210,13 +460,24 @@ class BackupEngine {
 
             // 4. Compress folder into tar.gz
             const tempTarPath = path.join(backupDir, `${baseName}.tar.gz`);
+            const filesToPack = ["manifest.json"];
+            if (fs.existsSync(path.join(tempFolder, "kuma.db"))) {
+                filesToPack.push("kuma.db");
+            }
+            if (fs.existsSync(path.join(tempFolder, "database.sql"))) {
+                filesToPack.push("database.sql");
+            }
+            if (fs.existsSync(path.join(tempFolder, "upload"))) {
+                filesToPack.push("upload");
+            }
+
             await tar.c(
                 {
                     gzip: true,
                     file: tempTarPath,
                     cwd: tempFolder,
                 },
-                ["manifest.json", "kuma.db", fs.existsSync(path.join(tempFolder, "upload")) ? "upload" : ""].filter(Boolean)
+                filesToPack
             );
 
             // 5. Apply Encryption if password is provided
@@ -394,7 +655,7 @@ class BackupEngine {
                         return false;
                     }
                     const topLevel = entryPath.split(/[/\\]/)[0];
-                    return ["manifest.json", "kuma.db", "upload"].includes(topLevel);
+                    return ["manifest.json", "kuma.db", "database.sql", "upload"].includes(topLevel);
                 },
             });
 
@@ -404,6 +665,24 @@ class BackupEngine {
             }
 
             const manifest = JSON.parse(await fsAsync.readFile(manifestPath, "utf8"));
+
+            // Verify database asset presence according to manifest databaseType
+            const isMySQLManifest = this.isMySQLFamily(manifest.databaseType);
+            if (isMySQLManifest) {
+                if (!fs.existsSync(path.join(tempFolder, "database.sql"))) {
+                    throw new Error("Invalid MySQL/MariaDB backup archive: missing database.sql");
+                }
+            } else if (manifest.databaseType === "sqlite") {
+                if (!fs.existsSync(path.join(tempFolder, "kuma.db"))) {
+                    throw new Error("Invalid SQLite backup archive: missing kuma.db");
+                }
+            } else {
+                // Older legacy archive: verify either kuma.db or database.sql exists
+                if (!fs.existsSync(path.join(tempFolder, "kuma.db")) && !fs.existsSync(path.join(tempFolder, "database.sql"))) {
+                    throw new Error("Invalid backup archive: missing database payload");
+                }
+            }
+
             await fsAsync.rm(tempFolder, { recursive: true, force: true });
 
             return {
@@ -442,6 +721,9 @@ class BackupEngine {
         const safetyBackup = await this.createBackup({
             userId: userId,
             type: "pre-restore",
+            dbConfig: options.dbConfig,
+            databaseType: options.databaseType,
+            connection: options.connection,
         });
 
         // 3. Extract contents to temporary directory
@@ -479,22 +761,34 @@ class BackupEngine {
                         return false;
                     }
                     const topLevel = entryPath.split(/[/\\]/)[0];
-                    return ["manifest.json", "kuma.db", "upload"].includes(topLevel);
+                    return ["manifest.json", "kuma.db", "database.sql", "upload"].includes(topLevel);
                 },
             });
 
-            // 4. Overwrite Database File (`kuma.db`)
+            // 4. Restore Database payload (MySQL logical SQL or SQLite kuma.db)
+            const restoredSqlPath = path.join(restoreTempFolder, "database.sql");
             const restoredDbPath = path.join(restoreTempFolder, "kuma.db");
-            const targetDbPath = Database.sqlitePath || path.join(Database.dataDir, "kuma.db");
 
-            if (fs.existsSync(restoredDbPath)) {
+            const isMySQLArchive = this.isMySQLFamily(verification.manifest.databaseType);
+
+            if (isMySQLArchive || (!verification.manifest.databaseType && fs.existsSync(restoredSqlPath))) {
+                if (!fs.existsSync(restoredSqlPath)) {
+                    throw new Error("Invalid MySQL/MariaDB backup archive: missing database.sql");
+                }
+                log.info("backup-engine", "Restoring MySQL/MariaDB database through connection...");
+                await this.restoreMySQLDatabase(restoredSqlPath, options);
+                log.info("backup-engine", "MySQL/MariaDB database restored successfully.");
+            } else if (fs.existsSync(restoredDbPath)) {
+                const targetDbPath = Database.sqlitePath || path.join(Database.dataDir || "./data", "kuma.db");
                 await fsAsync.copyFile(restoredDbPath, targetDbPath);
-                log.info("backup-engine", `Restored database file replaced at ${targetDbPath}`);
+                log.info("backup-engine", `Restored SQLite database file replaced at ${targetDbPath}`);
+            } else {
+                throw new Error("No restorable database payload found in archive.");
             }
 
             // 5. Overwrite Uploads Directory (`./data/upload`)
             const restoredUploadDir = path.join(restoreTempFolder, "upload");
-            const targetUploadDir = Database.uploadDir || path.join(Database.dataDir, "upload");
+            const targetUploadDir = Database.uploadDir || path.join(Database.dataDir || "./data", "upload");
 
             if (fs.existsSync(restoredUploadDir)) {
                 await fsAsync.rm(targetUploadDir, { recursive: true, force: true });

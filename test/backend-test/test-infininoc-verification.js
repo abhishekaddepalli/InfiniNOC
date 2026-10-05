@@ -75,16 +75,14 @@ async function runInfiniNOCVerification() {
     });
 
     // 6. Notification Provider Branding
-    test("Notification Providers: Teams webhook uses InfiniNOC branding and local/cloud icon", () => {
+    test("Notification Providers: Teams & Webpush use InfiniNOC branding and monitor.infiniforge.cloud", () => {
         const teamsPath = path.join(__dirname, "../../server/notification-providers/teams.js");
         const teamsSrc = fs.readFileSync(teamsPath, "utf8");
         assert(!teamsSrc.includes("https://raw.githubusercontent.com/louislam/uptime-kuma"), "Must not leak upstream raw github URLs");
         assert(teamsSrc.includes("https://monitor.infiniforge.cloud/icon.png"));
         assert(teamsSrc.includes("InfiniNOC Alert"));
         assert(teamsSrc.includes("InfiniNOC Logo"));
-    });
 
-    test("Notification Providers: Webpush uses InfiniNOC VAPID domain and title", () => {
         const wpPath = path.join(__dirname, "../../server/notification-providers/Webpush.js");
         const wpSrc = fs.readFileSync(wpPath, "utf8");
         assert(!wpSrc.includes("louislam/uptime-kuma"), "Must not reference louislam/uptime-kuma in Webpush VAPID");
@@ -127,6 +125,17 @@ async function runInfiniNOCVerification() {
         assert(installSrc.includes("https://monitor.infiniforge.cloud"));
         assert(!installSrc.includes("rm -rf \"$INSTALL_DIR\""), "Must never rm -rf existing directories");
         assert(installSrc.includes("To prevent data loss, existing files will NOT be deleted"));
+    });
+
+    // 10. Backup Engine Dual Database (SQLite + MySQL) Verification
+    test("Backup Engine: Supports both SQLite (kuma.db) and MySQL/MariaDB (logical SQL dump & connection restore)", () => {
+        const BackupEngine = require("../../server/backup");
+        assert(typeof BackupEngine.dumpMySQLDatabase === "function", "dumpMySQLDatabase must exist");
+        assert(typeof BackupEngine.restoreMySQLDatabase === "function", "restoreMySQLDatabase must exist");
+        assert(typeof BackupEngine.getDatabaseConfig === "function", "getDatabaseConfig must exist");
+        assert.strictEqual(BackupEngine.isMySQLFamily("mariadb"), true);
+        assert.strictEqual(BackupEngine.isMySQLFamily("mysql"), true);
+        assert.strictEqual(BackupEngine.isMySQLFamily("sqlite"), false);
     });
 
     // 10. Frontend Build Assets Integrity
