@@ -60,7 +60,7 @@ Uptime Kuma is a self-hosted monitoring tool built with a single-tier or multi-c
 - [`docker/`](file:///c:/Users/THALA/Desktop/InfNocmonitor/uptime-kuma-master/docker): Multi-stage Dockerfiles and compose setups.
 
 ### Crucial Files
-- [`package.json`](file:///c:/Users/THALA/Desktop/InfNocmonitor/uptime-kuma-master/package.json): Version tracking (`2.5.0`), scripts, and dependencies.
+- [`package.json`](file:///c:/Users/THALA/Desktop/InfNocmonitor/uptime-kuma-master/package.json): Version tracking (`1.0.0`), scripts, and dependencies.
 - [`server/server.js`](file:///c:/Users/THALA/Desktop/InfNocmonitor/uptime-kuma-master/server/server.js): Entry point for Node.js backend. Initializes DB, Express, Socket.IO, and background jobs.
 - [`server/uptime-kuma-server.js`](file:///c:/Users/THALA/Desktop/InfNocmonitor/uptime-kuma-master/server/uptime-kuma-server.js): Singleton container for app state, HTTP server, and active monitors.
 - [`server/database.js`](file:///c:/Users/THALA/Desktop/InfNocmonitor/uptime-kuma-master/server/database.js): Database connection manager, data path setup, and migration trigger.

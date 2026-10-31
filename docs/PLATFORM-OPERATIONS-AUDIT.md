@@ -36,7 +36,7 @@
 
 ## 4. Current Version Architecture
 - **Version Source-of-Truth**: `VERSION` file (`1.0.0`) and `config/product.json` (`"version": "1.0.0"`).
-- **Package Metadata**: `package.json` specifies `"version": "2.5.0"` (to be synced to `1.0.0`).
+- **Package Metadata**: `package.json` specifies `"version": "1.0.0"` (synced with product release).
 
 ---
 

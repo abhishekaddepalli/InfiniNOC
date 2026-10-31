@@ -1,6 +1,7 @@
 {
     "productName": "InfiniNOC",
     "companyName": "Infiniforge Technologies",
+    "version": "1.0.0",
     "tagline": "Know Your Network. Before Your Customers Do.",
     "website": "https://infiniforge.com",
     "supportEmail": "support@infiniforge.com",
