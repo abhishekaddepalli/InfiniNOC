@@ -85,7 +85,7 @@
                     <pre class="m-0 text-success" style="white-space: pre-wrap; font-family: inherit;">cd /www/apps/infininoc
 git fetch --all --tags
 git checkout feature/v1.26.31
-npm ci --omit=dev
+npm ci
 npm run build
 pm2 restart infininoc</pre>
                 </div>
@@ -161,8 +161,8 @@ pm2 restart infininoc</pre>
 # 3. Checkout the target release
 <span class="text-white">git checkout feature/v{{ updateInfo.latestVersion || '1.26.31' }}</span>
 
-# 4. Install production dependencies & compile frontend bundle
-<span class="text-white">npm ci --omit=dev</span>
+# 4. Install dependencies & compile frontend bundle
+<span class="text-white">npm ci</span>
 <span class="text-white">npm run build</span>
 
 # 5. Restart InfiniNOC daemon with PM2 (Zero downtime)
@@ -452,7 +452,7 @@ export default {
                 "cd /www/apps/infininoc",
                 "git fetch --all --tags",
                 `git checkout feature/v${target}`,
-                "npm ci --omit=dev",
+                "npm ci",
                 "npm run build",
                 "pm2 restart infininoc",
             ].join("\n");

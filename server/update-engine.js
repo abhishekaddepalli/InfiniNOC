@@ -61,7 +61,7 @@ class UpdateEngine {
                 "cd /www/apps/infininoc",
                 "git fetch --all --tags",
                 `git checkout feature/v${latestVersion}`,
-                "npm ci --omit=dev",
+                "npm ci",
                 "npm run build",
                 "pm2 restart infininoc",
             ].join("\n");
