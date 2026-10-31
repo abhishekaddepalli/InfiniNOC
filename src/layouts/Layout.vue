@@ -41,6 +41,17 @@
             <!-- Right: Controls Zone -->
             <div v-if="$root.loggedIn" class="header-right-zone d-flex align-items-center gap-2">
 
+                <!-- Live Update Notification Pill -->
+                <router-link
+                    v-if="hasNewVersion"
+                    to="/settings/updates"
+                    class="btn btn-warning btn-sm d-flex align-items-center gap-2 px-3 py-1 rounded-pill fw-bold shadow-sm animate-pulse text-dark text-decoration-none"
+                    title="A new InfiniNOC version is available"
+                >
+                    <font-awesome-icon icon="rocket" />
+                    <span class="d-none d-sm-inline">Update v{{ $root.info.latestVersion }}</span>
+                </router-link>
+
                 <!-- Status Pages Quick Nav -->
                 <router-link
                     to="/manage-status-page"
@@ -136,6 +147,15 @@
                         <li class="px-3 py-2 border-bottom border-secondary mb-1">
                             <div class="fw-bold text-foreground">{{ $root.username }}</div>
                             <div class="text-muted small">Organization Administrator</div>
+                        </li>
+                        <li v-if="hasNewVersion">
+                            <router-link to="/settings/updates" class="dropdown-item py-2 rounded text-warning fw-bold d-flex align-items-center justify-content-between">
+                                <span class="d-flex align-items-center gap-2">
+                                    <font-awesome-icon icon="rocket" />
+                                    <span>Update Available</span>
+                                </span>
+                                <span class="badge bg-warning text-dark font-monospace">v{{ $root.info.latestVersion }}</span>
+                            </router-link>
                         </li>
                         <li>
                             <router-link to="/settings/general" class="dropdown-item py-2 rounded">

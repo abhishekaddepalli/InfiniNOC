@@ -268,6 +268,9 @@
                                     <font-awesome-icon icon="cog" class="nav-icon" />
                                     <span>Settings</span>
                                 </div>
+                                <span v-if="hasNewVersion" class="badge bg-warning text-dark fw-bold animate-pulse" style="font-size: 0.65rem;" title="New version available">
+                                    UPDATE
+                                </span>
                             </router-link>
                         </li>
                     </ul>
@@ -278,6 +281,8 @@
 </template>
 
 <script>
+import compareVersions from "compare-versions";
+
 export default {
     emits: ["close"],
     data() {
@@ -291,6 +296,12 @@ export default {
         };
     },
     computed: {
+        hasNewVersion() {
+            if (this.$root.info && this.$root.info.latestVersion && this.$root.info.version) {
+                return compareVersions(this.$root.info.latestVersion, this.$root.info.version) >= 1;
+            }
+            return false;
+        },
         isSuperAdmin() {
             return Boolean(this.$root.user && this.$root.user.is_super_admin);
         },

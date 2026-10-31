@@ -57,27 +57,55 @@
                 </div>
             </div>
             <h5 class="fw-bold text-foreground mb-1">✓ You're Up to Date</h5>
-            <div class="text-muted small mb-3">InfiniNOC v{{ updateInfo.currentVersion || '1.0.0' }} is currently the latest stable release. No updates are available.</div>
-            <div>
+            <div class="text-muted small mb-3">InfiniNOC v{{ updateInfo.currentVersion || '1.26.31' }} is currently the latest stable release. No updates are available.</div>
+            <div class="d-flex align-items-center justify-content-center gap-2 flex-wrap">
                 <button class="btn btn-outline-secondary btn-sm fw-semibold" :disabled="checking" @click="checkUpdates">
                     <font-awesome-icon icon="sync-alt" class="me-1" :class="{ 'fa-spin': checking }" />
                     Check Again
                 </button>
+                <button class="btn btn-outline-primary btn-sm fw-semibold" @click="showVpsGuide = !showVpsGuide">
+                    <font-awesome-icon icon="terminal" class="me-1" />
+                    {{ showVpsGuide ? 'Hide VPS Commands' : 'View VPS Update Commands' }}
+                </button>
+            </div>
+
+            <!-- Collapsible VPS Commands Reference -->
+            <div v-if="showVpsGuide" class="mt-4 pt-3 border-top border-secondary text-start">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <font-awesome-icon icon="terminal" class="text-primary" />
+                        <span class="fw-bold text-foreground small">Production VPS Terminal Deployment Commands</span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary py-1 px-2" @click="copyVpsCommands">
+                        <font-awesome-icon :icon="copiedCommands ? 'check' : 'copy'" class="me-1" />
+                        <span>{{ copiedCommands ? 'Copied!' : 'Copy' }}</span>
+                    </button>
+                </div>
+                <div class="bg-black text-light p-3 rounded font-monospace small">
+                    <pre class="m-0 text-success" style="white-space: pre-wrap; font-family: inherit;">cd /www/apps/infininoc
+git fetch --all --tags
+git checkout feature/v1.26.31
+npm ci --omit=dev
+npm run build
+pm2 restart infininoc</pre>
+                </div>
             </div>
         </div>
 
         <!-- New Version Available Card (If update exists) -->
         <div v-if="updateInfo.updateAvailable" class="card border-warning bg-card mb-4 shadow-sm">
-            <div class="card-header bg-transparent border-bottom border-warning py-3 px-4 d-flex align-items-center justify-content-between">
+            <div class="card-header bg-transparent border-bottom border-warning py-3 px-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div class="fw-bold text-warning d-flex align-items-center gap-2 fs-6">
                     <font-awesome-icon icon="rocket" />
                     <span>NEW VERSION AVAILABLE — InfiniNOC v{{ updateInfo.latestVersion }}</span>
                 </div>
-                <span class="badge bg-warning text-dark text-uppercase fw-bold px-3 py-1">Stable Release</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning text-dark text-uppercase fw-bold px-3 py-1">Stable Release</span>
+                </div>
             </div>
             <div class="card-body p-4">
                 <div class="row g-4">
-                    <!-- Left: Clean Release Summary (No Gray Block!) -->
+                    <!-- Left: Clean Release Summary -->
                     <div class="col-md-7 col-lg-8">
                         <div class="d-flex align-items-center justify-content-between mb-3">
                             <h6 class="fw-bold text-foreground mb-0">What's New in v{{ updateInfo.latestVersion }}</h6>
@@ -87,29 +115,67 @@
                         <div class="release-summary-list mb-3">
                             <div class="d-flex align-items-start gap-2 mb-2">
                                 <font-awesome-icon icon="check" class="text-success mt-1 flex-shrink-0" />
-                                <span class="small text-foreground">Improved NOC dashboard rendering performance and real-time graph updates.</span>
+                                <span class="small text-foreground">Cyber-NOC Glassmorphic Theme with ambient status glows and dark UI styling.</span>
                             </div>
                             <div class="d-flex align-items-start gap-2 mb-2">
                                 <font-awesome-icon icon="check" class="text-success mt-1 flex-shrink-0" />
-                                <span class="small text-foreground">Enhanced SLA report export capability with detailed uptime metrics.</span>
+                                <span class="small text-foreground">1-Click NOC Wallboard Mode with real-time operational status and ESC shortcut.</span>
                             </div>
                             <div class="d-flex align-items-start gap-2 mb-2">
                                 <font-awesome-icon icon="check" class="text-success mt-1 flex-shrink-0" />
-                                <span class="small text-foreground">Upgraded PWA offline telemetry banner and asset caching policies.</span>
+                                <span class="small text-foreground">Integrated Web Audio alert engine with incident sirens and recovery chimes.</span>
+                            </div>
+                            <div class="d-flex align-items-start gap-2 mb-2">
+                                <font-awesome-icon icon="check" class="text-success mt-1 flex-shrink-0" />
+                                <span class="small text-foreground">Mobile-First bottom navigation bar with live incident badges and safe-area insets.</span>
                             </div>
                             <div class="d-flex align-items-start gap-2">
                                 <font-awesome-icon icon="check" class="text-success mt-1 flex-shrink-0" />
-                                <span class="small text-foreground">Security enhancements, vulnerability patches, and core stability improvements.</span>
+                                <span class="small text-foreground">Command Palette (Ctrl+K) quick actions and live update discovery.</span>
                             </div>
                         </div>
 
-                        <div class="pt-2 border-top border-secondary">
-                            <div class="small text-muted mb-1">Target Release Container:</div>
-                            <div class="font-monospace small text-primary text-truncate">ghcr.io/infiniforge/infininoc:{{ updateInfo.latestVersion }}</div>
+                        <!-- Production VPS Update Terminal Box -->
+                        <div class="mt-4 pt-3 border-top border-secondary">
+                            <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <font-awesome-icon icon="terminal" class="text-primary" />
+                                    <h6 class="fw-bold text-foreground mb-0">Production VPS Update Commands</h6>
+                                    <span class="badge bg-secondary font-monospace text-muted small">Ubuntu 24.04 · PM2 · MySQL</span>
+                                </div>
+                                <button
+                                    class="btn btn-outline-primary btn-sm fw-semibold d-flex align-items-center gap-2"
+                                    @click="copyVpsCommands"
+                                >
+                                    <font-awesome-icon :icon="copiedCommands ? 'check' : 'copy'" :class="{ 'text-success': copiedCommands }" />
+                                    <span>{{ copiedCommands ? 'Commands Copied!' : 'Copy Commands' }}</span>
+                                </button>
+                            </div>
+                            <div class="p-3 rounded font-monospace small bg-black text-light border border-secondary shadow-sm">
+                                <pre class="m-0 text-success" style="white-space: pre-wrap; font-family: inherit;"># 1. Navigate to InfiniNOC production directory
+<span class="text-white">cd /www/apps/infininoc</span>
+
+# 2. Fetch all latest remote branches and release tags
+<span class="text-white">git fetch --all --tags</span>
+
+# 3. Checkout the target release
+<span class="text-white">git checkout feature/v{{ updateInfo.latestVersion || '1.26.31' }}</span>
+
+# 4. Install production dependencies & compile frontend bundle
+<span class="text-white">npm ci --omit=dev</span>
+<span class="text-white">npm run build</span>
+
+# 5. Restart InfiniNOC daemon with PM2 (Zero downtime)
+<span class="text-white">pm2 restart infininoc</span></pre>
+                            </div>
+                            <div class="small text-muted mt-2 d-flex align-items-center gap-2">
+                                <font-awesome-icon icon="shield-alt" class="text-success" />
+                                <span>Safe in-place update: Preserves your MySQL database <code class="text-primary">kuma</code>, PM2 configuration, and all monitor data.</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Right: Clean Update Workflow Steps (No Gray Block!) -->
+                    <!-- Right: Clean Update Workflow Steps -->
                     <div class="col-md-5 col-lg-4">
                         <div class="border border-secondary rounded p-3 bg-card shadow-sm">
                             <h6 class="fw-bold text-foreground mb-3">Update Workflow</h6>
@@ -125,15 +191,15 @@
                                 </div>
                                 <div class="d-flex align-items-center gap-2 mb-2">
                                     <span class="badge rounded-circle p-1 d-flex align-items-center justify-content-center bg-secondary text-muted" style="width: 22px; height: 22px; font-size: 11px;">3</span>
-                                    <span class="small text-muted">Verify target image</span>
+                                    <span class="small text-muted">Copy VPS commands</span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2 mb-2">
                                     <span class="badge rounded-circle p-1 d-flex align-items-center justify-content-center bg-secondary text-muted" style="width: 22px; height: 22px; font-size: 11px;">4</span>
-                                    <span class="small text-muted">Apply container update</span>
+                                    <span class="small text-muted">Execute terminal upgrade</span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="badge rounded-circle p-1 d-flex align-items-center justify-content-center bg-secondary text-muted" style="width: 22px; height: 22px; font-size: 11px;">5</span>
-                                    <span class="small text-muted">Health verification</span>
+                                    <span class="small text-muted">Reload & verify health</span>
                                 </div>
                             </div>
 
@@ -146,13 +212,10 @@
                                     <font-awesome-icon icon="shield-alt" />
                                     <span>Run Safety Checks</span>
                                 </button>
-                                <button class="btn btn-warning fw-bold w-100 d-flex align-items-center justify-content-center gap-2 py-2 mt-1" :disabled="!safetyPassed" @click="confirmUpdateNow">
-                                    <font-awesome-icon icon="arrow-circle-up" />
-                                    <span>Update Now</span>
+                                <button class="btn btn-primary fw-bold w-100 d-flex align-items-center justify-content-center gap-2 py-2 mt-1" @click="copyVpsCommands">
+                                    <font-awesome-icon icon="copy" />
+                                    <span>{{ copiedCommands ? 'Commands Copied!' : 'Copy VPS Commands' }}</span>
                                 </button>
-                            </div>
-                            <div v-if="!safetyPassed" class="small text-muted text-center mt-2 opacity-75">
-                                Safety checks required before update.
                             </div>
                         </div>
                     </div>
@@ -318,6 +381,8 @@ export default {
             checkingSafety: false,
             safetyReport: null,
             updating: false,
+            showVpsGuide: false,
+            copiedCommands: false,
         };
     },
     mounted() {
@@ -380,6 +445,44 @@ export default {
             }
             const d = new Date(isoStr);
             return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        },
+        copyVpsCommands() {
+            const target = this.updateInfo.latestVersion || "1.26.31";
+            const cmds = [
+                "cd /www/apps/infininoc",
+                "git fetch --all --tags",
+                `git checkout feature/v${target}`,
+                "npm ci --omit=dev",
+                "npm run build",
+                "pm2 restart infininoc",
+            ].join("\n");
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(cmds).then(() => {
+                    this.copiedCommands = true;
+                    this.$root.toastSuccess("Production VPS update commands copied to clipboard!");
+                    setTimeout(() => {
+                        this.copiedCommands = false;
+                    }, 3000);
+                }).catch(() => {
+                    this.fallbackCopy(cmds);
+                });
+            } else {
+                this.fallbackCopy(cmds);
+            }
+        },
+        fallbackCopy(text) {
+            const el = document.createElement("textarea");
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand("copy");
+            document.body.removeChild(el);
+            this.copiedCommands = true;
+            this.$root.toastSuccess("Production VPS update commands copied to clipboard!");
+            setTimeout(() => {
+                this.copiedCommands = false;
+            }, 3000);
         },
     },
 };

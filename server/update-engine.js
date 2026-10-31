@@ -6,6 +6,8 @@ const BackupEngine = require("./backup");
 
 class UpdateEngine {
     static GITHUB_RELEASES_URL = "https://api.github.com/repos/abhishekaddepalli/InfiniNOC/releases/latest";
+    static GITHUB_ALL_RELEASES_URL = "https://api.github.com/repos/abhishekaddepalli/InfiniNOC/releases";
+    static GITHUB_TAGS_URL = "https://api.github.com/repos/abhishekaddepalli/InfiniNOC/tags";
 
     /**
      * Check for latest InfiniNOC updates from official Infiniforge repository
@@ -17,24 +19,52 @@ class UpdateEngine {
         try {
             log.info("update-engine", `Checking for InfiniNOC updates (channel: ${channel})...`);
 
-            const response = await axios.get(this.GITHUB_RELEASES_URL, {
-                timeout: 5000,
-                headers: { "User-Agent": "InfiniNOC-UpdateEngine/1.0.0" },
-            }).catch(() => null);
-
             let latestVersion = currentVersion;
             let releaseDate = new Date().toISOString();
             let releaseNotes = "You are running the latest stable release of InfiniNOC.";
             let dockerImage = "ghcr.io/abhishekaddepalli/infininoc:latest";
             let isSecurity = false;
 
-            if (response && response.data) {
-                latestVersion = (response.data.tag_name || `v${currentVersion}`).replace(/^v/, "");
+            // Strategy 1: Check GitHub /releases/latest
+            let response = await axios.get(this.GITHUB_RELEASES_URL, {
+                timeout: 5000,
+                headers: { "User-Agent": "InfiniNOC-UpdateEngine/1.0.0" },
+            }).catch(() => null);
+
+            if (response && response.data && response.data.tag_name) {
+                latestVersion = response.data.tag_name.replace(/^v/, "");
                 releaseDate = response.data.published_at || releaseDate;
                 releaseNotes = response.data.body || releaseNotes;
+            } else {
+                // Strategy 2: Fallback to GitHub /tags
+                const tagsResponse = await axios.get(this.GITHUB_TAGS_URL, {
+                    timeout: 5000,
+                    headers: { "User-Agent": "InfiniNOC-UpdateEngine/1.0.0" },
+                }).catch(() => null);
+
+                if (tagsResponse && Array.isArray(tagsResponse.data) && tagsResponse.data.length > 0) {
+                    const sortedTags = tagsResponse.data
+                        .map((t) => (t.name || "").replace(/^v/, ""))
+                        .filter((v) => /^\d+\.\d+\.\d+/.test(v))
+                        .sort((a, b) => compareVersions(b, a));
+
+                    if (sortedTags.length > 0 && compareVersions(sortedTags[0], latestVersion) > 0) {
+                        latestVersion = sortedTags[0];
+                        releaseNotes = `InfiniNOC release v${latestVersion} is available on GitHub.`;
+                    }
+                }
             }
 
             const updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
+
+            const vpsCommands = [
+                "cd /www/apps/infininoc",
+                "git fetch --all --tags",
+                `git checkout feature/v${latestVersion}`,
+                "npm ci --omit=dev",
+                "npm run build",
+                "pm2 restart infininoc",
+            ].join("\n");
 
             return {
                 ok: true,
@@ -46,6 +76,7 @@ class UpdateEngine {
                 releaseNotes: releaseNotes,
                 dockerImage: dockerImage,
                 securityFix: isSecurity,
+                vpsCommands: vpsCommands,
                 lastChecked: new Date().toISOString(),
             };
         } catch (error) {
@@ -60,6 +91,7 @@ class UpdateEngine {
                 releaseNotes: "Running latest stable release.",
                 dockerImage: "ghcr.io/abhishekaddepalli/infininoc:latest",
                 securityFix: false,
+                vpsCommands: "",
                 lastChecked: new Date().toISOString(),
             };
         }
@@ -93,7 +125,8 @@ class UpdateEngine {
     static getVersionHistory() {
         const currentVersion = productConfig.version || "1.0.0";
         return [
-            { version: currentVersion, date: "2026-08-24", channel: "stable", status: "current" },
+            { version: "1.26.31", date: "2026-10-31", channel: "stable", status: currentVersion === "1.26.31" ? "current" : "available" },
+            { version: "1.0.0", date: "2026-08-24", channel: "stable", status: currentVersion === "1.0.0" ? "current" : "available" },
         ];
     }
 }
