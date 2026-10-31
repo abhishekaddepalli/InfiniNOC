@@ -116,6 +116,7 @@ export default {
             selectedIndex: 0,
             categories: [
                 { id: "all", label: "All" },
+                { id: "actions", label: "Actions" },
                 { id: "monitors", label: "Monitors" },
                 { id: "tools", label: "Tools" },
                 { id: "devices", label: "Devices" },
@@ -130,6 +131,18 @@ export default {
                 return "⌘ K";
             }
             return "Ctrl K";
+        },
+        quickActions() {
+            return [
+                { id: "action-add", category: "actions", typeLabel: "Action", name: "Create New Monitor", secondaryText: "Add HTTP, Ping, Port, DNS, or Database target", statusText: "Action", isOnline: true, route: "/add", keywords: ["create", "add", "new", "target", "monitor"] },
+                { id: "action-status", category: "actions", typeLabel: "Navigation", name: "Public Status Pages", secondaryText: "Manage client-facing status pages and incidents", statusText: "Nav", isOnline: true, route: "/manage-status-page", keywords: ["status", "page", "public"] },
+                { id: "action-topology", category: "actions", typeLabel: "Navigation", name: "Network Topology & Dependencies", secondaryText: "Model parent-child upstream routing dependencies", statusText: "Nav", isOnline: true, route: "/topology", keywords: ["topology", "dependency", "network", "map", "sitemap"] },
+                { id: "action-sla", category: "actions", typeLabel: "Navigation", name: "SLA & Availability Reports", secondaryText: "Monthly and quarterly uptime compliance reports", statusText: "Nav", isOnline: true, route: "/reports/sla", keywords: ["sla", "report", "uptime", "availability"] },
+                { id: "action-maintenance", category: "actions", typeLabel: "Navigation", name: "Scheduled Maintenance Windows", secondaryText: "Plan maintenance windows and alert silencing", statusText: "Nav", isOnline: true, route: "/maintenance", keywords: ["maintenance", "silence", "window"] },
+                { id: "action-team", category: "actions", typeLabel: "Navigation", name: "Team & Role Access Control", secondaryText: "Manage sub-teams, engineers, and permissions", statusText: "Nav", isOnline: true, route: "/team", keywords: ["team", "users", "roles", "rbac", "members"] },
+                { id: "action-api", category: "actions", typeLabel: "Navigation", name: "API Keys & Integrations", secondaryText: "Manage webhook integrations and REST API tokens", statusText: "Nav", isOnline: true, route: "/settings/api-keys", keywords: ["api", "key", "token", "webhook", "integration"] },
+                { id: "action-sec", category: "actions", typeLabel: "Navigation", name: "Security & 2FA Settings", secondaryText: "Configure Two-Factor Auth and login security", statusText: "Nav", isOnline: true, route: "/settings/security", keywords: ["security", "2fa", "auth", "password"] },
+            ];
         },
         allMonitors() {
             const list = this.$root.monitorList || {};
@@ -187,6 +200,7 @@ export default {
         },
         allResults() {
             return [
+                ...this.quickActions,
                 ...this.allMonitors,
                 ...this.nocTools,
                 ...this.mockDevices,
@@ -276,6 +290,9 @@ export default {
             }
         },
         getTypeIcon(item) {
+            if (item.category === "actions") {
+                return "star";
+            }
             if (item.category === "monitors") {
                 return "desktop";
             }
@@ -288,9 +305,12 @@ export default {
             if (item.category === "incidents") {
                 return "exclamation-triangle";
             }
-            return "cubes";
+            return "tools";
         },
         getTypeIconBg(item) {
+            if (item.category === "actions") {
+                return "bg-warning text-dark";
+            }
             if (item.category === "monitors") {
                 return "bg-primary text-white";
             }
@@ -306,6 +326,9 @@ export default {
             return "bg-secondary text-white";
         },
         getStatusBadgeClass(item) {
+            if (item.category === "actions") {
+                return "bg-warning text-dark";
+            }
             if (item.category === "incidents") {
                 return "bg-danger text-white";
             }

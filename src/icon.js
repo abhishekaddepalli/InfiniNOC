@@ -73,6 +73,13 @@ import {
     faTools,
     faTerminal,
     faExchangeAlt,
+    faTv,
+    faVolumeUp,
+    faVolumeMute,
+    faExpand,
+    faCompress,
+    faBell,
+    faSatelliteDish,
 } from "@fortawesome/free-solid-svg-icons";
 
 library.add(
@@ -145,7 +152,14 @@ library.add(
     faRoute,
     faTools,
     faTerminal,
-    faExchangeAlt
+    faExchangeAlt,
+    faTv,
+    faVolumeUp,
+    faVolumeMute,
+    faExpand,
+    faCompress,
+    faBell,
+    faSatelliteDish
 );
 
 export { FontAwesomeIcon };

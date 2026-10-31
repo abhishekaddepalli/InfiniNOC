@@ -95,6 +95,15 @@ $dropdown-border-radius: 0.75rem;
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
+
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(226, 232, 240, 0.8);
+    --glass-blur: 16px;
+    --touch-min-h: 44px;
+    --glow-success: rgba(22, 163, 74, 0.2);
+    --glow-warning: rgba(217, 119, 6, 0.2);
+    --glow-danger: rgba(220, 38, 38, 0.2);
+    --glow-primary: rgba(30, 58, 138, 0.2);
 }
 
 // InfiniNOC Semantic Design Tokens (Dark Theme)
@@ -162,4 +171,13 @@ body.dark,
     --input-bg: #111827;
     --input-border: #374151;
     --input-text: #f9fafb;
+
+    --glass-bg: rgba(21, 30, 48, 0.85);
+    --glass-border: rgba(30, 41, 59, 0.8);
+    --glass-blur: 16px;
+    --touch-min-h: 44px;
+    --glow-success: rgba(34, 197, 94, 0.35);
+    --glow-warning: rgba(245, 158, 11, 0.3);
+    --glow-danger: rgba(239, 68, 68, 0.35);
+    --glow-primary: rgba(56, 189, 248, 0.3);
 }

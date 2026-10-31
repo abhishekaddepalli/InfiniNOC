@@ -40,10 +40,42 @@
                 </div>
             </div>
 
-            <!-- 8 Summary Telemetry Cards in Fluid Grid -->
+            <!-- Live Operational Status Hero Banner -->
+            <div
+                class="noc-operational-banner p-3 mb-4 rounded-3 border d-flex align-items-center justify-content-between flex-wrap gap-2"
+                :class="downCount > 0 ? 'outage' : 'nominal'"
+            >
+                <div class="d-flex align-items-center gap-3">
+                    <span class="noc-pulse-indicator" :class="downCount > 0 ? 'bg-danger' : 'bg-success'"></span>
+                    <div>
+                        <div class="fw-bold mb-0" :class="downCount > 0 ? 'text-danger fs-6' : 'text-success fs-6'">
+                            <span v-if="downCount === 0 && pendingCount === 0">All Core Network Systems Operational</span>
+                            <span v-else-if="downCount > 0">{{ downCount }} Critical Infrastructure Outage{{ downCount > 1 ? 's' : '' }} Active</span>
+                            <span v-else>{{ pendingCount }} Monitoring Target{{ pendingCount > 1 ? 's' : '' }} in Degraded State</span>
+                        </div>
+                        <div class="small text-muted">
+                            <span v-if="downCount === 0 && pendingCount === 0">Continuous carrier-grade telemetry active across {{ totalMonitors }} configured endpoint{{ totalMonitors === 1 ? '' : 's' }}.</span>
+                            <span v-else>Active automated alerting and escalation engaged. Verify target connectivity.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                    <router-link v-if="downCount > 0" to="/list?status=0" class="btn btn-sm btn-danger fw-bold px-3">
+                        <font-awesome-icon icon="exclamation-circle" class="me-1" />
+                        <span>View Outages</span>
+                    </router-link>
+                    <div class="d-none d-md-flex align-items-center gap-2 font-monospace small text-muted px-2 py-1 bg-secondary rounded">
+                        <font-awesome-icon icon="satellite-dish" class="text-success" />
+                        <span>Live Telemetry</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8 Summary Telemetry Cards in Fluid Grid (Responsive 2-Col Mobile, 4-Col Desktop) -->
             <div class="row g-2 g-md-3 mb-4">
                 <!-- 1. Total Monitors -->
-                <div class="col-12 col-sm-6 col-lg-3">
+                <div class="col-6 col-md-4 col-xl-3">
                     <div class="noc-card p-3 shadow-sm border-left-amber">
                         <div class="noc-card-header d-flex justify-content-between align-items-center mb-2">
                             <span class="noc-card-title">{{ $t("Total Monitors") }}</span>
@@ -55,7 +87,7 @@
                 </div>
 
                 <!-- 2. Up -->
-                <div class="col-12 col-sm-6 col-lg-3">
+                <div class="col-6 col-md-4 col-xl-3">
                     <div class="noc-card p-3 shadow-sm border-left-success">
                         <div class="noc-card-header d-flex justify-content-between align-items-center mb-2">
                             <span class="noc-card-title">{{ $t("Online") }}</span>
@@ -67,7 +99,7 @@
                 </div>
 
                 <!-- 3. Pending -->
-                <div class="col-12 col-sm-6 col-lg-3">
+                <div class="col-6 col-md-4 col-xl-3">
                     <div class="noc-card p-3 shadow-sm border-left-warning">
                         <div class="noc-card-header d-flex justify-content-between align-items-center mb-2">
                             <span class="noc-card-title">{{ $t("Warning") }}</span>
@@ -79,7 +111,7 @@
                 </div>
 
                 <!-- 4. Down -->
-                <div class="col-12 col-sm-6 col-lg-3">
+                <div class="col-6 col-md-4 col-xl-3">
                     <div class="noc-card p-3 shadow-sm border-left-danger">
                         <div class="noc-card-header d-flex justify-content-between align-items-center mb-2">
                             <span class="noc-card-title">{{ $t("Down") }}</span>
@@ -91,7 +123,7 @@
                 </div>
 
                 <!-- 5. Maintenance -->
-                <div class="col-12 col-sm-6 col-lg-3">
+                <div class="col-6 col-md-4 col-xl-3">
                     <div class="noc-card p-3 shadow-sm border-left-info">
                         <div class="noc-card-header d-flex justify-content-between align-items-center mb-2">
                             <span class="noc-card-title">{{ $t("Maintenance") }}</span>
@@ -103,7 +135,7 @@
                 </div>
 
                 <!-- 6. Active Alerts -->
-                <div class="col-12 col-sm-6 col-lg-3">
+                <div class="col-6 col-md-4 col-xl-3">
                     <div class="noc-card p-3 shadow-sm border-left-purple">
                         <div class="noc-card-header d-flex justify-content-between align-items-center mb-2">
                             <span class="noc-card-title">Active Alerts</span>
@@ -115,7 +147,7 @@
                 </div>
 
                 <!-- 7. Active Incidents -->
-                <div class="col-12 col-sm-6 col-lg-3">
+                <div class="col-6 col-md-4 col-xl-3">
                     <div class="noc-card p-3 shadow-sm" :class="activeIncidentCount > 0 ? 'border-left-danger' : 'border-left-secondary'">
                         <div class="noc-card-header d-flex justify-content-between align-items-center mb-2">
                             <span class="noc-card-title">Active Incidents</span>
@@ -129,7 +161,7 @@
                 </div>
 
                 <!-- 8. Org SLA -->
-                <div class="col-12 col-sm-6 col-lg-3">
+                <div class="col-6 col-md-4 col-xl-3">
                     <div class="noc-card p-3 shadow-sm border-left-blue">
                         <div class="noc-card-header d-flex justify-content-between align-items-center mb-2">
                             <span class="noc-card-title">Overall Availability</span>
@@ -864,13 +896,13 @@ export default {
     border-color: var(--ring);
 }
 
-.border-left-amber { border-left: 4px solid #ff9933; }
-.border-left-success { border-left: 4px solid #2ecc71; }
-.border-left-danger { border-left: 4px solid #dc2626; }
-.border-left-warning { border-left: 4px solid #ff9933; }
-.border-left-info { border-left: 4px solid #3b82f6; }
-.border-left-purple { border-left: 4px solid #a855f7; }
-.border-left-blue { border-left: 4px solid #3b82f6; }
+.border-left-amber { border-left: 4px solid #ff9933; box-shadow: -2px 0 10px rgba(255, 153, 51, 0.15); }
+.border-left-success { border-left: 4px solid #2ecc71; box-shadow: -2px 0 10px rgba(46, 204, 113, 0.15); }
+.border-left-danger { border-left: 4px solid #dc2626; box-shadow: -2px 0 12px rgba(220, 38, 38, 0.22); }
+.border-left-warning { border-left: 4px solid #ff9933; box-shadow: -2px 0 10px rgba(255, 153, 51, 0.15); }
+.border-left-info { border-left: 4px solid #3b82f6; box-shadow: -2px 0 10px rgba(59, 130, 246, 0.15); }
+.border-left-purple { border-left: 4px solid #a855f7; box-shadow: -2px 0 10px rgba(168, 85, 247, 0.15); }
+.border-left-blue { border-left: 4px solid #3b82f6; box-shadow: -2px 0 10px rgba(59, 130, 246, 0.15); }
 .border-left-secondary { border-left: 4px solid #64748b; }
 
 .noc-card-title {

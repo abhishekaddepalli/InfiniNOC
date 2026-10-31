@@ -12,6 +12,14 @@
             </div>
         </div>
 
+        <!-- Floating Exit Bar when in Wallboard Mode -->
+        <div v-if="isWallboardMode" class="noc-wallboard-exit-bar">
+            <button class="btn btn-sm btn-dark border border-warning shadow-lg text-warning fw-bold d-flex align-items-center gap-2 px-3 py-2 rounded-pill cursor-pointer" @click="toggleWallboardMode">
+                <font-awesome-icon icon="compress" />
+                <span>Exit Wallboard (ESC)</span>
+            </button>
+        </div>
+
         <!-- Premium SaaS Desktop Header (64px) -->
         <header v-if="!$root.isMobile" class="noc-saas-header d-flex align-items-center justify-content-between px-4 border-bottom">
             <!-- Left: Brand Identity -->
@@ -52,6 +60,26 @@
                     <font-awesome-icon icon="tachometer-alt" />
                     <span class="d-none d-xl-inline font-weight-semibold">Dashboard</span>
                 </router-link>
+
+                <!-- Fullscreen NOC Wallboard Toggle -->
+                <button
+                    class="btn header-icon-btn rounded-3 cursor-pointer d-flex align-items-center gap-2 px-3 py-2"
+                    :class="{ 'btn-primary text-white': isWallboardMode }"
+                    :title="isWallboardMode ? 'Exit Wallboard' : 'Fullscreen NOC Wallboard'"
+                    @click="toggleWallboardMode"
+                >
+                    <font-awesome-icon :icon="isWallboardMode ? 'compress' : 'tv'" />
+                    <span class="d-none d-xxl-inline small fw-semibold">Wallboard</span>
+                </button>
+
+                <!-- Audio Alert Chime Toggle -->
+                <button
+                    class="btn header-icon-btn rounded-3 cursor-pointer"
+                    :title="soundEnabled ? 'Alert Chime: Enabled' : 'Alert Chime: Muted'"
+                    @click="toggleSoundAlert"
+                >
+                    <font-awesome-icon :icon="soundEnabled ? 'volume-up' : 'volume-mute'" :class="soundEnabled ? 'text-warning' : 'text-muted'" />
+                </button>
 
                 <!-- Theme Selection Dropdown -->
                 <div class="dropdown">
@@ -209,27 +237,34 @@
         </main>
 
         <!-- Mobile Bottom Nav -->
-        <div v-if="$root.isMobile" style="width: 100%; height: calc(60px + env(safe-area-inset-bottom))" />
-        <nav v-if="$root.isMobile && $root.loggedIn" class="bottom-nav">
-            <router-link to="/dashboard" class="nav-link">
-                <div><font-awesome-icon icon="tachometer-alt" /></div>
-                {{ $t("Home") }}
+        <div v-if="$root.isMobile" style="width: 100%; height: calc(64px + env(safe-area-inset-bottom, 0px))" />
+        <nav v-if="$root.isMobile && $root.loggedIn" class="bottom-nav-modern">
+            <router-link to="/dashboard" class="nav-tab-item">
+                <font-awesome-icon icon="tachometer-alt" class="nav-tab-icon" />
+                <span>Dashboard</span>
             </router-link>
 
-            <router-link to="/list" class="nav-link">
-                <div><font-awesome-icon icon="list" /></div>
-                {{ $t("List") }}
+            <router-link to="/list" class="nav-tab-item">
+                <font-awesome-icon icon="list" class="nav-tab-icon" />
+                <span>Monitors</span>
             </router-link>
 
-            <router-link to="/add" class="nav-link">
-                <div><font-awesome-icon icon="plus" /></div>
-                {{ $t("Add") }}
+            <router-link to="/add" class="nav-tab-item nav-tab-add" aria-label="Add Target" title="Add Target">
+                <font-awesome-icon icon="plus" class="nav-tab-icon" />
             </router-link>
 
-            <router-link to="/settings" class="nav-link">
-                <div><font-awesome-icon icon="cog" /></div>
-                {{ $t("Settings") }}
+            <router-link to="/incidents" class="nav-tab-item">
+                <div class="position-relative">
+                    <font-awesome-icon icon="exclamation-triangle" class="nav-tab-icon" />
+                    <span v-if="activeIncidentCount > 0" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="width: 8px; height: 8px;"></span>
+                </div>
+                <span>Incidents</span>
             </router-link>
+
+            <button type="button" class="btn p-0 nav-tab-item border-0 bg-transparent" aria-label="Open menu drawer" @click="mobileDrawerOpen = !mobileDrawerOpen">
+                <font-awesome-icon icon="th-large" class="nav-tab-icon" />
+                <span>Menu</span>
+            </button>
         </nav>
 
         <button
@@ -269,6 +304,8 @@ export default {
             toastContainerObserver: null,
             mobileDrawerOpen: false,
             searchQuery: "",
+            isWallboardMode: false,
+            soundEnabled: localStorage.getItem("infininoc_sound_enabled") === "true",
         };
     },
 
@@ -277,7 +314,21 @@ export default {
             const classes = {};
             classes[this.$root.theme] = true;
             classes["mobile"] = this.$root.isMobile;
+            classes["wallboard"] = this.isWallboardMode;
             return classes;
+        },
+
+        activeIncidentCount() {
+            let count = 0;
+            if (this.$root.lastHeartbeatList) {
+                for (let id in this.$root.lastHeartbeatList) {
+                    const beat = this.$root.lastHeartbeatList[id];
+                    if (beat && beat.status === 0) {
+                        count++;
+                    }
+                }
+            }
+            return count;
         },
 
         themeIcon() {
@@ -380,12 +431,16 @@ export default {
         if (this.toastContainer != null) {
             this.toastContainerObserver.observe(this.toastContainer, { childList: true });
         }
+
+        window.addEventListener("keydown", this.handleKeyDown);
     },
 
     beforeUnmount() {
         if (this.toastContainerObserver) {
             this.toastContainerObserver.disconnect();
         }
+        window.removeEventListener("keydown", this.handleKeyDown);
+        document.body.classList.remove("noc-wallboard-mode");
         document.body.style.overflow = "";
     },
 
@@ -399,6 +454,61 @@ export default {
         handleGlobalSearch() {
             if (this.searchQuery.trim()) {
                 this.$router.push(`/list?search=${encodeURIComponent(this.searchQuery.trim())}`);
+            }
+        },
+        toggleWallboardMode() {
+            this.isWallboardMode = !this.isWallboardMode;
+            document.body.classList.toggle("noc-wallboard-mode", this.isWallboardMode);
+            if (this.isWallboardMode && document.documentElement.requestFullscreen && !document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else if (!this.isWallboardMode && document.exitFullscreen && document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+        },
+        toggleSoundAlert() {
+            this.soundEnabled = !this.soundEnabled;
+            localStorage.setItem("infininoc_sound_enabled", String(this.soundEnabled));
+            if (this.soundEnabled) {
+                this.playChime("up");
+                toast.info("Audio Alert Chimes: Enabled");
+            } else {
+                toast.info("Audio Alert Chimes: Muted");
+            }
+        },
+        playChime(type = "up") {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                const now = ctx.currentTime;
+                if (type === "down") {
+                    osc.type = "sine";
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(330, now + 0.35);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.36);
+                } else {
+                    osc.type = "sine";
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.25);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.26);
+                }
+            } catch (_) {}
+        },
+        handleKeyDown(e) {
+            if (e.key === "Escape" && this.isWallboardMode) {
+                this.toggleWallboardMode();
             }
         },
     },

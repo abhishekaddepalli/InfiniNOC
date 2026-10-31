@@ -26,7 +26,7 @@ async function runInfiniNOCVerification() {
     test("Package Metadata: name is 'infininoc' and repository is InfiniNOC", () => {
         const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "../../package.json"), "utf8"));
         assert.strictEqual(pkg.name, "infininoc", "Package name must be infininoc");
-        assert.strictEqual(pkg.version, "1.0.0", "Package version must be 1.0.0");
+        assert.strictEqual(pkg.version, "1.26.31", "Package version must be 1.26.31");
         assert.strictEqual(pkg.homepage, "https://monitor.infiniforge.cloud");
         assert.strictEqual(pkg.author, "Infiniforge Technologies");
         assert(pkg.repository.url.includes("abhishekaddepalli/InfiniNOC.git"));
@@ -37,7 +37,7 @@ async function runInfiniNOCVerification() {
         const product = require("../../config/product.json");
         assert.strictEqual(product.productName, "InfiniNOC");
         assert.strictEqual(product.companyName, "Infiniforge Technologies");
-        assert.strictEqual(product.version, "1.0.0", "Product version must be 1.0.0");
+        assert.strictEqual(product.version, "1.26.31", "Product version must be 1.26.31");
         assert.strictEqual(product.tagline, "Know Your Network. Before Your Customers Do.");
     });
 
