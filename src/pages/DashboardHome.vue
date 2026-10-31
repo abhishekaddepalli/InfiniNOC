@@ -173,6 +173,146 @@
                 </div>
             </div>
 
+            <!-- Interactive Live Monitor Telemetry Matrix -->
+            <div class="noc-section-box p-3 mb-4 shadow-sm">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <font-awesome-icon icon="satellite-dish" class="text-warning fs-5" />
+                        <h2 class="h6 fw-bold mb-0 text-uppercase tracking-wider text-warning">
+                            Live Infrastructure Target Matrix
+                        </h2>
+                        <span class="badge bg-secondary font-monospace">{{ filteredMonitors.length }} / {{ totalMonitors }}</span>
+                    </div>
+
+                    <!-- Fast Status Filter Chips -->
+                    <div class="d-flex align-items-center gap-1 flex-wrap">
+                        <button
+                            type="button"
+                            class="btn btn-xs rounded-pill px-3 py-1 fw-semibold transition-all"
+                            :class="monitorFilterStatus === 'all' ? 'btn-primary text-white' : 'btn-outline-secondary'"
+                            @click="monitorFilterStatus = 'all'"
+                        >
+                            All ({{ totalMonitors }})
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn-xs rounded-pill px-3 py-1 fw-semibold transition-all"
+                            :class="monitorFilterStatus === 'up' ? 'btn-success text-white' : 'btn-outline-success'"
+                            @click="monitorFilterStatus = 'up'"
+                        >
+                            ● Up ({{ upCount }})
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn-xs rounded-pill px-3 py-1 fw-semibold transition-all"
+                            :class="monitorFilterStatus === 'down' ? 'btn-danger text-white' : 'btn-outline-danger'"
+                            @click="monitorFilterStatus = 'down'"
+                        >
+                            ● Down ({{ downCount }})
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn-xs rounded-pill px-3 py-1 fw-semibold transition-all"
+                            :class="monitorFilterStatus === 'pending' ? 'btn-warning text-dark' : 'btn-outline-warning'"
+                            @click="monitorFilterStatus = 'pending'"
+                        >
+                            ● Warning ({{ pendingCount }})
+                        </button>
+                        <button
+                            v-if="maintenanceCount > 0"
+                            type="button"
+                            class="btn btn-xs rounded-pill px-3 py-1 fw-semibold transition-all"
+                            :class="monitorFilterStatus === 'maintenance' ? 'btn-info text-white' : 'btn-outline-info'"
+                            @click="monitorFilterStatus = 'maintenance'"
+                        >
+                            ● Maint ({{ maintenanceCount }})
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Instant Search Input -->
+                <div class="mb-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-secondary border-secondary text-muted">
+                            <font-awesome-icon icon="search" />
+                        </span>
+                        <input
+                            v-model="monitorSearchQuery"
+                            type="text"
+                            class="form-control bg-secondary border-secondary text-foreground"
+                            placeholder="Instant filter by target name, IP, or hostname..."
+                        />
+                        <button
+                            v-if="monitorSearchQuery"
+                            class="btn btn-outline-secondary"
+                            type="button"
+                            @click="monitorSearchQuery = ''"
+                        >
+                            <font-awesome-icon icon="times" />
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Target Telemetry Cards / Rows -->
+                <div v-if="filteredMonitors.length > 0" class="target-matrix-list d-flex flex-column gap-2" style="max-height: 420px; overflow-y: auto;">
+                    <div
+                        v-for="m in filteredMonitors"
+                        :key="m.id"
+                        class="p-2 p-md-3 rounded noc-subcard border d-flex align-items-center justify-content-between flex-wrap gap-2 hover-elevate"
+                    >
+                        <div class="d-flex align-items-center gap-3 overflow-hidden">
+                            <!-- Pulse Beacon -->
+                            <span
+                                class="noc-pulse-indicator flex-shrink-0"
+                                :class="getMonitorStatusClass(m.id)"
+                            ></span>
+
+                            <!-- Protocol Icon -->
+                            <div class="rounded p-2 bg-secondary d-flex align-items-center justify-content-center text-muted" style="width: 32px; height: 32px;">
+                                <font-awesome-icon :icon="getMonitorTypeIcon(m.type)" class="small" />
+                            </div>
+
+                            <div class="d-flex flex-column overflow-hidden">
+                                <router-link :to="`/dashboard/${m.id}`" class="noc-link fw-bold text-truncate text-decoration-none">
+                                    {{ m.name }}
+                                </router-link>
+                                <span class="small text-muted text-truncate font-monospace" style="font-size: 0.75rem;">
+                                    {{ m.url || m.hostname || m.type }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-3 ms-auto">
+                            <!-- Latency Badge -->
+                            <div class="text-end font-monospace">
+                                <span class="badge" :class="getLatencyBadgeClass(m.id)">
+                                    {{ getMonitorPing(m.id) }}
+                                </span>
+                            </div>
+
+                            <!-- Status Badge -->
+                            <span class="badge text-uppercase font-monospace" :class="getStatusBadgeClass(m.id)">
+                                {{ getMonitorStatusText(m.id) }}
+                            </span>
+
+                            <!-- 1-Click Details Link -->
+                            <router-link :to="`/dashboard/${m.id}`" class="btn btn-sm btn-outline-secondary py-1 px-2" title="View Target Telemetry">
+                                <font-awesome-icon icon="chart-line" />
+                            </router-link>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div v-else class="text-center py-4 text-muted">
+                    <font-awesome-icon icon="search" class="fs-4 mb-2 text-secondary" />
+                    <div class="small">No monitoring targets matched your search or status filter.</div>
+                    <button class="btn btn-outline-secondary btn-sm mt-2" @click="monitorFilterStatus = 'all'; monitorSearchQuery = '';">
+                        Reset Filters
+                    </button>
+                </div>
+            </div>
+
             <!-- Dashboard Grid: 10 Telemetry Sections -->
             <div class="row g-3">
                 <!-- Section 1: Network Health & Operational Status -->
@@ -584,6 +724,8 @@ export default {
             ],
             clearingAllEvents: false,
             activeIncidentCount: 0,
+            monitorFilterStatus: "all",
+            monitorSearchQuery: "",
         };
     },
 
@@ -607,6 +749,26 @@ export default {
     },
 
     computed: {
+        filteredMonitors() {
+            const list = Object.values(this.$root.monitorList || {});
+            return list.filter((m) => {
+                if (this.monitorFilterStatus !== "all") {
+                    const beat = (this.$root.lastHeartbeatList || {})[m.id];
+                    const status = beat ? beat.status : -1;
+                    if (this.monitorFilterStatus === "up" && status !== 1) return false;
+                    if (this.monitorFilterStatus === "down" && status !== 0) return false;
+                    if (this.monitorFilterStatus === "pending" && status !== 2) return false;
+                    if (this.monitorFilterStatus === "maintenance" && status !== 3) return false;
+                }
+                if (this.monitorSearchQuery && this.monitorSearchQuery.trim()) {
+                    const q = this.monitorSearchQuery.toLowerCase().trim();
+                    const name = (m.name || "").toLowerCase();
+                    const target = (m.url || m.hostname || "").toLowerCase();
+                    return name.includes(q) || target.includes(q);
+                }
+                return true;
+            });
+        },
         activeOrgObj() {
             return this.$root.organizationList.find((o) => o.id === this.$root.activeOrganizationId);
         },
@@ -816,6 +978,65 @@ export default {
     },
 
     methods: {
+        getMonitorStatusClass(id) {
+            const beat = (this.$root.lastHeartbeatList || {})[id];
+            if (!beat) return "bg-secondary";
+            if (beat.status === 1) return "bg-success";
+            if (beat.status === 0) return "bg-danger";
+            if (beat.status === 2) return "bg-warning";
+            if (beat.status === 3) return "bg-info";
+            return "bg-secondary";
+        },
+        getMonitorTypeIcon(type) {
+            switch (type) {
+                case "http":
+                case "keyword":
+                case "json-query":
+                    return "globe";
+                case "ping":
+                    return "network-wired";
+                case "port":
+                    return "plug";
+                case "dns":
+                    return "search";
+                case "snmp":
+                    return "server";
+                default:
+                    return "desktop";
+            }
+        },
+        getMonitorPing(id) {
+            const beat = (this.$root.lastHeartbeatList || {})[id];
+            if (beat && typeof beat.ping === "number" && beat.ping > 0) {
+                return `${beat.ping} ms`;
+            }
+            return "- ms";
+        },
+        getLatencyBadgeClass(id) {
+            const beat = (this.$root.lastHeartbeatList || {})[id];
+            if (!beat || typeof beat.ping !== "number" || beat.ping <= 0) return "bg-secondary text-muted";
+            if (beat.ping < 100) return "bg-success text-white";
+            if (beat.ping < 300) return "bg-warning text-dark";
+            return "bg-danger text-white";
+        },
+        getStatusBadgeClass(id) {
+            const beat = (this.$root.lastHeartbeatList || {})[id];
+            if (!beat) return "bg-secondary";
+            if (beat.status === 1) return "bg-success";
+            if (beat.status === 0) return "bg-danger";
+            if (beat.status === 2) return "bg-warning text-dark";
+            if (beat.status === 3) return "bg-info";
+            return "bg-secondary";
+        },
+        getMonitorStatusText(id) {
+            const beat = (this.$root.lastHeartbeatList || {})[id];
+            if (!beat) return "Pending";
+            if (beat.status === 1) return "UP";
+            if (beat.status === 0) return "DOWN";
+            if (beat.status === 2) return "DEGRADED";
+            if (beat.status === 3) return "MAINT";
+            return "UNKNOWN";
+        },
         lastHeartbeat(monitorId) {
             const beats = this.$root.heartbeatList[monitorId];
             if (Array.isArray(beats) && beats.length > 0) {
@@ -952,5 +1173,15 @@ export default {
     letter-spacing: 0.05em;
     color: var(--accent);
     border-bottom: 2px solid var(--border);
+}
+
+.hover-elevate {
+    transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.hover-elevate:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent) !important;
+    background-color: var(--secondary) !important;
 }
 </style>

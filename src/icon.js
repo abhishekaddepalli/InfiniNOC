@@ -80,6 +80,7 @@ import {
     faCompress,
     faBell,
     faSatelliteDish,
+    faSlidersH,
 } from "@fortawesome/free-solid-svg-icons";
 
 library.add(
@@ -159,7 +160,8 @@ library.add(
     faExpand,
     faCompress,
     faBell,
-    faSatelliteDish
+    faSatelliteDish,
+    faSlidersH
 );
 
 export { FontAwesomeIcon };

@@ -83,14 +83,23 @@
                     <span class="d-none d-xxl-inline small fw-semibold">Wallboard</span>
                 </button>
 
-                <!-- Audio Alert Chime Toggle -->
-                <button
-                    class="btn header-icon-btn rounded-3 cursor-pointer"
-                    :title="soundEnabled ? 'Alert Chime: Enabled' : 'Alert Chime: Muted'"
-                    @click="toggleSoundAlert"
-                >
-                    <font-awesome-icon :icon="soundEnabled ? 'volume-up' : 'volume-mute'" :class="soundEnabled ? 'text-warning' : 'text-muted'" />
-                </button>
+                <!-- Audio Alert Chime Control Group -->
+                <div class="btn-group">
+                    <button
+                        class="btn header-icon-btn rounded-start-3 cursor-pointer"
+                        :title="soundEnabled ? 'Alert Chime: Enabled (Click to mute)' : 'Alert Chime: Muted (Click to enable)'"
+                        @click="toggleSoundAlert"
+                    >
+                        <font-awesome-icon :icon="soundEnabled ? 'volume-up' : 'volume-mute'" :class="soundEnabled ? 'text-warning' : 'text-muted'" />
+                    </button>
+                    <button
+                        class="btn header-icon-btn rounded-end-3 cursor-pointer px-2 border-start border-secondary"
+                        title="NOC Audio Alert Settings & Test"
+                        @click="showAudioModal = true"
+                    >
+                        <font-awesome-icon icon="sliders-h" class="text-muted" style="font-size: 0.72rem;" />
+                    </button>
+                </div>
 
                 <!-- Theme Selection Dropdown -->
                 <div class="dropdown">
@@ -295,6 +304,111 @@
         >
             <font-awesome-icon icon="times" />
         </button>
+
+        <!-- NOC Audio Alert Control Modal -->
+        <div v-if="showAudioModal" class="modal d-block noc-modal-backdrop" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-secondary bg-card text-foreground shadow-lg">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="volume-up" />
+                            <span>NOC Audio Alert Control Center</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showAudioModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <!-- Master Switch -->
+                        <div class="form-check form-switch d-flex align-items-center justify-content-between p-0 mb-3">
+                            <label class="form-check-label fw-bold" for="nocAudioMasterSwitch">
+                                Enable Incident Audio Chimes
+                            </label>
+                            <input
+                                id="nocAudioMasterSwitch"
+                                v-model="soundEnabled"
+                                class="form-check-input ms-0"
+                                type="checkbox"
+                                role="switch"
+                                @change="saveSoundPrefs"
+                            />
+                        </div>
+
+                        <!-- Volume Slider -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="small text-muted fw-bold text-uppercase">Alert Volume</label>
+                                <span class="badge bg-secondary font-monospace">{{ soundVolume }}%</span>
+                            </div>
+                            <input
+                                v-model.number="soundVolume"
+                                type="range"
+                                class="form-range"
+                                min="5"
+                                max="100"
+                                step="5"
+                                :disabled="!soundEnabled"
+                                @change="saveSoundPrefs"
+                            />
+                        </div>
+
+                        <!-- Tone Selection -->
+                        <div class="mb-3">
+                            <label class="small text-muted fw-bold text-uppercase mb-2 d-block">Alert Tone Profile</label>
+                            <div class="btn-group w-100" role="group">
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    :class="{ active: soundTone === 'siren' }"
+                                    @click="soundTone = 'siren'; saveSoundPrefs();"
+                                >
+                                    Siren
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    :class="{ active: soundTone === 'sonar' }"
+                                    @click="soundTone = 'sonar'; saveSoundPrefs();"
+                                >
+                                    Sonar Ping
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    :class="{ active: soundTone === 'chime' }"
+                                    @click="soundTone = 'chime'; saveSoundPrefs();"
+                                >
+                                    Chime
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Sound Audition / Test Buttons -->
+                        <div class="p-3 rounded bg-dark border border-secondary mb-3">
+                            <div class="small text-muted fw-bold mb-2 text-uppercase">Audition Sound Engine</div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-outline-danger btn-sm flex-fill d-flex align-items-center justify-content-center gap-2" @click="testChime('down')">
+                                    <font-awesome-icon icon="exclamation-triangle" />
+                                    <span>Test Outage Siren</span>
+                                </button>
+                                <button class="btn btn-outline-success btn-sm flex-fill d-flex align-items-center justify-content-center gap-2" @click="testChime('up')">
+                                    <font-awesome-icon icon="check-circle" />
+                                    <span>Test Recovery</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="small text-muted">
+                            <font-awesome-icon icon="info-circle" class="me-1 text-info" />
+                            Audio alerts synthesize locally using browser Web Audio API. Zero external MP3 downloads required.
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-2">
+                        <button type="button" class="btn btn-secondary btn-sm px-4" @click="showAudioModal = false">
+                            Done
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -326,6 +440,9 @@ export default {
             searchQuery: "",
             isWallboardMode: false,
             soundEnabled: localStorage.getItem("infininoc_sound_enabled") === "true",
+            showAudioModal: false,
+            soundVolume: parseInt(localStorage.getItem("infininoc_sound_volume")) || 50,
+            soundTone: localStorage.getItem("infininoc_sound_tone") || "siren",
         };
     },
 
@@ -496,6 +613,7 @@ export default {
             }
         },
         playChime(type = "up") {
+            if (!this.soundEnabled) return;
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (!AudioContext) return;
@@ -506,25 +624,50 @@ export default {
                 osc.connect(gain);
                 gain.connect(ctx.destination);
 
+                const volumeFactor = Math.max(0.02, ((this.soundVolume || 50) / 100) * 0.25);
                 const now = ctx.currentTime;
+
                 if (type === "down") {
-                    osc.type = "sine";
-                    osc.frequency.setValueAtTime(440, now);
-                    osc.frequency.exponentialRampToValueAtTime(330, now + 0.35);
-                    gain.gain.setValueAtTime(0.2, now);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    if (this.soundTone === "sonar") {
+                        osc.type = "sine";
+                        osc.frequency.setValueAtTime(800, now);
+                        osc.frequency.exponentialRampToValueAtTime(220, now + 0.45);
+                    } else if (this.soundTone === "siren") {
+                        osc.type = "sawtooth";
+                        osc.frequency.setValueAtTime(480, now);
+                        osc.frequency.linearRampToValueAtTime(320, now + 0.2);
+                        osc.frequency.linearRampToValueAtTime(480, now + 0.4);
+                    } else {
+                        osc.type = "sine";
+                        osc.frequency.setValueAtTime(440, now);
+                        osc.frequency.exponentialRampToValueAtTime(330, now + 0.35);
+                    }
+                    gain.gain.setValueAtTime(volumeFactor, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
                     osc.start(now);
-                    osc.stop(now + 0.36);
+                    osc.stop(now + 0.46);
                 } else {
                     osc.type = "sine";
                     osc.frequency.setValueAtTime(523.25, now);
-                    osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.25);
-                    gain.gain.setValueAtTime(0.15, now);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.frequency.setValueAtTime(659.25, now + 0.12);
+                    osc.frequency.setValueAtTime(783.99, now + 0.24);
+                    gain.gain.setValueAtTime(volumeFactor, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
                     osc.start(now);
-                    osc.stop(now + 0.26);
+                    osc.stop(now + 0.43);
                 }
             } catch (_) {}
+        },
+        testChime(type) {
+            const prev = this.soundEnabled;
+            this.soundEnabled = true;
+            this.playChime(type);
+            this.soundEnabled = prev;
+        },
+        saveSoundPrefs() {
+            localStorage.setItem("infininoc_sound_enabled", String(this.soundEnabled));
+            localStorage.setItem("infininoc_sound_volume", String(this.soundVolume));
+            localStorage.setItem("infininoc_sound_tone", this.soundTone);
         },
         handleKeyDown(e) {
             if (e.key === "Escape" && this.isWallboardMode) {
