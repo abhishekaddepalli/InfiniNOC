@@ -72,9 +72,10 @@
                     <thead>
                         <tr class="text-secondary text-uppercase small" style="font-size: 0.75rem;">
                             <th>Severity</th>
-                            <th>Rule Name</th>
+                            <th>Target</th>
+                            <th>Rule / Outage Details</th>
                             <th>Metric</th>
-                            <th>Value</th>
+                            <th>Trigger Value</th>
                             <th>First Triggered</th>
                             <th>Status</th>
                             <th class="text-end">Actions</th>
@@ -87,9 +88,16 @@
                                     {{ a.state }}
                                 </span>
                             </td>
-                            <td class="fw-bold text-foreground">{{ a.rule_name || 'Alert #' + a.rule_id }}</td>
+                            <td class="fw-bold text-foreground">
+                                <font-awesome-icon :icon="a.target_type === 'monitor' ? 'desktop' : 'network-wired'" class="me-1 text-muted" />
+                                <span>{{ a.target_name || (a.target_type + ' #' + a.target_id) }}</span>
+                            </td>
+                            <td class="fw-semibold text-foreground">
+                                <div>{{ a.rule_name || 'Monitor Outage Alert' }}</div>
+                                <div class="small text-muted font-monospace text-truncate" style="max-width: 320px;" :title="a.message">{{ a.message }}</div>
+                            </td>
                             <td><span class="badge bg-secondary font-monospace">{{ a.metric }}</span></td>
-                            <td class="font-monospace text-info">{{ a.trigger_value }}</td>
+                            <td class="font-monospace text-info">{{ a.trigger_value !== null ? a.trigger_value : 'DOWN' }}</td>
                             <td class="small text-muted">{{ formatDate(a.first_triggered_at) }}</td>
                             <td>
                                 <span v-if="a.acknowledged" class="badge bg-success">ACKNOWLEDGED</span>
@@ -325,6 +333,14 @@ export default {
     },
     mounted() {
         this.loadData();
+        if (this.$root.getSocket()) {
+            this.$root.getSocket().on("updateActiveAlerts", this.loadData);
+        }
+    },
+    beforeUnmount() {
+        if (this.$root.getSocket()) {
+            this.$root.getSocket().off("updateActiveAlerts", this.loadData);
+        }
     },
     methods: {
         loadData() {

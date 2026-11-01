@@ -63,6 +63,7 @@ const { promisify } = require("node:util");
 const brotliCompress = promisify(zlib.brotliCompress);
 const DomainExpiry = require("./domain_expiry");
 const Incident = require("./incident");
+const AlertEngine = require("./alert-engine");
 
 const rootCertificates = rootCertificatesFingerprints();
 
@@ -985,11 +986,14 @@ class Monitor extends BeanModel {
 
                 await UptimeKumaServer.getInstance().sendMaintenanceListByUserID(this.user_id);
 
-                // InfiniNOC Auto Incident Creation & Resolution on Monitor Status Change
+                // InfiniNOC Auto Incident & Active Alert Synchronization on Monitor Status Change
                 if (bean.status === DOWN) {
                     try {
                         const orgId = this.organization_id || 1;
-                        const existing = await R.getRow(
+                        const isoNow = new Date().toISOString();
+
+                        // 1. Ensure Active Incident exists for this outage
+                        const existingInc = await R.getRow(
                             `SELECT incident.id FROM incident 
                             JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
                             WHERE incident.organization_id = ? AND incident.status NOT IN ('RESOLVED', 'CLOSED') 
@@ -997,7 +1001,7 @@ class Monitor extends BeanModel {
                             [orgId, this.id]
                         );
 
-                        if (!existing) {
+                        if (!existingInc) {
                             await Incident.createIncident(
                                 {
                                     title: `[OUTAGE] Monitor #${this.id} (${this.name}) is DOWN`,
@@ -1010,12 +1014,32 @@ class Monitor extends BeanModel {
                             );
                             io.emit("updateIncidentStats");
                         }
+
+                        // 2. Ensure Active Alert exists for this outage
+                        const existingAlert = await R.getRow(
+                            "SELECT id FROM active_alert WHERE organization_id = ? AND target_type = 'monitor' AND target_id = ?",
+                            [orgId, this.id]
+                        );
+
+                        if (!existingAlert) {
+                            const alertMsg = `Monitor #${this.id} (${this.name}) is DOWN: ${bean.msg || "Target unreachable"}`;
+                            await R.exec(
+                                `INSERT INTO active_alert (
+                                    organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
+                                ) VALUES (?, 0, 'monitor', ?, 'monitor_down', 'CRITICAL', 0, ?, ?, ?, ?, ?)`,
+                                [orgId, this.id, alertMsg, isoNow, isoNow, isoNow, isoNow]
+                            );
+                            io.emit("updateActiveAlerts");
+                        }
                     } catch (e) {
-                        log.error("monitor", "Auto incident creation failed: " + e.message);
+                        log.error("monitor", "Auto incident & alert creation failed: " + e.message);
                     }
                 } else if (bean.status === UP && previousBeat?.status === DOWN) {
                     try {
                         const orgId = this.organization_id || 1;
+                        const isoNow = new Date().toISOString();
+
+                        // 1. Resolve Open Incidents for this monitor
                         const openIncidents = await R.getAll(
                             `SELECT incident.id FROM incident 
                             JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
@@ -1027,18 +1051,33 @@ class Monitor extends BeanModel {
                         for (const inc of openIncidents) {
                             await R.exec(
                                 "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
-                                [new Date().toISOString(), new Date().toISOString(), inc.id]
+                                [isoNow, isoNow, inc.id]
                             );
                             await R.exec(
                                 "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, ?, 'resolved', 'Auto resolved on monitor recovery (UP)', ?)",
-                                [orgId, inc.id, null, new Date().toISOString()]
+                                [orgId, inc.id, null, isoNow]
                             );
                         }
                         if (openIncidents.length > 0) {
                             io.emit("updateIncidentStats");
                         }
+
+                        // 2. Resolve Active Alert for this monitor
+                        const existingAlert = await R.getRow(
+                            "SELECT * FROM active_alert WHERE organization_id = ? AND target_type = 'monitor' AND target_id = ?",
+                            [orgId, this.id]
+                        );
+                        if (existingAlert) {
+                            const recoveryMsg = `[RECOVERED] Monitor #${this.id} (${this.name}) returned to service (UP)`;
+                            await R.exec(
+                                "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, ?, 'RECOVERED', ?, ?)",
+                                [orgId, existingAlert.id, existingAlert.rule_id || 0, recoveryMsg, isoNow]
+                            );
+                            await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
+                            io.emit("updateActiveAlerts");
+                        }
                     } catch (e) {
-                        log.error("monitor", "Auto incident resolution failed: " + e.message);
+                        log.error("monitor", "Auto incident & alert resolution failed: " + e.message);
                     }
                 }
             } else {

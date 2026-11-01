@@ -46,35 +46,34 @@
                 </div>
             </div>
 
-            <!-- Critical Infrastructure Alert Banner -->
+            <!-- Critical Infrastructure Alert Banner (Only displayed when active critical outages or degraded targets exist) -->
             <div
-                class="noc-alert-banner p-3 p-md-4 mb-4 rounded-4 d-flex align-items-center justify-content-between flex-wrap gap-3"
-                :class="downCount > 0 ? 'outage' : 'nominal'"
+                v-if="downCount > 0 || pendingCount > 0 || activeIncidentCount > 0"
+                class="noc-alert-banner outage p-3 p-md-4 mb-4 rounded-4 d-flex align-items-center justify-content-between flex-wrap gap-3"
             >
                 <div class="d-flex align-items-center gap-3">
                     <div class="alert-icon-box d-flex align-items-center justify-content-center flex-shrink-0 rounded-3">
-                        <font-awesome-icon :icon="downCount > 0 ? 'exclamation-triangle' : 'check-circle'" class="fs-4" />
+                        <font-awesome-icon icon="exclamation-triangle" class="fs-4 text-danger" />
                     </div>
                     <div>
                         <div class="fw-bold mb-1 text-foreground fs-6">
-                            <span v-if="downCount === 0 && pendingCount === 0">All Core Network Systems Operational</span>
-                            <span v-else-if="downCount > 0">{{ downCount }} Critical Infrastructure Outage{{ downCount > 1 ? 's' : '' }} Active</span>
+                            <span v-if="downCount > 0">{{ downCount }} Critical Infrastructure Outage{{ downCount > 1 ? 's' : '' }} Active</span>
+                            <span v-else-if="activeIncidentCount > 0">{{ activeIncidentCount }} Active Incident{{ activeIncidentCount > 1 ? 's' : '' }} Under Investigation</span>
                             <span v-else>{{ pendingCount }} Monitoring Target{{ pendingCount > 1 ? 's' : '' }} in Degraded State</span>
                         </div>
                         <div class="small alert-subtext">
-                            <span v-if="downCount === 0 && pendingCount === 0">Continuous carrier-grade telemetry active across {{ totalMonitors }} configured endpoint{{ totalMonitors === 1 ? '' : 's' }}.</span>
-                            <span v-else>Active automated alerting and escalation engaged. Verify target connectivity.</span>
+                            Active automated alerting and escalation engaged. Verify target connectivity.
                         </div>
                     </div>
                 </div>
 
-                <div class="d-flex align-items-center gap-2">
-                    <router-link v-if="downCount > 0" to="/list?status=0" class="btn btn-danger fw-semibold px-3 py-2 rounded-3 d-flex align-items-center gap-2 shadow-sm">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <router-link to="/incidents?status=OPEN&severity=P1" class="btn btn-danger fw-semibold px-3 py-2 rounded-3 d-flex align-items-center gap-2 shadow-sm">
                         <span>View Outages</span>
                         <font-awesome-icon icon="chevron-down" style="transform: rotate(-90deg); font-size: 0.75rem;" />
                     </router-link>
-                    <button class="btn btn-secondary border text-foreground fw-medium px-3 py-2 rounded-3 d-flex align-items-center gap-2" @click="$emit('wallboard')">
-                        <font-awesome-icon icon="heartbeat" :class="downCount > 0 ? 'text-danger' : 'text-success'" />
+                    <button class="btn btn-secondary border text-foreground fw-medium px-3 py-2 rounded-3 d-flex align-items-center gap-2" @click="openLiveTelemetry">
+                        <font-awesome-icon icon="heartbeat" class="text-danger" />
                         <span>Live Telemetry</span>
                     </button>
                 </div>
@@ -173,7 +172,7 @@
                         <div>
                             <div class="kpi-label">Active Alerts</div>
                             <div class="kpi-value text-indigo" style="color: #6366F1 !important;">{{ activeAlertsCount }}</div>
-                            <div class="kpi-subtext">Notification rules</div>
+                            <div class="kpi-subtext">Firing alerts</div>
                         </div>
                     </div>
                 </div>
@@ -218,7 +217,7 @@
                 <!-- ================= LEFT COLUMN ================= -->
                 <div class="col-12 col-xl-8 d-flex flex-column gap-3">
                     <!-- 1. Live Infrastructure Targets -->
-                    <div class="noc-panel p-3 p-md-4 rounded-4">
+                    <div id="live-targets-panel" class="noc-panel p-3 p-md-4 rounded-4">
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                             <div class="d-flex align-items-center gap-2">
                                 <font-awesome-icon icon="layer-group" class="text-success" style="color: #10B981 !important;" />
@@ -755,6 +754,8 @@ export default {
             ],
             clearingAllEvents: false,
             activeIncidentCount: 0,
+            activeAlertsCount: 0,
+            activeAlertsList: [],
             monitorFilterStatus: "all",
             monitorSearchQuery: "",
         };
@@ -763,19 +764,23 @@ export default {
     watch: {
         "$root.activeOrganizationId"() {
             this.loadIncidentStats();
+            this.loadActiveAlerts();
         },
     },
 
     mounted() {
         this.loadIncidentStats();
+        this.loadActiveAlerts();
         if (this.$root.getSocket()) {
             this.$root.getSocket().on("updateIncidentStats", this.loadIncidentStats);
+            this.$root.getSocket().on("updateActiveAlerts", this.loadActiveAlerts);
         }
     },
 
     beforeUnmount() {
         if (this.$root.getSocket()) {
             this.$root.getSocket().off("updateIncidentStats", this.loadIncidentStats);
+            this.$root.getSocket().off("updateActiveAlerts", this.loadActiveAlerts);
         }
     },
 
@@ -824,9 +829,6 @@ export default {
         },
         maintenanceCount() {
             return this.$root.stats.maintenance || 0;
-        },
-        activeAlertsCount() {
-            return this.$root.notificationList.length;
         },
         activeProbes() {
             return this.upCount + this.downCount + this.pendingCount + this.maintenanceCount;
@@ -1039,6 +1041,36 @@ export default {
                         this.activeIncidentCount = res.stats.activeCount || 0;
                     }
                 });
+            }
+        },
+
+        loadActiveAlerts() {
+            if (this.$root.getSocket()) {
+                this.$root.getSocket().emit("getActiveAlerts", (res) => {
+                    if (res && res.ok && Array.isArray(res.alerts)) {
+                        this.activeAlertsList = res.alerts;
+                        this.activeAlertsCount = res.alerts.length;
+                    }
+                });
+            }
+        },
+
+        openLiveTelemetry() {
+            if (this.downCount > 0) {
+                const list = Object.values(this.$root.monitorList || {});
+                const downMon = list.find((m) => {
+                    const beat = (this.$root.lastHeartbeatList || {})[m.id];
+                    return beat && beat.status === 0;
+                });
+                if (downMon) {
+                    this.$router.push(`/dashboard/${downMon.id}`);
+                    return;
+                }
+            }
+            this.monitorFilterStatus = this.downCount > 0 ? "down" : "all";
+            const el = document.getElementById("live-targets-panel");
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
             }
         },
 

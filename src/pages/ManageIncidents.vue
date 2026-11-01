@@ -232,12 +232,29 @@ export default {
         "$root.activeOrganizationId"() {
             this.loadData();
         },
+        "$route.query"() {
+            this.loadData();
+        },
     },
     mounted() {
         this.loadData();
+        if (this.$root.getSocket()) {
+            this.$root.getSocket().on("updateIncidentStats", this.loadData);
+        }
+    },
+    beforeUnmount() {
+        if (this.$root.getSocket()) {
+            this.$root.getSocket().off("updateIncidentStats", this.loadData);
+        }
     },
     methods: {
         loadData() {
+            if (this.$route.query.status) {
+                this.selectedStatus = String(this.$route.query.status).toUpperCase();
+            }
+            if (this.$route.query.severity) {
+                this.selectedSeverity = String(this.$route.query.severity).toUpperCase();
+            }
             this.loadStats();
             this.loadIncidents();
             this.loadSites();

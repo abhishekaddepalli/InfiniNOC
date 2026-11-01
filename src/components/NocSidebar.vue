@@ -247,6 +247,7 @@ export default {
     data() {
         return {
             activeIncidentCount: 0,
+            activeAlertsCount: 0,
         };
     },
     computed: {
@@ -268,7 +269,7 @@ export default {
             return this.activeOrgRole === "owner" || this.activeOrgRole === "admin";
         },
         alertCount() {
-            return this.$root.notificationList ? this.$root.notificationList.length : 0;
+            return this.activeAlertsCount;
         },
         incidentCount() {
             return this.activeIncidentCount;
@@ -277,17 +278,21 @@ export default {
     watch: {
         "$root.activeOrganizationId"() {
             this.loadIncidentCount();
+            this.loadAlertCount();
         },
     },
     mounted() {
         this.loadIncidentCount();
+        this.loadAlertCount();
         if (this.$root.getSocket()) {
             this.$root.getSocket().on("updateIncidentStats", this.loadIncidentCount);
+            this.$root.getSocket().on("updateActiveAlerts", this.loadAlertCount);
         }
     },
     beforeUnmount() {
         if (this.$root.getSocket()) {
             this.$root.getSocket().off("updateIncidentStats", this.loadIncidentCount);
+            this.$root.getSocket().off("updateActiveAlerts", this.loadAlertCount);
         }
     },
     methods: {
@@ -304,6 +309,15 @@ export default {
                 this.$root.getSocket().emit("getIncidentDashboardStats", (res) => {
                     if (res && res.ok && res.stats) {
                         this.activeIncidentCount = res.stats.activeCount || 0;
+                    }
+                });
+            }
+        },
+        loadAlertCount() {
+            if (this.$root.getSocket()) {
+                this.$root.getSocket().emit("getActiveAlerts", (res) => {
+                    if (res && res.ok && Array.isArray(res.alerts)) {
+                        this.activeAlertsCount = res.alerts.length;
                     }
                 });
             }

@@ -63,32 +63,6 @@
                     <font-awesome-icon icon="sync-alt" class="me-1" :class="{ 'fa-spin': checking }" />
                     Check Again
                 </button>
-                <button class="btn btn-outline-primary btn-sm fw-semibold" @click="showVpsGuide = !showVpsGuide">
-                    <font-awesome-icon icon="terminal" class="me-1" />
-                    {{ showVpsGuide ? 'Hide VPS Commands' : 'View VPS Update Commands' }}
-                </button>
-            </div>
-
-            <!-- Collapsible VPS Commands Reference -->
-            <div v-if="showVpsGuide" class="mt-4 pt-3 border-top border-secondary text-start">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <div class="d-flex align-items-center gap-2">
-                        <font-awesome-icon icon="terminal" class="text-primary" />
-                        <span class="fw-bold text-foreground small">Production VPS Terminal Deployment Commands</span>
-                    </div>
-                    <button class="btn btn-sm btn-outline-primary py-1 px-2" @click="copyVpsCommands">
-                        <font-awesome-icon :icon="copiedCommands ? 'check' : 'copy'" class="me-1" />
-                        <span>{{ copiedCommands ? 'Copied!' : 'Copy' }}</span>
-                    </button>
-                </div>
-                <div class="bg-black text-light p-3 rounded font-monospace small">
-                    <pre class="m-0 text-success" style="white-space: pre-wrap; font-family: inherit;">cd /www/apps/infininoc
-git fetch --all --tags
-git checkout feature/v1.26.31
-npm ci
-npm run build
-pm2 restart infininoc</pre>
-                </div>
             </div>
         </div>
 
@@ -135,42 +109,18 @@ pm2 restart infininoc</pre>
                             </div>
                         </div>
 
-                        <!-- Production VPS Update Terminal Box -->
+                        <!-- Production Update Safety Notice -->
                         <div class="mt-4 pt-3 border-top border-secondary">
-                            <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="terminal" class="text-primary" />
-                                    <h6 class="fw-bold text-foreground mb-0">Production VPS Update Commands</h6>
-                                    <span class="badge bg-secondary font-monospace text-muted small">Ubuntu 24.04 · PM2 · MySQL</span>
+                            <div class="p-3 rounded bg-surface border border-secondary shadow-sm d-flex align-items-center gap-3">
+                                <div class="rounded-circle bg-success-subtle text-success p-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 42px; height: 42px;">
+                                    <font-awesome-icon icon="shield-alt" class="fs-5" />
                                 </div>
-                                <button
-                                    class="btn btn-outline-primary btn-sm fw-semibold d-flex align-items-center gap-2"
-                                    @click="copyVpsCommands"
-                                >
-                                    <font-awesome-icon :icon="copiedCommands ? 'check' : 'copy'" :class="{ 'text-success': copiedCommands }" />
-                                    <span>{{ copiedCommands ? 'Commands Copied!' : 'Copy Commands' }}</span>
-                                </button>
-                            </div>
-                            <div class="p-3 rounded font-monospace small bg-black text-light border border-secondary shadow-sm">
-                                <pre class="m-0 text-success" style="white-space: pre-wrap; font-family: inherit;"># 1. Navigate to InfiniNOC production directory
-<span class="text-white">cd /www/apps/infininoc</span>
-
-# 2. Fetch all latest remote branches and release tags
-<span class="text-white">git fetch --all --tags</span>
-
-# 3. Checkout the target release
-<span class="text-white">git checkout feature/v{{ updateInfo.latestVersion || '1.26.31' }}</span>
-
-# 4. Install dependencies & compile frontend bundle
-<span class="text-white">npm ci</span>
-<span class="text-white">npm run build</span>
-
-# 5. Restart InfiniNOC daemon with PM2 (Zero downtime)
-<span class="text-white">pm2 restart infininoc</span></pre>
-                            </div>
-                            <div class="small text-muted mt-2 d-flex align-items-center gap-2">
-                                <font-awesome-icon icon="shield-alt" class="text-success" />
-                                <span>Safe in-place update: Preserves your MySQL database <code class="text-primary">kuma</code>, PM2 configuration, and all monitor data.</span>
+                                <div>
+                                    <h6 class="fw-bold text-foreground mb-1">Carrier-Grade In-Place Upgrades</h6>
+                                    <div class="small text-muted">
+                                        InfiniNOC updates are fully automated and database-safe. All existing monitoring telemetry, alert rules, topology maps, and configurations are preserved with zero downtime.
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -191,11 +141,11 @@ pm2 restart infininoc</pre>
                                 </div>
                                 <div class="d-flex align-items-center gap-2 mb-2">
                                     <span class="badge rounded-circle p-1 d-flex align-items-center justify-content-center bg-secondary text-muted" style="width: 22px; height: 22px; font-size: 11px;">3</span>
-                                    <span class="small text-muted">Copy VPS commands</span>
+                                    <span class="small text-muted">Stage release package</span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2 mb-2">
                                     <span class="badge rounded-circle p-1 d-flex align-items-center justify-content-center bg-secondary text-muted" style="width: 22px; height: 22px; font-size: 11px;">4</span>
-                                    <span class="small text-muted">Execute terminal upgrade</span>
+                                    <span class="small text-muted">Execute system upgrade</span>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="badge rounded-circle p-1 d-flex align-items-center justify-content-center bg-secondary text-muted" style="width: 22px; height: 22px; font-size: 11px;">5</span>
@@ -211,10 +161,6 @@ pm2 restart infininoc</pre>
                                 <button class="btn btn-outline-warning btn-sm fw-semibold w-100 d-flex align-items-center justify-content-center gap-2" @click="openSafetyCheckModal">
                                     <font-awesome-icon icon="shield-alt" />
                                     <span>Run Safety Checks</span>
-                                </button>
-                                <button class="btn btn-primary fw-bold w-100 d-flex align-items-center justify-content-center gap-2 py-2 mt-1" @click="copyVpsCommands">
-                                    <font-awesome-icon icon="copy" />
-                                    <span>{{ copiedCommands ? 'Commands Copied!' : 'Copy VPS Commands' }}</span>
                                 </button>
                             </div>
                         </div>

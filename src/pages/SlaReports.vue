@@ -133,6 +133,12 @@
                                 </span>
                             </td>
                         </tr>
+                        <tr v-if="entitiesList.length === 0">
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                <font-awesome-icon icon="info-circle" class="me-1" />
+                                No active telemetry records found for the selected time window.
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -189,26 +195,18 @@ export default {
             endDate: "",
             activeReportId: null,
             summary: {
-                availabilityPct: 99.94,
-                formattedDowntime: "26m 41s",
-                formattedMttr: "11m 32s",
-                incidentCount: 14,
-                p1Count: 2,
-                p2Count: 4,
-                avgResponseTimeMs: 12.4,
-                avgPacketLossPct: 0.05,
-                avgLatencyMs: 8.2,
+                availabilityPct: 100.0,
+                formattedDowntime: "0m 0s",
+                formattedMttr: "0m 0s",
+                incidentCount: 0,
+                p1Count: 0,
+                p2Count: 0,
+                avgResponseTimeMs: 0.0,
+                avgPacketLossPct: 0.0,
+                avgLatencyMs: 0.0,
             },
-            entitiesList: [
-                { name: "CORE-MIKROTIK-ROUTER-VIJAYAWADA-POP-01", type: "MIKROTIK", availabilityPct: 99.98, downtime: "1m 12s", incidents: 1, status: "HEALTHY" },
-                { name: "HUA-GPON-OLT-HYDERABAD-EAST-02", type: "OLT", availabilityPct: 99.95, downtime: "3m 44s", incidents: 2, status: "HEALTHY" },
-                { name: "CISCO-N9K-AGGREGATION-CORE-01", type: "SWITCH", availabilityPct: 99.89, downtime: "18m 10s", incidents: 4, status: "DEGRADED" },
-                { name: "INFININOC-AUTH-TELEMETRY-DB-CLUSTER", type: "SERVER", availabilityPct: 100.0, downtime: "0m 0s", incidents: 0, status: "HEALTHY" },
-            ],
-            reportsHistory: [
-                { id: "rep-20260818-001", name: "Monthly SLA Telemetry Audit - Aug 2026", time_range: "30d", availability_pct: 99.94, status: "COMPLETED", created_at: new Date().toISOString() },
-                { id: "rep-20260811-002", name: "Weekly Executive Network Health Report", time_range: "7d", availability_pct: 99.98, status: "COMPLETED", created_at: new Date(Date.now() - 604800000).toISOString() },
-            ],
+            entitiesList: [],
+            reportsHistory: [],
         };
     },
     mounted() {
@@ -220,26 +218,39 @@ export default {
             this.fetchSlaData();
         },
         fetchSlaData() {
-            this.$root.getSocket().emit("getSlaReportData", { range: this.selectedRange }, (res) => {
+            this.$root.getSocket().emit("getSlaReportData", {
+                range: this.selectedRange,
+                startDate: this.startDate,
+                endDate: this.endDate
+            }, (res) => {
                 if (res && res.ok) {
                     this.summary = res.summary || this.summary;
-                    if (res.entities && res.entities.length) {
-                        this.entitiesList = res.entities;
-                    }
-                    if (res.reports && res.reports.length) {
-                        this.reportsHistory = res.reports;
-                    }
+                    this.entitiesList = res.entities || [];
+                    this.reportsHistory = res.reports || [];
                 }
             });
         },
         generateReport() {
             this.fetchSlaData();
         },
-        downloadCsv(id) {
-            window.open(`/api/v1/reports/sla/export?format=csv&id=${id || ''}&token=${this.$root.socket.token}`, "_blank");
+        downloadCsv() {
+            let csv = "Target Name,Type,Availability (%),Downtime,Average Ping (ms),Status\n";
+            for (const item of this.entitiesList) {
+                csv += `"${item.name}","${item.type}",${item.availabilityPct},"${item.downtime}",${item.avgPingMs || 0},"${item.status}"\n`;
+            }
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `infininoc-sla-report-${this.selectedRange}-${Date.now()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            this.$root.toastSuccess("SLA Report CSV downloaded successfully!");
         },
-        printPdf(id) {
-            window.open(`/api/v1/reports/sla/export?format=pdf&id=${id || ''}&token=${this.$root.socket.token}`, "_blank");
+        printPdf() {
+            window.print();
         },
         getAvailabilityClass(pct) {
             if (pct >= 99.9) {

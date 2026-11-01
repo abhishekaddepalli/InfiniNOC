@@ -245,7 +245,7 @@ const routes = [
                     },
                     {
                         path: "/reports",
-                        component: () => import("./pages/ComingSoon.vue"),
+                        component: () => import("./pages/SlaReports.vue"),
                     },
                     {
                         path: "/team",
