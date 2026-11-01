@@ -3,8 +3,8 @@
         <!-- Header & Action Bar -->
         <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3 border-bottom border-secondary pb-3">
             <div>
-                <h1 class="h3 fw-bold mb-1 d-flex align-items-center gap-2">
-                    <font-awesome-icon icon="chart-line" class="text-warning" />
+                <h1 class="h3 fw-bold mb-1 text-white d-flex align-items-center gap-2">
+                    <font-awesome-icon icon="chart-line" class="text-success" />
                     <span>SLA & Availability Reporting Center</span>
                 </h1>
                 <p class="text-secondary small mb-0">Compute real network availability, downtime, MTTR, P1/P2 incidents, packet loss, and latency metrics from authoritative telemetry.</p>
@@ -13,7 +13,7 @@
                 <button class="btn btn-outline-info fw-bold" @click="downloadCsv()">
                     <font-awesome-icon icon="file-csv" class="me-1" /> Download CSV
                 </button>
-                <button class="btn btn-warning fw-bold px-3" @click="printPdf()">
+                <button class="btn btn-primary fw-bold px-3 shadow-sm" @click="printPdf()">
                     <font-awesome-icon icon="print" class="me-1" /> Print / Export PDF
                 </button>
             </div>

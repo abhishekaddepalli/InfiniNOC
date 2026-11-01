@@ -3,8 +3,8 @@
         <!-- Top Control Bar -->
         <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3 border-bottom border-secondary pb-3">
             <div>
-                <h1 class="h3 fw-bold mb-1 d-flex align-items-center gap-2" style="color: #ff9933;">
-                    <font-awesome-icon icon="satellite-dish" />
+                <h1 class="h3 fw-bold mb-1 text-white d-flex align-items-center gap-2">
+                    <font-awesome-icon icon="satellite-dish" class="text-cyan" style="color: #06B6D4;" />
                     <span>Remote Distributed Probes</span>
                 </h1>
                 <p class="text-secondary small mb-0">
@@ -12,7 +12,7 @@
                 </p>
             </div>
 
-            <button class="btn noc-create-btn fw-bold px-3 py-2 d-flex align-items-center gap-2" @click="openCreateModal">
+            <button class="btn noc-create-btn fw-bold px-3 d-flex align-items-center gap-2 shadow-sm" @click="openCreateModal">
                 <font-awesome-icon icon="plus-circle" />
                 <span>Register New Probe</span>
             </button>
@@ -357,13 +357,16 @@ export default {
 .noc-create-btn {
     background-color: var(--accent);
     border-color: var(--accent);
-    color: var(--accent-foreground);
+    color: #FFFFFF;
+    height: 38px;
+    border-radius: 8px;
     transition: all 0.2s ease-in-out;
 }
 
 .noc-create-btn:hover:not(:disabled) {
-    opacity: 0.9;
-    box-shadow: 0 0 15px rgba(255, 153, 51, 0.35);
+    background-color: #059669;
+    border-color: #059669;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.35);
 }
 
 .noc-input {
@@ -382,13 +385,13 @@ export default {
     background-color: var(--card);
     color: var(--card-foreground);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 12px;
     height: 100%;
 }
 
-.border-left-amber { border-left: 4px solid #ff9933; }
-.border-left-success { border-left: 4px solid #2ecc71; }
-.border-left-danger { border-left: 4px solid #dc2626; }
+.border-left-amber { border-left: 4px solid var(--accent); }
+.border-left-success { border-left: 4px solid #10B981; }
+.border-left-danger { border-left: 4px solid #ef4444; }
 .border-left-secondary { border-left: 4px solid #64748b; }
 
 .noc-card-title {

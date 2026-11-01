@@ -3,7 +3,7 @@
         <div class="form">
             <div class="text-center mb-4">
                 <object class="bi mb-2" width="64" height="64" data="/icon.svg" />
-                <h2 class="fw-bold mt-2 mb-1" style="color: #ff9933;">{{ productConfig.productName }}</h2>
+                <h2 class="fw-bold mt-2 mb-1 text-white">{{ productConfig.productName }}</h2>
                 <p class="text-secondary small mb-1">{{ productConfig.tagline }}</p>
                 <div class="badge bg-secondary text-wrap" style="font-size: 0.75rem;">by {{ productConfig.companyName }}</div>
             </div>
@@ -138,8 +138,9 @@ export default {
 .form-container {
     display: flex;
     align-items: center;
-    padding-top: 40px;
-    padding-bottom: 40px;
+    justify-content: center;
+    min-height: calc(100vh - 120px);
+    padding: 2rem 1rem;
 }
 
 .form-floating {
@@ -154,9 +155,12 @@ export default {
 
 .form {
     width: 100%;
-    max-width: 330px;
-    padding: 15px;
+    max-width: 420px;
+    padding: 2rem;
     margin: auto;
-    text-align: center;
+    background-color: var(--card, #111D30);
+    border: 1px solid var(--border, #24364D);
+    border-radius: 14px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
 }
 </style>

@@ -9,7 +9,7 @@
 
         <!-- Search Trigger Icon Button (Mobile Header Bar) -->
         <button
-            class="btn btn-sm btn-outline-secondary d-md-none border-0 rounded-circle"
+            class="header-icon-btn d-md-none rounded-3"
             aria-label="Search"
             title="Search"
             @click="openSearch"
@@ -340,32 +340,40 @@ export default {
 
 <style scoped>
 .noc-search-trigger-box {
-    background-color: var(--secondary, #1e293b);
-    border: 1px solid var(--border, #334155);
-    color: var(--foreground, #f8fafc);
-    border-radius: 10px;
-    padding: 0.45rem 0.85rem;
-    width: 340px;
+    background-color: var(--input-bg, #0B1424);
+    border: 1px solid var(--border, #24364D);
+    color: var(--foreground, #F8FAFC);
+    border-radius: 8px;
+    padding: 0 0.85rem;
+    height: 38px;
+    width: 100%;
+    max-width: 440px;
+    min-width: 160px;
     cursor: pointer;
     transition: all 0.2s ease-in-out;
 }
 
 .noc-search-trigger-box:hover {
-    border-color: var(--ring, #ff9933);
-    box-shadow: 0 0 0 2px rgba(255, 153, 51, 0.15);
+    border-color: var(--ring, #3B82F6);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
 }
 
 .search-placeholder {
-    font-size: 0.875rem;
+    font-size: 0.825rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .search-kbd {
-    background-color: var(--card, #0f172a);
-    border: 1px solid var(--border, #334155);
-    color: var(--muted-foreground, #94a3b8);
-    font-size: 0.7rem;
-    padding: 0.15rem 0.4rem;
+    background-color: var(--secondary, #17263B);
+    border: 1px solid var(--border, #24364D);
+    color: var(--muted-foreground, #94A3B8);
+    font-size: 0.6875rem;
+    padding: 2px 6px;
     border-radius: 4px;
+    flex-shrink: 0;
 }
 
 .noc-search-overlay {
@@ -374,8 +382,8 @@ export default {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(15, 23, 42, 0.7);
-    backdrop-filter: blur(4px);
+    background-color: rgba(8, 15, 29, 0.8);
+    backdrop-filter: blur(8px);
     z-index: 1080;
     display: flex;
     justify-content: center;
@@ -386,7 +394,8 @@ export default {
 .noc-search-modal {
     width: 100%;
     max-width: 620px;
-    background-color: var(--card, #1e293b);
+    background-color: var(--card, #111D30);
+    border: 1px solid var(--border, #24364D);
     border-radius: 14px;
     overflow: hidden;
 }

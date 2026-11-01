@@ -21,14 +21,17 @@
         </div>
 
         <!-- Premium SaaS Desktop Header (64px) -->
-        <header v-if="!$root.isMobile" class="noc-saas-header d-flex align-items-center justify-content-between px-4 border-bottom">
+        <header v-if="!$root.isMobile" class="noc-saas-header d-flex align-items-center justify-content-between px-3 px-xl-4 border-bottom">
             <!-- Left: Brand Identity -->
-            <div class="header-left-zone d-flex align-items-center gap-3">
-                <router-link to="/dashboard" class="d-flex align-items-center gap-2 text-decoration-none brand-link">
-                    <object class="brand-logo-img" width="30" height="30" data="/icon.svg" />
-                    <div class="d-flex flex-column" style="line-height: 1.1;">
-                        <span class="brand-title fw-bold" style="color: var(--accent, #ff9933); font-size: 1.15rem;">{{ productConfig.productName }}</span>
-                        <span class="brand-sublabel text-muted text-uppercase" style="font-size: 0.6rem; letter-spacing: 0.08em;">INFINIFORGE TECHNOLOGIES</span>
+            <div class="header-left-zone d-flex align-items-center">
+                <router-link to="/dashboard" class="d-flex align-items-center gap-3 text-decoration-none brand-link">
+                    <object class="brand-logo-img flex-shrink-0" width="34" height="34" data="/icon.svg" />
+                    <div class="d-flex flex-column justify-content-center">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="brand-title fw-bold text-white fs-5 lh-1" style="letter-spacing: -0.02em;">{{ productConfig.productName }}</span>
+                            <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle font-monospace fw-semibold" style="font-size: 0.65rem; padding: 2px 7px;">NOC</span>
+                        </div>
+                        <span class="brand-sublabel text-muted text-uppercase fw-semibold" style="font-size: 0.6rem; letter-spacing: 0.08em; margin-top: 3px;">INFINIFORGE TECHNOLOGIES</span>
                     </div>
                 </router-link>
             </div>
@@ -45,55 +48,57 @@
                 <router-link
                     v-if="hasNewVersion"
                     to="/settings/updates"
-                    class="btn btn-warning btn-sm d-flex align-items-center gap-2 px-3 py-1 rounded-pill fw-bold shadow-sm animate-pulse text-dark text-decoration-none"
+                    class="header-update-btn d-flex align-items-center gap-2 px-3 text-decoration-none shadow-sm animate-pulse"
                     title="A new InfiniNOC version is available"
                 >
                     <font-awesome-icon icon="rocket" />
-                    <span class="d-none d-sm-inline">Update v{{ $root.info.latestVersion }}</span>
+                    <span class="d-none d-xxl-inline small fw-bold">Update v{{ $root.info.latestVersion }}</span>
                 </router-link>
 
                 <!-- Status Pages Quick Nav -->
                 <router-link
                     to="/manage-status-page"
-                    class="header-nav-btn d-flex align-items-center gap-2 px-3 py-2 rounded-3 text-decoration-none"
+                    class="header-control-btn d-flex align-items-center gap-2 px-3 text-decoration-none"
                     :class="{ active: $route.path.includes('status-page') }"
+                    title="Status Pages"
                 >
                     <font-awesome-icon icon="desktop" />
-                    <span class="d-none d-xl-inline font-weight-semibold">Status Pages</span>
+                    <span class="d-none d-xl-inline">Status Pages</span>
                 </router-link>
 
                 <!-- Dashboard Quick Nav -->
                 <router-link
                     to="/dashboard"
-                    class="header-nav-btn d-flex align-items-center gap-2 px-3 py-2 rounded-3 text-decoration-none"
+                    class="header-control-btn d-flex align-items-center gap-2 px-3 text-decoration-none"
                     :class="{ active: $route.path === '/dashboard' || $route.path === '/' }"
+                    title="Dashboard"
                 >
                     <font-awesome-icon icon="tachometer-alt" />
-                    <span class="d-none d-xl-inline font-weight-semibold">Dashboard</span>
+                    <span class="d-none d-xl-inline">Dashboard</span>
                 </router-link>
 
-                <!-- Fullscreen NOC Wallboard Toggle -->
+                <!-- Fullscreen NOC Wallboard Toggle (Desktop) -->
                 <button
-                    class="btn header-icon-btn rounded-3 cursor-pointer d-flex align-items-center gap-2 px-3 py-2"
-                    :class="{ 'btn-primary text-white': isWallboardMode }"
-                    :title="isWallboardMode ? 'Exit Wallboard' : 'Fullscreen NOC Wallboard'"
+                    class="header-control-btn d-none d-xl-inline-flex align-items-center gap-2 px-3 cursor-pointer"
+                    :class="{ active: isWallboardMode }"
+                    :title="isWallboardMode ? 'Exit Wallboard (ESC)' : 'Fullscreen NOC Wallboard (ESC)'"
                     @click="toggleWallboardMode"
                 >
                     <font-awesome-icon :icon="isWallboardMode ? 'compress' : 'tv'" />
-                    <span class="d-none d-xxl-inline small fw-semibold">Wallboard</span>
+                    <span class="d-none d-xxl-inline">Wallboard</span>
                 </button>
 
-                <!-- Audio Alert Chime Control Group -->
-                <div class="btn-group">
+                <!-- Audio Alert Chimes Segmented Pill (Desktop) -->
+                <div class="header-audio-pill d-none d-xl-flex align-items-center" title="NOC Audio Alert Controls">
                     <button
-                        class="btn header-icon-btn rounded-start-3 cursor-pointer"
+                        class="header-audio-toggle"
                         :title="soundEnabled ? 'Alert Chime: Enabled (Click to mute)' : 'Alert Chime: Muted (Click to enable)'"
                         @click="toggleSoundAlert"
                     >
                         <font-awesome-icon :icon="soundEnabled ? 'volume-up' : 'volume-mute'" :class="soundEnabled ? 'text-warning' : 'text-muted'" />
                     </button>
                     <button
-                        class="btn header-icon-btn rounded-end-3 cursor-pointer px-2 border-start border-secondary"
+                        class="header-audio-gear"
                         title="NOC Audio Alert Settings & Test"
                         @click="showAudioModal = true"
                     >
@@ -104,12 +109,12 @@
                 <!-- Theme Selection Dropdown -->
                 <div class="dropdown">
                     <button
-                        class="btn header-icon-btn rounded-3 cursor-pointer"
+                        class="header-icon-btn rounded-3 cursor-pointer"
                         data-bs-toggle="dropdown"
                         :title="themeTitle"
                         :aria-label="themeTitle"
                     >
-                        <font-awesome-icon :icon="themeIcon" class="fs-6" />
+                        <font-awesome-icon :icon="themeIcon" />
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end shadow-lg border-secondary py-2 px-1" style="min-width: 170px;">
                         <li class="dropdown-header px-3 py-1 text-uppercase font-monospace text-muted small fw-bold">Theme</li>
@@ -143,13 +148,45 @@
                     </ul>
                 </div>
 
+                <!-- Responsive More Tools Dropdown (Visible on Tablet / Compact Screens < 1200px) -->
+                <div class="dropdown d-xl-none">
+                    <button class="header-icon-btn rounded-3 cursor-pointer" data-bs-toggle="dropdown" title="More Tools" aria-label="More Tools">
+                        <font-awesome-icon icon="ellipsis-v" />
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-lg border-secondary py-2 px-1" style="min-width: 210px;">
+                        <li class="dropdown-header px-3 py-1 text-uppercase font-monospace text-muted small fw-bold">NOC Tools</li>
+                        <li>
+                            <button class="dropdown-item py-2 px-3 rounded d-flex align-items-center gap-2" @click="toggleWallboardMode">
+                                <font-awesome-icon icon="tv" class="text-muted" />
+                                <span>Fullscreen Wallboard</span>
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item py-2 px-3 rounded d-flex align-items-center justify-content-between" @click="toggleSoundAlert">
+                                <span class="d-flex align-items-center gap-2">
+                                    <font-awesome-icon :icon="soundEnabled ? 'volume-up' : 'volume-mute'" :class="soundEnabled ? 'text-warning' : 'text-muted'" />
+                                    <span>Audio Chimes</span>
+                                </span>
+                                <span class="badge" :class="soundEnabled ? 'bg-success' : 'bg-secondary'">{{ soundEnabled ? 'ON' : 'MUTED' }}</span>
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item py-2 px-3 rounded d-flex align-items-center gap-2" @click="showAudioModal = true">
+                                <font-awesome-icon icon="sliders-h" class="text-muted" />
+                                <span>Audio Preferences</span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Account Profile Dropdown -->
                 <div class="dropdown">
-                    <div class="header-avatar-btn cursor-pointer d-flex align-items-center gap-1 p-1 rounded-circle" data-bs-toggle="dropdown" aria-label="Account menu">
-                        <div class="avatar-circle bg-primary text-white fw-bold d-flex align-items-center justify-content-center" style="width: 34px; height: 34px; border-radius: 50%;">
+                    <div class="header-profile-btn cursor-pointer d-flex align-items-center gap-2 px-2" data-bs-toggle="dropdown" aria-label="Account menu">
+                        <div class="header-avatar-circle d-flex align-items-center justify-content-center">
                             {{ $root.usernameFirstChar }}
                         </div>
-                        <font-awesome-icon icon="chevron-down" class="small text-muted me-1" style="font-size: 0.7rem;" />
+                        <span class="d-none d-xxl-inline small fw-semibold text-foreground text-truncate" style="max-width: 100px;">{{ $root.username }}</span>
+                        <font-awesome-icon icon="chevron-down" class="text-muted" style="font-size: 0.65rem;" />
                     </div>
 
                     <ul class="dropdown-menu dropdown-menu-end shadow-lg border-secondary py-2 px-1" style="min-width: 240px;">
@@ -199,12 +236,12 @@
         <!-- Responsive Mobile Header (60px) -->
         <header v-else class="noc-saas-header-mobile d-flex align-items-center justify-content-between px-3 border-bottom">
             <div class="d-flex align-items-center gap-2">
-                <button class="btn btn-sm btn-outline-secondary border-0" aria-label="Open navigation menu" @click="mobileDrawerOpen = !mobileDrawerOpen">
-                    <font-awesome-icon icon="bars" class="fs-5" />
+                <button class="header-icon-btn rounded-3" aria-label="Open navigation menu" @click="mobileDrawerOpen = !mobileDrawerOpen">
+                    <font-awesome-icon icon="bars" class="fs-6" />
                 </button>
                 <router-link to="/dashboard" class="d-flex align-items-center text-decoration-none gap-2">
-                    <object width="26" height="26" data="/icon.svg" />
-                    <span class="fs-6 fw-bold" style="color: var(--accent, #ff9933);">{{ productConfig.productName }}</span>
+                    <object width="28" height="28" data="/icon.svg" class="flex-shrink-0" />
+                    <span class="fs-6 fw-bold text-white lh-1" style="letter-spacing: -0.01em;">{{ productConfig.productName }}</span>
                 </router-link>
             </div>
 
@@ -212,7 +249,7 @@
                 <GlobalSearchModal />
                 <!-- Mobile Theme Dropdown -->
                 <div class="dropdown">
-                    <button class="btn btn-sm header-icon-btn rounded-circle" data-bs-toggle="dropdown" :title="themeTitle" :aria-label="themeTitle">
+                    <button class="header-icon-btn rounded-3" data-bs-toggle="dropdown" :title="themeTitle" :aria-label="themeTitle">
                         <font-awesome-icon :icon="themeIcon" />
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end shadow-lg border-secondary py-2 px-1" style="min-width: 160px;">
@@ -236,7 +273,7 @@
                         </li>
                     </ul>
                 </div>
-                <div class="avatar-circle bg-primary text-white fw-bold d-flex align-items-center justify-content-center cursor-pointer" style="width: 32px; height: 32px; border-radius: 50%;" @click="mobileDrawerOpen = !mobileDrawerOpen">
+                <div class="header-avatar-circle d-flex align-items-center justify-content-center cursor-pointer" style="width: 34px; height: 34px;" @click="mobileDrawerOpen = !mobileDrawerOpen">
                     {{ $root.usernameFirstChar }}
                 </div>
             </div>
@@ -743,48 +780,74 @@ export default {
 
 header.noc-saas-header {
     height: 64px;
-    background-color: var(--card);
-    border-bottom: 1px solid var(--border) !important;
+    min-height: 64px;
+    max-height: 64px;
+    background-color: var(--sidebar, #0B1424);
+    border-bottom: 1px solid var(--border, #24364D) !important;
     position: sticky;
     top: 0;
-    z-index: 1020;
+    z-index: 1030;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 header.noc-saas-header-mobile {
     height: 60px;
-    background-color: var(--card);
-    border-bottom: 1px solid var(--border) !important;
+    min-height: 60px;
+    max-height: 60px;
+    background-color: var(--sidebar, #0B1424);
+    border-bottom: 1px solid var(--border, #24364D) !important;
     position: sticky;
     top: 0;
-    z-index: 1020;
+    z-index: 1030;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.header-left-zone {
+    flex-shrink: 0;
 }
 
 .brand-link {
-    transition: opacity 0.2s ease;
-
-    &:hover {
-        opacity: 0.9;
-    }
+    transition: opacity 0.15s ease;
+    &:hover { opacity: 0.9; }
 }
 
-.header-nav-btn {
-    color: var(--foreground);
-    background-color: transparent;
-    border: 1px solid transparent;
-    font-size: 0.9rem;
+.header-center-zone {
+    flex: 1 1 360px;
+    max-width: 440px;
+    min-width: 0;
+    margin: 0 1.25rem;
+    display: flex;
+    justify-content: center;
+}
+
+.header-right-zone {
+    flex-shrink: 0;
+}
+
+.header-control-btn {
+    height: 38px;
+    background-color: var(--secondary, #17263B);
+    border: 1px solid var(--border, #24364D);
+    color: var(--secondary-foreground, #CBD5E1);
+    font-size: 0.85rem;
     font-weight: 500;
-    transition: all 0.2s ease-in-out;
+    border-radius: 8px;
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+    white-space: nowrap;
 
     &:hover {
-        background-color: var(--secondary);
-        color: var(--foreground);
+        background-color: var(--surface-elevated, #1E3350);
+        border-color: var(--primary, #3B82F6);
+        color: #FFFFFF;
     }
 
     &.active {
-        background-color: var(--secondary);
-        border-color: var(--border);
-        color: var(--accent);
+        background-color: var(--accent, #10B981) !important;
+        border-color: var(--accent, #10B981) !important;
+        color: #FFFFFF !important;
         font-weight: 600;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
     }
 }
 
@@ -794,34 +857,111 @@ header.noc-saas-header-mobile {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--secondary);
-    border: 1px solid var(--border);
-    color: var(--foreground);
-    transition: all 0.2s ease-in-out;
+    background-color: var(--secondary, #17263B);
+    border: 1px solid var(--border, #24364D);
+    color: var(--secondary-foreground, #CBD5E1);
+    border-radius: 8px;
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
 
     &:hover {
-        border-color: var(--accent);
-        color: var(--accent);
+        background-color: var(--surface-elevated, #1E3350);
+        border-color: var(--primary, #3B82F6);
+        color: #FFFFFF;
+    }
+
+    &.active {
+        background-color: var(--accent, #10B981);
+        border-color: var(--accent, #10B981);
+        color: #FFFFFF;
     }
 }
 
-.header-avatar-btn {
-    border: 1px solid var(--border);
-    background-color: var(--secondary);
-    transition: all 0.2s ease-in-out;
+.header-update-btn {
+    height: 38px;
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    border: 1px solid #F59E0B;
+    color: #080F1D !important;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+    transition: all 0.15s ease-in-out;
 
     &:hover {
-        border-color: var(--accent);
+        opacity: 0.95;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.45);
     }
 }
 
-.avatar-circle {
-    font-size: 0.85rem;
+.header-audio-pill {
+    height: 38px;
+    background-color: var(--secondary, #17263B);
+    border: 1px solid var(--border, #24364D);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+
+    &:hover {
+        border-color: var(--primary, #3B82F6);
+    }
+
+    .header-audio-toggle {
+        height: 100%;
+        border: none;
+        background: transparent;
+        padding: 0 11px;
+        color: var(--foreground);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.15s ease;
+
+        &:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+    }
+
+    .header-audio-gear {
+        height: 100%;
+        border: none;
+        border-left: 1px solid var(--border, #24364D);
+        background: transparent;
+        padding: 0 9px;
+        color: var(--muted-foreground);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.15s ease;
+
+        &:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--foreground);
+        }
+    }
 }
 
-.noc-brand-title {
-    color: var(--accent);
-    letter-spacing: -0.01em;
+.header-profile-btn {
+    height: 38px;
+    background-color: var(--secondary, #17263B);
+    border: 1px solid var(--border, #24364D);
+    border-radius: 8px;
+    transition: all 0.15s ease-in-out;
+
+    &:hover {
+        border-color: var(--primary, #3B82F6);
+    }
+}
+
+.header-avatar-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 0.8rem;
+    flex-shrink: 0;
 }
 
 .nav-pills .nav-link.active, .nav-pills .show > .nav-link {

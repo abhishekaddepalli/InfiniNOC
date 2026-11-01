@@ -3,8 +3,8 @@
         <!-- Top Control Bar -->
         <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3 border-bottom border-secondary pb-3">
             <div>
-                <h1 class="h3 fw-bold mb-1 d-flex align-items-center gap-2" style="color: #ff9933;">
-                    <font-awesome-icon icon="exclamation-triangle" />
+                <h1 class="h3 fw-bold mb-1 text-white d-flex align-items-center gap-2">
+                    <font-awesome-icon icon="exclamation-triangle" class="text-danger" />
                     <span>NOC Incident Management</span>
                 </h1>
                 <p class="text-secondary small mb-0">
@@ -13,11 +13,11 @@
             </div>
 
             <div class="d-flex align-items-center gap-2">
-                <button v-if="stats.activeCount > 0 || incidents.length > 0" class="btn btn-outline-success fw-bold px-3 py-2 d-flex align-items-center gap-2" @click="resolveAll">
+                <button v-if="stats.activeCount > 0 || incidents.length > 0" class="btn btn-outline-success fw-bold px-3 d-flex align-items-center gap-2" @click="resolveAll">
                     <font-awesome-icon icon="check-double" />
                     <span>Resolve All</span>
                 </button>
-                <button class="btn noc-create-btn fw-bold px-3 py-2 d-flex align-items-center gap-2" @click="showCreateModal = true">
+                <button class="btn noc-create-btn fw-bold px-3 d-flex align-items-center gap-2 shadow-sm" @click="showCreateModal = true">
                     <font-awesome-icon icon="plus-circle" />
                     <span>Create Incident</span>
                 </button>
@@ -338,13 +338,16 @@ export default {
 .noc-create-btn {
     background-color: var(--accent);
     border-color: var(--accent);
-    color: var(--accent-foreground);
+    color: #FFFFFF;
+    height: 38px;
+    border-radius: 8px;
     transition: all 0.2s ease-in-out;
 }
 
 .noc-create-btn:hover:not(:disabled) {
-    opacity: 0.9;
-    box-shadow: 0 0 15px rgba(255, 153, 51, 0.35);
+    background-color: #059669;
+    border-color: #059669;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.35);
 }
 
 .noc-input {
@@ -358,14 +361,14 @@ export default {
     background-color: var(--card);
     color: var(--card-foreground);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 12px;
     height: 100%;
 }
 
-.border-left-amber { border-left: 4px solid #ff9933; }
-.border-left-danger { border-left: 4px solid #dc2626; }
+.border-left-amber { border-left: 4px solid var(--accent); }
+.border-left-danger { border-left: 4px solid #ef4444; }
 .border-left-warning { border-left: 4px solid #f59e0b; }
-.border-left-info { border-left: 4px solid #0ea5e9; }
+.border-left-info { border-left: 4px solid #06b6d4; }
 
 .noc-card-title {
     font-size: 0.75rem;

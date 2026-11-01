@@ -1062,4 +1062,17 @@ table {
         opacity: 0.7;
     }
 }
+
+.functions {
+    margin-bottom: 1rem;
+
+    .btn-group {
+        flex-wrap: wrap;
+        gap: 0.35rem;
+
+        .btn {
+            border-radius: 8px !important;
+        }
+    }
+}
 </style>

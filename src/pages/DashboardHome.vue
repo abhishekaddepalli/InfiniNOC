@@ -31,12 +31,12 @@
                         </button>
                     </div>
 
-                    <button class="btn btn-sm btn-outline-secondary px-2 py-1 ms-1 text-muted" title="Custom Date Filter">
+                    <button class="btn btn-sm btn-icon btn-outline-secondary text-muted" title="Custom Date Filter">
                         <font-awesome-icon icon="calendar-alt" />
                     </button>
 
                     <button
-                        class="btn btn-sm btn-outline-danger ms-1"
+                        class="btn btn-sm btn-icon btn-outline-danger"
                         :disabled="clearingAllEvents"
                         title="Clear Heartbeat Event History"
                         @click="clearAllEventsDialog"
@@ -1150,6 +1150,9 @@ export default {
     background: #111D30;
     border: 1px solid #24364D;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    min-height: 124px;
+    min-width: 0;
     transition: transform 0.2s ease, border-color 0.2s ease;
 }
 

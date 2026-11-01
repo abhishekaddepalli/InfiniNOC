@@ -50,13 +50,20 @@ export default {
 }
 
 .noc-add-btn {
-    background-color: #ff9933;
-    border: 1px solid #e68a2e;
-    color: #0f172a;
-    font-weight: 700;
-    letter-spacing: 0.03em;
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    border: 1px solid #10B981;
+    color: #FFFFFF;
+    font-weight: 600;
+    height: 40px;
     border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
     transition: all 0.2s ease-in-out;
+
+    &:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+        color: #FFFFFF;
+    }
 }
 
 .noc-add-btn:hover {
