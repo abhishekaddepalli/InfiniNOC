@@ -270,7 +270,7 @@
         <nav v-if="$root.isMobile && $root.loggedIn" class="bottom-nav-modern">
             <router-link to="/dashboard" class="nav-tab-item">
                 <font-awesome-icon icon="tachometer-alt" class="nav-tab-icon" />
-                <span>Dashboard</span>
+                <span>Home</span>
             </router-link>
 
             <router-link to="/list" class="nav-tab-item">
@@ -278,21 +278,25 @@
                 <span>Monitors</span>
             </router-link>
 
-            <router-link to="/add" class="nav-tab-item nav-tab-add" aria-label="Add Target" title="Add Target">
-                <font-awesome-icon icon="plus" class="nav-tab-icon" />
+            <router-link to="/alerts" class="nav-tab-item">
+                <div class="position-relative">
+                    <font-awesome-icon icon="bell" class="nav-tab-icon" />
+                    <span v-if="alertCount > 0" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-dark rounded-circle" style="width: 7px; height: 7px;"></span>
+                </div>
+                <span>Alerts</span>
             </router-link>
 
             <router-link to="/incidents" class="nav-tab-item">
                 <div class="position-relative">
                     <font-awesome-icon icon="exclamation-triangle" class="nav-tab-icon" />
-                    <span v-if="activeIncidentCount > 0" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="width: 8px; height: 8px;"></span>
+                    <span v-if="activeIncidentCount > 0" class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-dark rounded-circle" style="width: 7px; height: 7px;"></span>
                 </div>
                 <span>Incidents</span>
             </router-link>
 
-            <button type="button" class="btn p-0 nav-tab-item border-0 bg-transparent" aria-label="Open menu drawer" @click="mobileDrawerOpen = !mobileDrawerOpen">
+            <button type="button" class="btn p-0 nav-tab-item border-0 bg-transparent cursor-pointer" aria-label="Open menu drawer" @click="mobileDrawerOpen = !mobileDrawerOpen">
                 <font-awesome-icon icon="th-large" class="nav-tab-icon" />
-                <span>Menu</span>
+                <span>More</span>
             </button>
         </nav>
 
@@ -468,6 +472,10 @@ export default {
             return count;
         },
 
+        alertCount() {
+            return this.$root.notificationList ? this.$root.notificationList.length : 0;
+        },
+
         themeIcon() {
             if (this.$root.userTheme === "light") {
                 return "sun";
@@ -555,6 +563,7 @@ export default {
     },
 
     mounted() {
+        this.$root.toggleWallboardMode = this.toggleWallboardMode;
         this.toastContainer = document.querySelector(".bottom-right.toast-container");
 
         this.toastContainerObserver = new MutationObserver((mutations) => {

@@ -109,75 +109,77 @@ $dropdown-border-radius: 0.75rem;
 // InfiniNOC Semantic Design Tokens (Dark Theme)
 body.dark,
 [data-theme="dark"] {
-    --background: #0b1220;
-    --foreground: #f8fafc;
+    --background: #080F1D;
+    --foreground: #F8FAFC;
 
-    --surface: #151e30;
-    --surface-elevated: #1e293b;
-    --surface-muted: #0f172a;
+    --surface: #111D30;
+    --surface-elevated: #17263B;
+    --surface-muted: #0B1424;
 
-    --card: #151e30;
-    --card-foreground: #f8fafc;
+    --card: #111D30;
+    --card-foreground: #F8FAFC;
 
-    --popover: #151e30;
-    --popover-foreground: #f8fafc;
+    --popover: #111D30;
+    --popover-foreground: #F8FAFC;
 
-    --primary: #38bdf8;
-    --primary-foreground: #0b1220;
+    --primary: #3B82F6;
+    --primary-foreground: #FFFFFF;
 
-    --secondary: #1e293b;
-    --secondary-foreground: #cbd5e1;
+    --secondary: #17263B;
+    --secondary-foreground: #CBD5E1;
 
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
+    --muted: #17263B;
+    --muted-foreground: #94A3B8;
 
-    --accent: #ff9933;
-    --accent-foreground: #0f172a;
+    --accent: #10B981;
+    --accent-saffron: #FF9933;
+    --accent-foreground: #080F1D;
 
-    --border: #1e293b;
-    --border-subtle: #0f172a;
-    --border-strong: #334155;
+    --border: #24364D;
+    --border-subtle: #17263B;
+    --border-strong: #334B68;
 
-    --input: #1b263b;
-    --input-foreground: #f8fafc;
-    --ring: #38bdf8;
-    --focus: #38bdf8;
+    --input: #0E1828;
+    --input-foreground: #F8FAFC;
+    --ring: #3B82F6;
+    --focus: #3B82F6;
 
-    --success: #22c55e;
-    --success-foreground: #0b1220;
-    --success-muted: rgba(34, 197, 94, 0.15);
+    --success: #10B981;
+    --success-foreground: #080F1D;
+    --success-muted: rgba(16, 185, 129, 0.15);
 
-    --warning: #f59e0b;
-    --warning-foreground: #0b1220;
+    --warning: #F59E0B;
+    --warning-foreground: #080F1D;
     --warning-muted: rgba(245, 158, 11, 0.15);
 
-    --danger: #ef4444;
-    --danger-foreground: #ffffff;
+    --danger: #EF4444;
+    --danger-foreground: #FFFFFF;
     --danger-muted: rgba(239, 68, 68, 0.15);
 
-    --info: #38bdf8;
-    --info-foreground: #0b1220;
-    --info-muted: rgba(56, 189, 248, 0.15);
+    --info: #06B6D4;
+    --info-foreground: #080F1D;
+    --info-muted: rgba(6, 182, 212, 0.15);
 
-    --disabled: #1e293b;
-    --disabled-foreground: #64748b;
+    --disabled: #17263B;
+    --disabled-foreground: #64748B;
 
-    --sidebar: #0f172a;
-    --sidebar-foreground: #f8fafc;
-    --sidebar-active: #ff9933;
-    --sidebar-hover: #1e293b;
-    --sidebar-border: #1e293b;
+    --sidebar: #0B1424;
+    --sidebar-foreground: #F8FAFC;
+    --sidebar-active: #10B981;
+    --sidebar-hover: #17263B;
+    --sidebar-border: #24364D;
 
-    --input-bg: #111827;
-    --input-border: #374151;
-    --input-text: #f9fafb;
+    --input-bg: #0B1424;
+    --input-border: #24364D;
+    --input-text: #F8FAFC;
 
-    --glass-bg: rgba(21, 30, 48, 0.85);
-    --glass-border: rgba(30, 41, 59, 0.8);
+    --glass-bg: rgba(17, 29, 48, 0.85);
+    --glass-border: rgba(36, 54, 77, 0.8);
     --glass-blur: 16px;
     --touch-min-h: 44px;
-    --glow-success: rgba(34, 197, 94, 0.35);
+    --glow-success: rgba(16, 185, 129, 0.35);
     --glow-warning: rgba(245, 158, 11, 0.3);
     --glow-danger: rgba(239, 68, 68, 0.35);
-    --glow-primary: rgba(56, 189, 248, 0.3);
+    --glow-primary: rgba(59, 130, 246, 0.3);
+    --glow-info: rgba(6, 182, 212, 0.3);
 }

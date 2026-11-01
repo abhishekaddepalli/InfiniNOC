@@ -1,281 +1,240 @@
 <template>
     <div class="noc-sidebar-wrapper">
-        <div class="noc-sidebar p-3 shadow-sm">
-            <!-- Top Branding Header -->
-            <div class="px-2 py-2 mb-3 border-bottom border-secondary d-flex align-items-center gap-2">
-                <object width="32" height="32" data="/icon.svg" class="flex-shrink-0" />
-                <div class="d-flex flex-column overflow-hidden">
-                    <span class="fw-bold text-primary fs-6 lh-1">InfiniNOC</span>
-                    <span class="text-secondary small text-uppercase text-truncate mt-1" style="font-size: 0.62rem; letter-spacing: 0.06em;">Infiniforge Technologies</span>
+        <div class="noc-sidebar p-3 shadow-lg d-flex flex-column justify-content-between">
+            <div>
+                <!-- Top Branding Header -->
+                <div class="px-2 py-2 mb-3 border-bottom border-secondary d-flex align-items-center gap-2">
+                    <object width="32" height="32" data="/icon.svg" class="flex-shrink-0" />
+                    <div class="d-flex flex-column overflow-hidden">
+                        <span class="fw-bold text-foreground fs-6 lh-1" style="letter-spacing: -0.02em;">InfiniNOC</span>
+                        <span class="text-muted small text-uppercase text-truncate mt-1" style="font-size: 0.62rem; letter-spacing: 0.08em;">Infiniforge Technologies</span>
+                    </div>
                 </div>
+
+                <nav class="noc-nav flex-column gap-3">
+                    <!-- Group 1: OVERVIEW -->
+                    <div class="noc-nav-group">
+                        <div class="noc-nav-label">Overview</div>
+                        <ul class="nav flex-column gap-1">
+                            <li class="nav-item">
+                                <router-link to="/dashboard" class="nav-link nav-link-pill d-flex align-items-center justify-content-between" :class="{ 'active-emerald': isCurrentRoute('/dashboard') }" @click="$emit('close')">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <font-awesome-icon icon="tachometer-alt" class="nav-icon" />
+                                        <span>Dashboard</span>
+                                    </div>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <a href="javascript:void(0)" class="nav-link d-flex align-items-center justify-content-between cursor-pointer" @click="handleNocViewClick">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <font-awesome-icon icon="tv" class="nav-icon text-muted" />
+                                        <span>NOC View</span>
+                                    </div>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/topology" class="nav-link d-flex align-items-center justify-content-between" :class="{ active: isCurrentRoute('/topology') }" @click="$emit('close')">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <font-awesome-icon icon="project-diagram" class="nav-icon text-muted" />
+                                        <span>Map & Topology</span>
+                                    </div>
+                                </router-link>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Group 2: MONITORING -->
+                    <div class="noc-nav-group">
+                        <div class="noc-nav-label">Monitoring</div>
+                        <ul class="nav flex-column gap-1">
+                            <li class="nav-item">
+                                <router-link to="/list" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.path === '/list' && !$route.query.type }" @click="$emit('close')">
+                                    <font-awesome-icon icon="list" class="nav-icon text-muted" />
+                                    <span>All Monitors</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/list?type=http" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.query.type === 'http' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="globe" class="nav-icon text-muted" />
+                                    <span>HTTP / HTTPS</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/list?type=ping" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.query.type === 'ping' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="network-wired" class="nav-icon text-muted" />
+                                    <span>Ping</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/list?type=port" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.query.type === 'port' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="plug" class="nav-icon text-muted" />
+                                    <span>TCP</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/list?type=dns" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.query.type === 'dns' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="search" class="nav-icon text-muted" />
+                                    <span>DNS</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/list?type=realtime" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.query.type === 'realtime' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="lock" class="nav-icon text-muted" />
+                                    <span>SSL</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/list?type=snmp" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.query.type === 'snmp' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="server" class="nav-icon text-muted" />
+                                    <span>SNMP</span>
+                                </router-link>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Group 3: NETWORK -->
+                    <div class="noc-nav-group">
+                        <div class="noc-nav-label">Network</div>
+                        <ul class="nav flex-column gap-1">
+                            <li class="nav-item">
+                                <router-link to="/devices" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.path.startsWith('/devices') }" @click="$emit('close')">
+                                    <font-awesome-icon icon="server" class="nav-icon text-muted" />
+                                    <span>Devices</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/sites" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.path.startsWith('/sites') }" @click="$emit('close')">
+                                    <font-awesome-icon icon="map-marker-alt" class="nav-icon text-muted" />
+                                    <span>Sites</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/probes" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.path === '/probes' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="satellite-dish" class="nav-icon text-muted" />
+                                    <span>Probes</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/topology" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.path === '/topology' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="project-diagram" class="nav-icon text-muted" />
+                                    <span>Topology</span>
+                                </router-link>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Group 4: OPERATIONS -->
+                    <div class="noc-nav-group">
+                        <div class="noc-nav-label">Operations</div>
+                        <ul class="nav flex-column gap-1">
+                            <li class="nav-item">
+                                <router-link to="/alerts" class="nav-link d-flex align-items-center justify-content-between" :class="{ active: $route.path === '/alerts' }" @click="$emit('close')">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <font-awesome-icon icon="bell" class="nav-icon text-muted" />
+                                        <span>Alerts</span>
+                                    </div>
+                                    <span v-if="alertCount > 0" class="badge rounded-pill bg-danger text-white fw-bold" style="font-size: 0.65rem;">
+                                        {{ alertCount }}
+                                    </span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/incidents" class="nav-link d-flex align-items-center justify-content-between" :class="{ active: $route.path === '/incidents' }" @click="$emit('close')">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <font-awesome-icon icon="exclamation-triangle" class="nav-icon text-muted" />
+                                        <span>Incidents</span>
+                                    </div>
+                                    <span v-if="incidentCount > 0" class="badge rounded-pill bg-danger text-white animate-pulse" style="font-size: 0.65rem;">
+                                        {{ incidentCount }}
+                                    </span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/maintenance" class="nav-link d-flex align-items-center justify-content-between" :class="{ active: $route.path === '/maintenance' }" @click="$emit('close')">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <font-awesome-icon icon="wrench" class="nav-icon text-muted" />
+                                        <span>Maintenance</span>
+                                    </div>
+                                </router-link>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Group 5: REPORTS -->
+                    <div class="noc-nav-group">
+                        <div class="noc-nav-label">Reports</div>
+                        <ul class="nav flex-column gap-1">
+                            <li class="nav-item">
+                                <router-link to="/reports/sla" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.path === '/reports/sla' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="chart-line" class="nav-icon text-muted" />
+                                    <span>Availability</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/reports" class="nav-link d-flex align-items-center gap-2" :class="{ active: $route.path === '/reports' }" @click="$emit('close')">
+                                    <font-awesome-icon icon="chart-bar" class="nav-icon text-muted" />
+                                    <span>Performance</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/dashboard#events" class="nav-link d-flex align-items-center gap-2" @click="$emit('close')">
+                                    <font-awesome-icon icon="history" class="nav-icon text-muted" />
+                                    <span>Events</span>
+                                </router-link>
+                            </li>
+                            <li class="nav-item">
+                                <router-link to="/reports/sla" class="nav-link d-flex align-items-center gap-2" @click="$emit('close')">
+                                    <font-awesome-icon icon="file-alt" class="nav-icon text-muted" />
+                                    <span>SLA Reports</span>
+                                </router-link>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Group 6: SETTINGS -->
+                    <div class="noc-nav-group">
+                        <ul class="nav flex-column gap-1">
+                            <li class="nav-item">
+                                <router-link to="/settings/general" class="nav-link d-flex align-items-center justify-content-between" :class="{ active: $route.path.startsWith('/settings') }" @click="$emit('close')">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <font-awesome-icon icon="cog" class="nav-icon text-muted" />
+                                        <span>Settings</span>
+                                    </div>
+                                    <span v-if="hasNewVersion" class="badge bg-warning text-dark fw-bold animate-pulse" style="font-size: 0.65rem;" title="New version available">
+                                        UPDATE
+                                    </span>
+                                </router-link>
+                            </li>
+                        </ul>
+                    </div>
+                </nav>
             </div>
 
-            <nav class="noc-nav flex-column gap-3">
-                <!-- Group 1: OVERVIEW -->
-                <div class="noc-nav-group">
-                    <div class="noc-nav-label">Overview</div>
-                    <ul class="nav flex-column gap-1">
-                        <li class="nav-item">
-                            <router-link to="/dashboard" class="nav-link d-flex align-items-center justify-content-between" :class="{ active: isCurrentRoute('/dashboard') }" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="tachometer-alt" class="nav-icon" />
-                                    <span>Dashboard</span>
-                                </div>
-                            </router-link>
-                        </li>
-                    </ul>
+            <!-- Bottom Promo Card (from Design Mockup) -->
+            <div class="noc-promo-card mt-3 p-3 rounded-3 position-relative overflow-hidden">
+                <div class="d-flex align-items-center justify-content-center mb-2">
+                    <div class="promo-icon-box d-flex align-items-center justify-content-center rounded-3">
+                        <font-awesome-icon icon="server" class="fs-4 text-info" />
+                    </div>
                 </div>
-
-                <!-- Group 2: MONITORING -->
-                <div class="noc-nav-group">
-                    <button
-                        class="noc-nav-label-btn w-100 d-flex align-items-center justify-content-between"
-                        @click="toggleSubmenu('monitoring')"
-                    >
-                        <span>Monitoring</span>
-                        <font-awesome-icon icon="chevron-down" class="small transition-transform" :class="{ 'rotate-180': submenus.monitoring }" />
-                    </button>
-                    <ul v-show="submenus.monitoring" class="nav flex-column gap-1 mt-1 ms-2 ps-2 border-start border-secondary">
-                        <li class="nav-item">
-                            <router-link to="/list" class="nav-link py-1 px-2 small" :class="{ active: $route.path === '/list' }" @click="$emit('close')">
-                                <font-awesome-icon icon="list" class="me-2 text-muted" />
-                                <span>All Monitors</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/list?type=http" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="globe" class="me-2 text-muted" />
-                                <span>HTTP / HTTPS</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/list?type=ping" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="network-wired" class="me-2 text-muted" />
-                                <span>Ping</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/list?type=port" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="plug" class="me-2 text-muted" />
-                                <span>TCP</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/list?type=dns" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="search" class="me-2 text-muted" />
-                                <span>DNS</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/list?type=realtime" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="lock" class="me-2 text-muted" />
-                                <span>SSL</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/list?type=snmp" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="server" class="me-2 text-muted" />
-                                <span>SNMP</span>
-                            </router-link>
-                        </li>
-                    </ul>
+                <div class="text-center mb-2">
+                    <div class="fw-bold text-white small" style="font-size: 0.85rem; line-height: 1.25;">Network Monitoring<br/><span style="color: #10B981;">Simplified</span></div>
                 </div>
-
-                <!-- Group 3: NETWORK -->
-                <div class="noc-nav-group">
-                    <button
-                        class="noc-nav-label-btn w-100 d-flex align-items-center justify-content-between"
-                        @click="toggleSubmenu('network')"
-                    >
-                        <span>Network</span>
-                        <font-awesome-icon icon="chevron-down" class="small transition-transform" :class="{ 'rotate-180': submenus.network }" />
-                    </button>
-                    <ul v-show="submenus.network" class="nav flex-column gap-1 mt-1 ms-2 ps-2 border-start border-secondary">
-                        <li class="nav-item">
-                            <router-link to="/devices/routers" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="server" class="me-2 text-muted" />
-                                <span>Devices</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/sites" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="globe" class="me-2 text-muted" />
-                                <span>Sites</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/probes" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="satellite-dish" class="me-2 text-muted" />
-                                <span>Probes</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/topology" class="nav-link py-1 px-2 small" @click="$emit('close')">
-                                <font-awesome-icon icon="project-diagram" class="me-2 text-muted" />
-                                <span>Topology</span>
-                            </router-link>
-                        </li>
-                    </ul>
+                <div class="d-flex flex-column gap-1 px-1" style="font-size: 0.68rem;">
+                    <div class="d-flex align-items-center gap-2 text-muted">
+                        <font-awesome-icon icon="check-circle" class="text-success flex-shrink-0" />
+                        <span class="text-secondary-foreground">Real-time Alerts</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 text-muted">
+                        <font-awesome-icon icon="check-circle" class="text-success flex-shrink-0" />
+                        <span class="text-secondary-foreground">High Availability</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 text-muted">
+                        <font-awesome-icon icon="check-circle" class="text-success flex-shrink-0" />
+                        <span class="text-secondary-foreground">Infrastructure Insights</span>
+                    </div>
                 </div>
-
-                <!-- Group 4: OPERATIONS -->
-                <div class="noc-nav-group">
-                    <div class="noc-nav-label">Operations</div>
-                    <ul class="nav flex-column gap-1">
-                        <li class="nav-item">
-                            <router-link to="/settings/notifications" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="bell" class="nav-icon" />
-                                    <span>Alerts</span>
-                                </div>
-                                <span v-if="alertCount > 0" class="badge bg-warning text-dark fw-bold">
-                                    {{ alertCount }}
-                                </span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/incidents" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="exclamation-triangle" class="nav-icon" />
-                                    <span>Incidents</span>
-                                </div>
-                                <span v-if="incidentCount > 0" class="badge bg-danger animate-pulse">
-                                    {{ incidentCount }}
-                                </span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/maintenance" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="wrench" class="nav-icon" />
-                                    <span>Maintenance</span>
-                                </div>
-                            </router-link>
-                        </li>
-                    </ul>
-                </div>
-
-                <!-- Group 5: REPORTS -->
-                <div class="noc-nav-group">
-                    <div class="noc-nav-label">Reports</div>
-                    <ul class="nav flex-column gap-1">
-                        <li class="nav-item">
-                            <router-link to="/reports/sla" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="file-alt" class="nav-icon" />
-                                    <span>SLA Reports</span>
-                                </div>
-                            </router-link>
-                        </li>
-                    </ul>
-                </div>
-
-                <!-- Group: TOOLS -->
-                <div class="noc-nav-group">
-                    <button
-                        class="noc-nav-label-btn w-100 d-flex align-items-center justify-content-between"
-                        @click="toggleSubmenu('tools')"
-                    >
-                        <span>Tools</span>
-                        <font-awesome-icon icon="chevron-down" class="small transition-transform" :class="{ 'rotate-180': submenus.tools }" />
-                    </button>
-                    <ul v-show="submenus.tools" class="nav flex-column gap-1 mt-1 ms-2 ps-2 border-start border-secondary">
-                        <li class="nav-item">
-                            <router-link to="/tools" class="nav-link py-1 px-2 small" :class="{ active: $route.path === '/tools' }" @click="$emit('close')">
-                                <font-awesome-icon icon="th-large" class="me-2 text-muted" />
-                                <span>Tools Dashboard</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/tools/ip-checker" class="nav-link py-1 px-2 small" :class="{ active: $route.path === '/tools/ip-checker' }" @click="$emit('close')">
-                                <font-awesome-icon icon="globe" class="me-2 text-muted" />
-                                <span>IP Checker</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/tools/port-checker" class="nav-link py-1 px-2 small" :class="{ active: $route.path === '/tools/port-checker' }" @click="$emit('close')">
-                                <font-awesome-icon icon="plug" class="me-2 text-muted" />
-                                <span>Port Checker</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/tools/subnet-calculator" class="nav-link py-1 px-2 small" :class="{ active: $route.path === '/tools/subnet-calculator' }" @click="$emit('close')">
-                                <font-awesome-icon icon="calculator" class="me-2 text-muted" />
-                                <span>Subnet Calculator</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/tools/dns-lookup" class="nav-link py-1 px-2 small" :class="{ active: $route.path === '/tools/dns-lookup' }" @click="$emit('close')">
-                                <font-awesome-icon icon="search" class="me-2 text-muted" />
-                                <span>DNS Lookup</span>
-                            </router-link>
-                        </li>
-                        <li class="nav-item">
-                            <router-link to="/tools/ping" class="nav-link py-1 px-2 small" :class="{ active: $route.path === '/tools/ping' }" @click="$emit('close')">
-                                <font-awesome-icon icon="network-wired" class="me-2 text-muted" />
-                                <span>Ping</span>
-                            </router-link>
-                        </li>
-                    </ul>
-                </div>
-
-                <!-- Group 6: COMMUNICATION -->
-                <div class="noc-nav-group">
-                    <div class="noc-nav-label">Communication</div>
-                    <ul class="nav flex-column gap-1">
-                        <li class="nav-item">
-                            <router-link to="/manage-status-page" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="stream" class="nav-icon" />
-                                    <span>Status Pages</span>
-                                </div>
-                            </router-link>
-                        </li>
-                        <li v-if="canManageSettings" class="nav-item">
-                            <router-link to="/settings/api-keys" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="key" class="nav-icon" />
-                                    <span>Integrations</span>
-                                </div>
-                            </router-link>
-                        </li>
-                    </ul>
-                </div>
-
-                <!-- Group 7: ORGANIZATION -->
-                <div class="noc-nav-group">
-                    <div class="noc-nav-label">Organization</div>
-                    <ul class="nav flex-column gap-1">
-                        <li v-if="canManageSettings" class="nav-item">
-                            <router-link to="/team" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="users" class="nav-icon" />
-                                    <span>Team</span>
-                                </div>
-                            </router-link>
-                        </li>
-                        <li v-if="canManageSettings" class="nav-item">
-                            <router-link to="/billing" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="credit-card" class="nav-icon" />
-                                    <span>Billing</span>
-                                </div>
-                            </router-link>
-                        </li>
-                        <li v-if="canManageSettings" class="nav-item">
-                            <router-link to="/settings/general" class="nav-link d-flex align-items-center justify-content-between" @click="$emit('close')">
-                                <div class="d-flex align-items-center gap-2">
-                                    <font-awesome-icon icon="cog" class="nav-icon" />
-                                    <span>Settings</span>
-                                </div>
-                                <span v-if="hasNewVersion" class="badge bg-warning text-dark fw-bold animate-pulse" style="font-size: 0.65rem;" title="New version available">
-                                    UPDATE
-                                </span>
-                            </router-link>
-                        </li>
-                    </ul>
-                </div>
-            </nav>
+            </div>
         </div>
     </div>
 </template>
@@ -287,11 +246,6 @@ export default {
     emits: ["close"],
     data() {
         return {
-            submenus: {
-                monitoring: true,
-                network: true,
-                tools: true,
-            },
             activeIncidentCount: 0,
         };
     },
@@ -337,6 +291,14 @@ export default {
         }
     },
     methods: {
+        handleNocViewClick() {
+            if (this.$root.toggleWallboardMode) {
+                this.$root.toggleWallboardMode();
+            } else if (this.$route.path !== "/dashboard") {
+                this.$router.push("/dashboard");
+            }
+            this.$emit("close");
+        },
         loadIncidentCount() {
             if (this.$root.getSocket()) {
                 this.$root.getSocket().emit("getIncidentDashboardStats", (res) => {
@@ -345,9 +307,6 @@ export default {
                     }
                 });
             }
-        },
-        toggleSubmenu(name) {
-            this.submenus[name] = !this.submenus[name];
         },
         isCurrentRoute(path) {
             return this.$route.path === path;
@@ -360,8 +319,9 @@ export default {
 .noc-sidebar {
     background-color: var(--sidebar);
     border: 1px solid var(--sidebar-border);
-    border-radius: 12px;
+    border-radius: 14px;
     color: var(--sidebar-foreground);
+    min-height: calc(100vh - 100px);
 }
 
 .noc-nav-label {
@@ -370,31 +330,14 @@ export default {
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted-foreground);
-    padding: 0.35rem 0.5rem 0.2rem 0.5rem;
-}
-
-.noc-nav-label-btn {
-    font-size: 0.68rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted-foreground);
-    padding: 0.35rem 0.5rem 0.2rem 0.5rem;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-}
-
-.noc-nav-label-btn:hover {
-    color: var(--foreground);
+    padding: 0.4rem 0.6rem 0.2rem 0.6rem;
 }
 
 .nav-link {
     color: var(--sidebar-foreground);
     font-weight: 500;
     font-size: 0.85rem;
-    padding: 0.45rem 0.65rem;
+    padding: 0.45rem 0.75rem;
     border-radius: 8px;
     transition: all 0.15s ease-in-out;
 }
@@ -404,23 +347,40 @@ export default {
     color: var(--foreground);
 }
 
-.nav-link.active {
+.nav-link.active-emerald {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
+    font-weight: 600 !important;
+    border-radius: 8px;
+}
+
+.nav-link.active-emerald .nav-icon {
+    color: #ffffff !important;
+}
+
+.nav-link.active:not(.active-emerald) {
     background-color: var(--secondary) !important;
     color: var(--foreground) !important;
-    font-weight: 700 !important;
+    font-weight: 600 !important;
     border-left: 3px solid var(--accent);
 }
 
 .nav-link.active .nav-icon {
-    color: var(--primary) !important;
+    color: var(--accent) !important;
 }
 
-.rotate-180 {
-    transform: rotate(180deg);
+.noc-promo-card {
+    background: linear-gradient(180deg, rgba(17, 29, 48, 0.7) 0%, rgba(11, 20, 36, 0.95) 100%);
+    border: 1px solid rgba(36, 54, 77, 0.9);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.transition-transform {
-    transition: transform 0.2s ease-in-out;
+.promo-icon-box {
+    width: 48px;
+    height: 48px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.25) 0%, rgba(16, 185, 129, 0.1) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 @keyframes pulse {

@@ -81,6 +81,21 @@ import {
     faBell,
     faSatelliteDish,
     faSlidersH,
+    faChartLine,
+    faChartBar,
+    faServer,
+    faMapMarkerAlt,
+    faCalendarAlt,
+    faEllipsisV,
+    faTh,
+    faLayerGroup,
+    faUsers,
+    faCreditCard,
+    faFileAlt,
+    faTrashAlt,
+    faRocket,
+    faBars,
+    faProjectDiagram,
 } from "@fortawesome/free-solid-svg-icons";
 
 library.add(
@@ -161,7 +176,22 @@ library.add(
     faCompress,
     faBell,
     faSatelliteDish,
-    faSlidersH
+    faSlidersH,
+    faChartLine,
+    faChartBar,
+    faServer,
+    faMapMarkerAlt,
+    faCalendarAlt,
+    faEllipsisV,
+    faTh,
+    faLayerGroup,
+    faUsers,
+    faCreditCard,
+    faFileAlt,
+    faTrashAlt,
+    faRocket,
+    faBars,
+    faProjectDiagram
 );
 
 export { FontAwesomeIcon };
