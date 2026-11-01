@@ -23,6 +23,22 @@
             margin: 0 auto;
         }
     </style>
+    <!-- Theme Anti-Flash Initialization -->
+    <script>
+        (function() {
+            try {
+                var t = localStorage.theme;
+                if (!t || t === 'auto') {
+                    t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                document.documentElement.setAttribute('data-theme', t);
+                if (document.body) {
+                    document.body.classList.remove('dark', 'light');
+                    document.body.classList.add(t);
+                }
+            } catch(e) {}
+        })();
+    </script>
 </head>
 <body>
 <noscript>

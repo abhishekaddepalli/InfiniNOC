@@ -147,7 +147,7 @@ optgroup {
     background-color: var(--card) !important;
     color: var(--card-foreground) !important;
     border: 1px solid var(--border) !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+    box-shadow: var(--shadow-card) !important;
     border-radius: 12px !important;
     padding: 1.25rem;
     transition: border-color 0.15s ease-in-out;
@@ -166,11 +166,149 @@ optgroup {
     box-shadow: none !important;
 }
 
-body.dark {
+/* Semantic Theme Utilities */
+.text-foreground {
+    color: var(--foreground) !important;
+}
+
+.text-muted-foreground {
+    color: var(--muted-foreground) !important;
+}
+
+.bg-surface {
+    background-color: var(--surface) !important;
+}
+
+.bg-surface-secondary {
+    background-color: var(--secondary) !important;
+}
+
+.border-theme {
+    border-color: var(--border) !important;
+}
+
+/* Light Mode Global System */
+body.light,
+[data-theme="light"] {
+    color-scheme: light;
+
+    .shadow-box,
+    .noc-card,
+    .noc-panel,
+    .noc-section-box {
+        box-shadow: var(--shadow-card) !important;
+    }
+
+    /* Modal Overrides for Light Mode */
+    .modal-content {
+        background-color: var(--card) !important;
+        color: var(--card-foreground) !important;
+        border-color: var(--border) !important;
+        box-shadow: var(--shadow-elevated) !important;
+    }
+
+    .modal-header,
+    .modal-footer {
+        background-color: var(--card) !important;
+        border-color: var(--border) !important;
+    }
+
+    /* Card Header & Footer Overrides */
+    .card-header,
+    .card-footer {
+        background-color: var(--card);
+        border-color: var(--border);
+        color: var(--card-foreground);
+    }
+
+    /* Form Controls & Inputs in Light Mode */
+    .form-control,
+    .form-select,
+    .form-check-input {
+        background-color: var(--input-bg) !important;
+        border-color: var(--input-border) !important;
+        color: var(--input-text) !important;
+    }
+
+    .form-control::placeholder,
+    .form-select::placeholder {
+        color: var(--muted-foreground) !important;
+        opacity: 0.8;
+    }
+
+    .form-check-input:checked {
+        background-color: var(--accent) !important;
+        border-color: var(--accent) !important;
+    }
+
+    /* Table Theme Styles */
+    .table {
+        --bs-table-bg: var(--card);
+        --bs-table-color: var(--foreground);
+        --bs-table-border-color: var(--border);
+        --bs-table-striped-bg: var(--secondary);
+        --bs-table-hover-bg: var(--surface-elevated);
+        color: var(--foreground);
+        background-color: var(--card);
+    }
+
+    .table-dark {
+        --bs-table-bg: var(--secondary);
+        --bs-table-color: var(--foreground);
+        border-color: var(--border);
+    }
+
+    /* Dropdown Menus */
+    .dropdown-menu {
+        background-color: var(--popover) !important;
+        border-color: var(--border) !important;
+        color: var(--popover-foreground) !important;
+        box-shadow: var(--shadow-elevated) !important;
+
+        .dropdown-item {
+            color: var(--popover-foreground) !important;
+
+            &:hover,
+            &:focus {
+                background-color: var(--secondary) !important;
+                color: var(--foreground) !important;
+            }
+
+            &.active {
+                background-color: var(--accent) !important;
+                color: var(--accent-foreground) !important;
+            }
+        }
+    }
+
+    /* Ensure legacy bg-dark / text-light classes do not break Light Mode */
+    .bg-dark:not(.badge):not(.btn) {
+        background-color: var(--secondary) !important;
+        color: var(--foreground) !important;
+    }
+
+    .border-secondary,
+    .border-light {
+        border-color: var(--border) !important;
+    }
+
+    .text-light {
+        color: var(--muted-foreground) !important;
+    }
+
+    .text-dark {
+        color: var(--foreground) !important;
+    }
+}
+
+/* Dark Mode Global System */
+body.dark,
+[data-theme="dark"] {
     color-scheme: dark;
 
     .shadow-box,
     .noc-card,
+    .noc-panel,
     .noc-section-box {
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35) !important;
     }
@@ -202,13 +340,15 @@ body.dark {
 
     /* Modal Overrides for Dark Mode */
     .modal-content {
-        background-color: var(--card);
-        color: var(--card-foreground);
-        border-color: var(--border);
+        background-color: var(--card) !important;
+        color: var(--card-foreground) !important;
+        border-color: var(--border) !important;
+        box-shadow: var(--shadow-elevated) !important;
     }
 
     .modal-header,
     .modal-footer {
+        background-color: var(--card);
         border-color: var(--border);
     }
 
@@ -526,6 +666,61 @@ body.dark {
     background-color: var(--info-muted);
     color: var(--info);
     border: 1px solid var(--info);
+}
+
+/* Alert Banners & Bootstrap Semantic Overrides */
+.alert {
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--foreground);
+}
+
+.alert-success {
+    background-color: var(--success-muted) !important;
+    border-color: var(--success-border) !important;
+    color: var(--success) !important;
+}
+
+.alert-warning {
+    background-color: var(--warning-muted) !important;
+    border-color: var(--warning-border) !important;
+    color: var(--warning) !important;
+}
+
+.alert-danger {
+    background-color: var(--danger-muted) !important;
+    border-color: var(--danger-border) !important;
+    color: var(--danger) !important;
+}
+
+.alert-info {
+    background-color: var(--info-muted) !important;
+    border-color: var(--info-border) !important;
+    color: var(--info) !important;
+}
+
+.badge.bg-success-subtle {
+    background-color: var(--success-muted) !important;
+    color: var(--success) !important;
+    border: 1px solid var(--success-border) !important;
+}
+
+.badge.bg-warning-subtle {
+    background-color: var(--warning-muted) !important;
+    color: var(--warning) !important;
+    border: 1px solid var(--warning-border) !important;
+}
+
+.badge.bg-danger-subtle {
+    background-color: var(--danger-muted) !important;
+    color: var(--danger) !important;
+    border: 1px solid var(--danger-border) !important;
+}
+
+.badge.bg-info-subtle {
+    background-color: var(--info-muted) !important;
+    color: var(--info) !important;
+    border: 1px solid var(--info-border) !important;
 }
 
 .nav-pills .nav-link.active,

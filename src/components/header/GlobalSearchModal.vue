@@ -38,7 +38,7 @@
                 </div>
 
                 <!-- Category Filter Tabs -->
-                <div class="px-3 py-2 border-bottom border-secondary d-flex gap-2 bg-secondary-subtle">
+                <div class="px-3 py-2 border-bottom border-secondary d-flex gap-2" style="background-color: var(--secondary);">
                     <button
                         v-for="cat in categories"
                         :key="cat.id"
@@ -340,9 +340,9 @@ export default {
 
 <style scoped>
 .noc-search-trigger-box {
-    background-color: var(--input-bg, #0B1424);
-    border: 1px solid var(--border, #24364D);
-    color: var(--foreground, #F8FAFC);
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--foreground);
     border-radius: 8px;
     padding: 0 0.85rem;
     height: 38px;
@@ -354,7 +354,7 @@ export default {
 }
 
 .noc-search-trigger-box:hover {
-    border-color: var(--ring, #3B82F6);
+    border-color: var(--ring);
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
 }
 
@@ -367,9 +367,9 @@ export default {
 }
 
 .search-kbd {
-    background-color: var(--secondary, #17263B);
-    border: 1px solid var(--border, #24364D);
-    color: var(--muted-foreground, #94A3B8);
+    background-color: var(--secondary);
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
     font-size: 0.6875rem;
     padding: 2px 6px;
     border-radius: 4px;
@@ -382,7 +382,7 @@ export default {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(8, 15, 29, 0.8);
+    background-color: rgba(15, 23, 42, 0.6);
     backdrop-filter: blur(8px);
     z-index: 1080;
     display: flex;
@@ -391,13 +391,19 @@ export default {
     padding-top: 80px;
 }
 
+body.dark .noc-search-overlay,
+[data-theme="dark"] .noc-search-overlay {
+    background-color: rgba(8, 15, 29, 0.8);
+}
+
 .noc-search-modal {
     width: 100%;
     max-width: 620px;
-    background-color: var(--card, #111D30);
-    border: 1px solid var(--border, #24364D);
+    background-color: var(--card);
+    border: 1px solid var(--border);
     border-radius: 14px;
     overflow: hidden;
+    box-shadow: var(--shadow-elevated);
 }
 
 .cursor-pointer {

@@ -3,7 +3,7 @@
         <div class="form">
             <div class="text-center mb-4">
                 <object class="bi mb-2" width="64" height="64" data="/icon.svg" />
-                <h2 class="fw-bold mt-2 mb-1 text-white">{{ productConfig.productName }}</h2>
+                <h2 class="fw-bold mt-2 mb-1 text-foreground">{{ productConfig.productName }}</h2>
                 <p class="text-secondary small mb-1">{{ productConfig.tagline }}</p>
                 <div class="badge bg-secondary text-wrap" style="font-size: 0.75rem;">by {{ productConfig.companyName }}</div>
             </div>
@@ -158,9 +158,9 @@ export default {
     max-width: 420px;
     padding: 2rem;
     margin: auto;
-    background-color: var(--card, #111D30);
-    border: 1px solid var(--border, #24364D);
+    background-color: var(--card);
+    border: 1px solid var(--border);
     border-radius: 14px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-elevated);
 }
 </style>

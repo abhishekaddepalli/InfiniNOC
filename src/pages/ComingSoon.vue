@@ -129,8 +129,8 @@ export default {
 }
 
 .noc-box {
-    background-color: #1e293b;
-    border: 1px solid #334155;
+    background-color: var(--card);
+    border: 1px solid var(--border);
     border-radius: 16px;
 }
 

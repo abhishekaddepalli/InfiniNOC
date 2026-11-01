@@ -28,7 +28,7 @@
                     <object class="brand-logo-img flex-shrink-0" width="34" height="34" data="/icon.svg" />
                     <div class="d-flex flex-column justify-content-center">
                         <div class="d-flex align-items-center gap-2">
-                            <span class="brand-title fw-bold text-white fs-5 lh-1" style="letter-spacing: -0.02em;">{{ productConfig.productName }}</span>
+                            <span class="brand-title fw-bold text-foreground fs-5 lh-1" style="letter-spacing: -0.02em;">{{ productConfig.productName }}</span>
                             <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle font-monospace fw-semibold" style="font-size: 0.65rem; padding: 2px 7px;">NOC</span>
                         </div>
                         <span class="brand-sublabel text-muted text-uppercase fw-semibold" style="font-size: 0.6rem; letter-spacing: 0.08em; margin-top: 3px;">INFINIFORGE TECHNOLOGIES</span>
@@ -241,7 +241,7 @@
                 </button>
                 <router-link to="/dashboard" class="d-flex align-items-center text-decoration-none gap-2">
                     <object width="28" height="28" data="/icon.svg" class="flex-shrink-0" />
-                    <span class="fs-6 fw-bold text-white lh-1" style="letter-spacing: -0.01em;">{{ productConfig.productName }}</span>
+                    <span class="fs-6 fw-bold text-foreground lh-1" style="letter-spacing: -0.01em;">{{ productConfig.productName }}</span>
                 </router-link>
             </div>
 
@@ -782,24 +782,24 @@ header.noc-saas-header {
     height: 64px;
     min-height: 64px;
     max-height: 64px;
-    background-color: var(--sidebar, #0B1424);
-    border-bottom: 1px solid var(--border, #24364D) !important;
+    background-color: var(--sidebar);
+    border-bottom: 1px solid var(--border) !important;
     position: sticky;
     top: 0;
     z-index: 1030;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-sm);
 }
 
 header.noc-saas-header-mobile {
     height: 60px;
     min-height: 60px;
     max-height: 60px;
-    background-color: var(--sidebar, #0B1424);
-    border-bottom: 1px solid var(--border, #24364D) !important;
+    background-color: var(--sidebar);
+    border-bottom: 1px solid var(--border) !important;
     position: sticky;
     top: 0;
     z-index: 1030;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-sm);
 }
 
 .header-left-zone {
@@ -826,9 +826,9 @@ header.noc-saas-header-mobile {
 
 .header-control-btn {
     height: 38px;
-    background-color: var(--secondary, #17263B);
-    border: 1px solid var(--border, #24364D);
-    color: var(--secondary-foreground, #CBD5E1);
+    background-color: var(--secondary);
+    border: 1px solid var(--border);
+    color: var(--secondary-foreground);
     font-size: 0.85rem;
     font-weight: 500;
     border-radius: 8px;
@@ -837,14 +837,14 @@ header.noc-saas-header-mobile {
     white-space: nowrap;
 
     &:hover {
-        background-color: var(--surface-elevated, #1E3350);
-        border-color: var(--primary, #3B82F6);
-        color: #FFFFFF;
+        background-color: var(--surface-elevated);
+        border-color: var(--primary);
+        color: var(--foreground);
     }
 
     &.active {
-        background-color: var(--accent, #10B981) !important;
-        border-color: var(--accent, #10B981) !important;
+        background-color: var(--accent) !important;
+        border-color: var(--accent) !important;
         color: #FFFFFF !important;
         font-weight: 600;
         box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
@@ -857,22 +857,22 @@ header.noc-saas-header-mobile {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--secondary, #17263B);
-    border: 1px solid var(--border, #24364D);
-    color: var(--secondary-foreground, #CBD5E1);
+    background-color: var(--secondary);
+    border: 1px solid var(--border);
+    color: var(--secondary-foreground);
     border-radius: 8px;
     transition: all 0.15s ease-in-out;
     cursor: pointer;
 
     &:hover {
-        background-color: var(--surface-elevated, #1E3350);
-        border-color: var(--primary, #3B82F6);
-        color: #FFFFFF;
+        background-color: var(--surface-elevated);
+        border-color: var(--primary);
+        color: var(--foreground);
     }
 
     &.active {
-        background-color: var(--accent, #10B981);
-        border-color: var(--accent, #10B981);
+        background-color: var(--accent);
+        border-color: var(--accent);
         color: #FFFFFF;
     }
 }
@@ -894,14 +894,14 @@ header.noc-saas-header-mobile {
 
 .header-audio-pill {
     height: 38px;
-    background-color: var(--secondary, #17263B);
-    border: 1px solid var(--border, #24364D);
+    background-color: var(--secondary);
+    border: 1px solid var(--border);
     border-radius: 8px;
     overflow: hidden;
     transition: border-color 0.15s ease;
 
     &:hover {
-        border-color: var(--primary, #3B82F6);
+        border-color: var(--primary);
     }
 
     .header-audio-toggle {
@@ -917,14 +917,14 @@ header.noc-saas-header-mobile {
         transition: background-color 0.15s ease;
 
         &:hover {
-            background-color: rgba(255, 255, 255, 0.05);
+            background-color: var(--surface-elevated);
         }
     }
 
     .header-audio-gear {
         height: 100%;
         border: none;
-        border-left: 1px solid var(--border, #24364D);
+        border-left: 1px solid var(--border);
         background: transparent;
         padding: 0 9px;
         color: var(--muted-foreground);
@@ -935,7 +935,7 @@ header.noc-saas-header-mobile {
         transition: background-color 0.15s ease;
 
         &:hover {
-            background-color: rgba(255, 255, 255, 0.05);
+            background-color: var(--surface-elevated);
             color: var(--foreground);
         }
     }
@@ -943,13 +943,13 @@ header.noc-saas-header-mobile {
 
 .header-profile-btn {
     height: 38px;
-    background-color: var(--secondary, #17263B);
-    border: 1px solid var(--border, #24364D);
+    background-color: var(--secondary);
+    border: 1px solid var(--border);
     border-radius: 8px;
     transition: all 0.15s ease-in-out;
 
     &:hover {
-        border-color: var(--primary, #3B82F6);
+        border-color: var(--primary);
     }
 }
 

@@ -87,9 +87,9 @@ export default {
 
 <style scoped>
 .bg-card {
-    background-color: var(--card, #1e293b);
+    background-color: var(--card);
 }
 .text-foreground {
-    color: var(--foreground, #f8fafc);
+    color: var(--foreground);
 }
 </style>

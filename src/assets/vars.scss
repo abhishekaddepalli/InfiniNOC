@@ -25,94 +25,127 @@ $easing-in-out: cubic-bezier(0.79, 0.14, 0.15, 0.86);
 
 $dropdown-border-radius: 0.75rem;
 
-// InfiniNOC Semantic Design Tokens (:root for Light Theme)
-:root {
-    --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+// InfiniNOC Semantic Design Tokens (:root & Light Theme)
+:root,
+body.light,
+[data-theme="light"] {
+    --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
-    --background: #f8fafc;
-    --foreground: #0f172a;
+    // Canvas & Core
+    --app-bg: #F8FAFC;
+    --background: #F8FAFC;
+    --foreground: #0F172A;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
 
-    --surface: #ffffff;
-    --surface-elevated: #ffffff;
-    --surface-muted: #f1f5f9;
+    // Card & Surface
+    --surface: #FFFFFF;
+    --surface-secondary: #F1F5F9;
+    --surface-elevated: #FFFFFF;
+    --surface-muted: #F8FAFC;
 
-    --card: #ffffff;
-    --card-foreground: #0f172a;
+    --card: #FFFFFF;
+    --card-foreground: #0F172A;
 
-    --popover: #ffffff;
-    --popover-foreground: #0f172a;
+    --popover: #FFFFFF;
+    --popover-foreground: #0F172A;
 
-    --primary: #1e3a8a;
-    --primary-foreground: #ffffff;
+    // Brand & Interactions
+    --primary: #2563EB;
+    --primary-foreground: #FFFFFF;
 
-    --secondary: #f1f5f9;
-    --secondary-foreground: #1e293b;
+    --secondary: #F1F5F9;
+    --secondary-foreground: #334155;
 
-    --muted: #f8fafc;
-    --muted-foreground: #64748b;
+    --muted: #F1F5F9;
+    --muted-foreground: #64748B;
 
-    --accent: #ff9933;
-    --accent-foreground: #0f172a;
+    --accent: #10B981;
+    --accent-saffron: #FF9933;
+    --accent-foreground: #FFFFFF;
 
-    --border: #e2e8f0;
-    --border-subtle: #f1f5f9;
-    --border-strong: #cbd5e1;
+    // Borders & Dividers
+    --border: #E2E8F0;
+    --border-subtle: #F1F5F9;
+    --border-strong: #CBD5E1;
 
-    --input: #ffffff;
-    --input-foreground: #0f172a;
-    --ring: #2563eb;
-    --focus: #2563eb;
+    // Inputs & Forms
+    --input: #FFFFFF;
+    --input-foreground: #0F172A;
+    --input-bg: #FFFFFF;
+    --input-border: #CBD5E1;
+    --input-text: #0F172A;
+    --ring: #2563EB;
+    --focus: #2563EB;
 
-    --success: #16a34a;
-    --success-foreground: #ffffff;
-    --success-muted: #dcfce7;
+    // Status Semantics (Light Mode Tinted)
+    --success: #059669;
+    --success-foreground: #FFFFFF;
+    --success-muted: #ECFDF5;
+    --success-border: #A7F3D0;
 
-    --warning: #d97706;
-    --warning-foreground: #ffffff;
-    --warning-muted: #fef3c7;
+    --warning: #D97706;
+    --warning-foreground: #FFFFFF;
+    --warning-muted: #FFFBEB;
+    --warning-border: #FDE68A;
 
-    --danger: #dc2626;
-    --danger-foreground: #ffffff;
-    --danger-muted: #fee2e2;
+    --danger: #DC2626;
+    --danger-foreground: #FFFFFF;
+    --danger-muted: #FEF2F2;
+    --danger-border: #FECACA;
 
-    --info: #2563eb;
-    --info-foreground: #ffffff;
-    --info-muted: #e0f2fe;
+    --info: #0891B2;
+    --info-foreground: #FFFFFF;
+    --info-muted: #F0F9FF;
+    --info-border: #BAE6FD;
 
-    --disabled: #e2e8f0;
-    --disabled-foreground: #94a3b8;
+    --disabled: #E2E8F0;
+    --disabled-foreground: #94A3B8;
 
-    --sidebar: #ffffff;
-    --sidebar-foreground: #0f172a;
-    --sidebar-active: #ff9933;
-    --sidebar-hover: #f1f5f9;
-    --sidebar-border: #e2e8f0;
+    // Sidebar & Navigation
+    --sidebar: #FFFFFF;
+    --sidebar-foreground: #0F172A;
+    --sidebar-active: #10B981;
+    --sidebar-hover: #F1F5F9;
+    --sidebar-border: #E2E8F0;
 
-    --input-bg: #ffffff;
-    --input-border: #cbd5e1;
-    --input-text: #0f172a;
+    // Shadows & Radii
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-elevated: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
 
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
 
-    --glass-bg: rgba(255, 255, 255, 0.85);
-    --glass-border: rgba(226, 232, 240, 0.8);
+    --glass-bg: rgba(255, 255, 255, 0.9);
+    --glass-border: rgba(226, 232, 240, 0.9);
     --glass-blur: 16px;
     --touch-min-h: 44px;
-    --glow-success: rgba(22, 163, 74, 0.2);
-    --glow-warning: rgba(217, 119, 6, 0.2);
-    --glow-danger: rgba(220, 38, 38, 0.2);
-    --glow-primary: rgba(30, 58, 138, 0.2);
+    --glow-success: rgba(16, 185, 129, 0.15);
+    --glow-warning: rgba(217, 119, 6, 0.15);
+    --glow-danger: rgba(220, 38, 38, 0.15);
+    --glow-primary: rgba(37, 99, 235, 0.15);
+    --glow-info: rgba(8, 145, 178, 0.15);
 }
 
 // InfiniNOC Semantic Design Tokens (Dark Theme)
 body.dark,
 [data-theme="dark"] {
+    // Canvas & Core
+    --app-bg: #080F1D;
     --background: #080F1D;
     --foreground: #F8FAFC;
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
 
+    // Card & Surface
     --surface: #111D30;
+    --surface-secondary: #17263B;
     --surface-elevated: #17263B;
     --surface-muted: #0B1424;
 
@@ -122,6 +155,7 @@ body.dark,
     --popover: #111D30;
     --popover-foreground: #F8FAFC;
 
+    // Brand & Interactions
     --primary: #3B82F6;
     --primary-foreground: #FFFFFF;
 
@@ -135,43 +169,57 @@ body.dark,
     --accent-saffron: #FF9933;
     --accent-foreground: #080F1D;
 
+    // Borders & Dividers
     --border: #24364D;
     --border-subtle: #17263B;
     --border-strong: #334B68;
 
+    // Inputs & Forms
     --input: #0E1828;
     --input-foreground: #F8FAFC;
+    --input-bg: #0B1424;
+    --input-border: #24364D;
+    --input-text: #F8FAFC;
     --ring: #3B82F6;
     --focus: #3B82F6;
 
+    // Status Semantics (Dark Mode Tinted)
     --success: #10B981;
     --success-foreground: #080F1D;
     --success-muted: rgba(16, 185, 129, 0.15);
+    --success-border: rgba(16, 185, 129, 0.35);
 
     --warning: #F59E0B;
     --warning-foreground: #080F1D;
     --warning-muted: rgba(245, 158, 11, 0.15);
+    --warning-border: rgba(245, 158, 11, 0.35);
 
     --danger: #EF4444;
     --danger-foreground: #FFFFFF;
     --danger-muted: rgba(239, 68, 68, 0.15);
+    --danger-border: rgba(239, 68, 68, 0.35);
 
     --info: #06B6D4;
     --info-foreground: #080F1D;
     --info-muted: rgba(6, 182, 212, 0.15);
+    --info-border: rgba(6, 182, 212, 0.35);
 
     --disabled: #17263B;
     --disabled-foreground: #64748B;
 
+    // Sidebar & Navigation
     --sidebar: #0B1424;
     --sidebar-foreground: #F8FAFC;
     --sidebar-active: #10B981;
     --sidebar-hover: #17263B;
     --sidebar-border: #24364D;
 
-    --input-bg: #0B1424;
-    --input-border: #24364D;
-    --input-text: #F8FAFC;
+    // Shadows & Radii
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.35);
+    --shadow-elevated: 0 12px 30px rgba(0, 0, 0, 0.5);
 
     --glass-bg: rgba(17, 29, 48, 0.85);
     --glass-border: rgba(36, 54, 77, 0.8);

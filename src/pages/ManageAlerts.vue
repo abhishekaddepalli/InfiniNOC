@@ -3,7 +3,7 @@
         <!-- Top Control Bar -->
         <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3 border-bottom border-secondary pb-3">
             <div>
-                <h1 class="h3 fw-bold mb-1 text-white d-flex align-items-center gap-2">
+                <h1 class="h3 fw-bold mb-1 text-foreground d-flex align-items-center gap-2">
                     <font-awesome-icon icon="bell" class="text-warning" />
                     <span>Enterprise Alert Management</span>
                 </h1>

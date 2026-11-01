@@ -6,7 +6,7 @@
                 <div class="d-flex align-items-center">
                     <div class="noc-header-indicator me-3 flex-shrink-0"></div>
                     <div>
-                        <h1 class="h3 fw-bold mb-1 text-white d-flex align-items-center gap-2" style="letter-spacing: -0.02em;">
+                        <h1 class="h3 fw-bold mb-1 text-foreground d-flex align-items-center gap-2" style="letter-spacing: -0.02em;">
                             <span>Network Operations Center</span>
                         </h1>
                         <p class="text-muted small mb-0 font-monospace">
@@ -56,7 +56,7 @@
                         <font-awesome-icon :icon="downCount > 0 ? 'exclamation-triangle' : 'check-circle'" class="fs-4" />
                     </div>
                     <div>
-                        <div class="fw-bold mb-1 text-white fs-6">
+                        <div class="fw-bold mb-1 text-foreground fs-6">
                             <span v-if="downCount === 0 && pendingCount === 0">All Core Network Systems Operational</span>
                             <span v-else-if="downCount > 0">{{ downCount }} Critical Infrastructure Outage{{ downCount > 1 ? 's' : '' }} Active</span>
                             <span v-else>{{ pendingCount }} Monitoring Target{{ pendingCount > 1 ? 's' : '' }} in Degraded State</span>
@@ -73,7 +73,7 @@
                         <span>View Outages</span>
                         <font-awesome-icon icon="chevron-down" style="transform: rotate(-90deg); font-size: 0.75rem;" />
                     </router-link>
-                    <button class="btn btn-dark border border-secondary text-light fw-medium px-3 py-2 rounded-3 d-flex align-items-center gap-2" @click="$emit('wallboard')">
+                    <button class="btn btn-secondary border text-foreground fw-medium px-3 py-2 rounded-3 d-flex align-items-center gap-2" @click="$emit('wallboard')">
                         <font-awesome-icon icon="heartbeat" :class="downCount > 0 ? 'text-danger' : 'text-success'" />
                         <span>Live Telemetry</span>
                     </button>
@@ -92,7 +92,7 @@
                         </div>
                         <div>
                             <div class="kpi-label">Total Monitors</div>
-                            <div class="kpi-value text-white">{{ totalMonitors }}</div>
+                            <div class="kpi-value text-foreground">{{ totalMonitors }}</div>
                             <div class="kpi-subtext">Configured targets</div>
                         </div>
                     </div>
@@ -156,7 +156,7 @@
                         </div>
                         <div>
                             <div class="kpi-label">Maintenance</div>
-                            <div class="kpi-value text-white">{{ maintenanceCount }}</div>
+                            <div class="kpi-value text-purple" style="color: #8B5CF6 !important;">{{ maintenanceCount }}</div>
                             <div class="kpi-subtext">Scheduled work</div>
                         </div>
                     </div>
@@ -172,7 +172,7 @@
                         </div>
                         <div>
                             <div class="kpi-label">Active Alerts</div>
-                            <div class="kpi-value text-white">{{ activeAlertsCount }}</div>
+                            <div class="kpi-value text-indigo" style="color: #6366F1 !important;">{{ activeAlertsCount }}</div>
                             <div class="kpi-subtext">Notification rules</div>
                         </div>
                     </div>
@@ -188,7 +188,7 @@
                         </div>
                         <div>
                             <div class="kpi-label">Active Incidents</div>
-                            <div class="kpi-value" :class="activeIncidentCount > 0 ? 'text-danger' : 'text-white'">
+                            <div class="kpi-value" :class="activeIncidentCount > 0 ? 'text-danger' : 'text-foreground'">
                                 {{ activeIncidentCount }}
                             </div>
                             <div class="kpi-subtext">System outages</div>
@@ -222,7 +222,7 @@
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                             <div class="d-flex align-items-center gap-2">
                                 <font-awesome-icon icon="layer-group" class="text-success" style="color: #10B981 !important;" />
-                                <h2 class="h6 fw-bold mb-0 text-white" style="letter-spacing: -0.01em;">
+                                <h2 class="h6 fw-bold mb-0 text-foreground" style="letter-spacing: -0.01em;">
                                     Live Infrastructure Targets ({{ totalMonitors }})
                                 </h2>
                             </div>
@@ -346,7 +346,7 @@
                         <div class="col-12 col-md-4">
                             <div class="noc-panel p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                                    <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                         <font-awesome-icon icon="bell" class="text-success" style="color: #10B981 !important;" />
                                         <span>Active Notification Channels</span>
                                     </div>
@@ -355,7 +355,7 @@
                                     </router-link>
                                 </div>
                                 <div class="d-flex align-items-center justify-content-between mt-2 pt-2 border-top border-secondary">
-                                    <span class="fw-semibold text-light small text-truncate">
+                                    <span class="fw-semibold text-foreground small text-truncate">
                                         {{ $root.notificationList.length > 0 ? $root.notificationList[0].name : 'Default Channel' }}
                                     </span>
                                     <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle" style="font-size: 0.65rem;">
@@ -369,7 +369,7 @@
                         <div class="col-12 col-md-4">
                             <div class="noc-panel p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                                    <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                         <font-awesome-icon icon="exclamation-triangle" class="text-danger" style="color: #EF4444 !important;" />
                                         <span>Active Incidents</span>
                                     </div>
@@ -378,7 +378,7 @@
                                     </span>
                                 </div>
                                 <div class="d-flex align-items-center justify-content-between mt-2 pt-2 border-top border-secondary">
-                                    <span class="fw-semibold text-light small text-truncate">
+                                    <span class="fw-semibold text-foreground small text-truncate">
                                         {{ activeIncidents.length > 0 ? activeIncidents[0].name : 'All systems nominal' }}
                                     </span>
                                     <span class="badge rounded-pill" :class="activeIncidentCount > 0 ? 'bg-danger text-white' : 'bg-success-subtle text-success'" style="font-size: 0.65rem;">
@@ -392,7 +392,7 @@
                         <div class="col-12 col-md-4">
                             <div class="noc-panel p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                                    <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                         <font-awesome-icon icon="times-circle" class="text-warning" style="color: #F59E0B !important;" />
                                         <span>Top Failed Targets</span>
                                     </div>
@@ -400,11 +400,11 @@
                                 <div class="d-flex align-items-center justify-content-between mt-2 pt-2 border-top border-secondary">
                                     <div class="d-flex align-items-center gap-2 overflow-hidden">
                                         <span class="badge bg-danger text-white" style="font-size: 0.65rem;">#1</span>
-                                        <span class="fw-semibold text-light small text-truncate">
+                                        <span class="fw-semibold text-foreground small text-truncate">
                                             {{ topFailedMonitors.length > 0 ? topFailedMonitors[0].name : 'None' }}
                                         </span>
                                     </div>
-                                    <span class="badge rounded-pill bg-dark border border-secondary text-muted font-monospace" style="font-size: 0.65rem;">
+                                    <span class="badge rounded-pill bg-secondary border border-secondary text-muted font-monospace" style="font-size: 0.65rem;">
                                         {{ topFailedMonitors.length > 0 ? topFailedMonitors[0].failCount + ' Failures' : '0 Failures' }}
                                     </span>
                                 </div>
@@ -417,13 +417,13 @@
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <div class="d-flex align-items-center gap-2">
                                 <font-awesome-icon icon="history" class="text-success" style="color: #10B981 !important;" />
-                                <h2 class="h6 fw-bold mb-0 text-white">Recent Telemetry Events</h2>
+                                <h2 class="h6 fw-bold mb-0 text-foreground">Recent Telemetry Events</h2>
                             </div>
                             <span class="small text-muted font-monospace">Window: {{ selectedTimeRangeLabel }}</span>
                         </div>
 
                         <div class="table-responsive">
-                            <table class="table table-borderless align-middle mb-0 text-light small">
+                            <table class="table table-borderless align-middle mb-0 small">
                                 <thead>
                                     <tr class="text-muted border-bottom border-secondary font-monospace" style="font-size: 0.7rem; text-transform: uppercase;">
                                         <th scope="col" class="pb-2">TARGET NAME</th>
@@ -434,7 +434,7 @@
                                 </thead>
                                 <tbody>
                                     <tr v-for="(event, idx) in displayedEvents" :key="idx" class="border-bottom border-secondary">
-                                        <td class="fw-bold text-white py-2">
+                                        <td class="fw-bold text-foreground py-2">
                                             {{ $root.monitorList[event.monitorID] ? $root.monitorList[event.monitorID].name : 'Target #' + event.monitorID }}
                                         </td>
                                         <td class="py-2">
@@ -465,7 +465,7 @@
                         <div class="col-12 col-md-6">
                             <div class="noc-panel p-3 p-md-4 rounded-4 h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                                    <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                         <font-awesome-icon icon="heartbeat" class="text-success" style="color: #10B981 !important;" />
                                         <span>Latency & Response Time</span>
                                     </div>
@@ -475,7 +475,7 @@
                                 </div>
                                 <div class="row g-2 text-center pt-2">
                                     <div class="col-4">
-                                        <div class="fs-5 fw-bold text-white font-monospace">{{ avgResponseTime }} <span class="small text-muted" style="font-size: 0.65rem;">ms</span></div>
+                                        <div class="fs-5 fw-bold text-foreground font-monospace">{{ avgResponseTime }} <span class="small text-muted" style="font-size: 0.65rem;">ms</span></div>
                                         <div class="small text-muted" style="font-size: 0.7rem;">Average Latency</div>
                                     </div>
                                     <div class="col-4 border-start border-end border-secondary">
@@ -494,7 +494,7 @@
                         <div class="col-12 col-md-6">
                             <div class="noc-panel p-3 p-md-4 rounded-4 h-100 d-flex flex-column justify-content-between">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                                    <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                         <font-awesome-icon icon="globe" class="text-success" style="color: #10B981 !important;" />
                                         <span>Sites & Status Pages</span>
                                     </div>
@@ -503,8 +503,8 @@
                                     </router-link>
                                 </div>
                                 <div v-if="$root.statusPageList && $root.statusPageList.length > 0" class="d-flex flex-column gap-2">
-                                    <div v-for="sp in $root.statusPageList.slice(0, 2)" :key="sp.id" class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-dark border border-secondary">
-                                        <span class="small text-white text-truncate">{{ sp.title }}</span>
+                                    <div v-for="sp in $root.statusPageList.slice(0, 2)" :key="sp.id" class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-secondary border">
+                                        <span class="small text-foreground text-truncate">{{ sp.title }}</span>
                                         <a :href="`/status/${sp.slug}`" target="_blank" class="badge bg-success-subtle text-success text-decoration-none">PUBLISHED</a>
                                     </div>
                                 </div>
@@ -522,7 +522,7 @@
                     <!-- 1. Network Health Overview -->
                     <div class="noc-panel p-3 p-md-4 rounded-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                            <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                 <font-awesome-icon icon="heartbeat" class="text-success" style="color: #10B981 !important;" />
                                 <span>Network Health Overview</span>
                             </div>
@@ -535,7 +535,7 @@
                                     <path
                                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                         fill="none"
-                                        stroke="#1E2D44"
+                                        stroke="var(--border)"
                                         stroke-width="3.5"
                                     />
                                     <path
@@ -548,7 +548,7 @@
                                     />
                                 </svg>
                                 <div class="position-absolute text-center" style="transform: none;">
-                                    <div class="fw-bold fs-4 text-white lh-1">{{ healthPercent }}%</div>
+                                    <div class="fw-bold fs-4 text-foreground lh-1">{{ healthPercent }}%</div>
                                     <div class="text-muted small mt-1" style="font-size: 0.65rem; letter-spacing: 0.05em;">HEALTH</div>
                                 </div>
                             </div>
@@ -576,7 +576,7 @@
                         </div>
 
                         <!-- Multi-Segment Colored Bar -->
-                        <div class="progress mt-2 rounded-pill overflow-hidden" style="height: 6px; background-color: #1E2D44;">
+                        <div class="progress mt-2 rounded-pill overflow-hidden" style="height: 6px; background-color: var(--secondary); border: 1px solid var(--border);">
                             <div class="progress-bar bg-success" :style="{ width: upPercent + '%' }"></div>
                             <div class="progress-bar bg-warning" :style="{ width: pendingPercent + '%' }"></div>
                             <div class="progress-bar bg-danger" :style="{ width: downPercent + '%' }"></div>
@@ -586,7 +586,7 @@
                     <!-- 2. Availability SLA -->
                     <div class="noc-panel p-3 p-md-4 rounded-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                            <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                 <font-awesome-icon icon="award" class="text-success" style="color: #10B981 !important;" />
                                 <span>Availability SLA</span>
                             </div>
@@ -598,7 +598,7 @@
                                     <span class="text-muted">Selected Window ({{ selectedTimeRangeLabel }})</span>
                                     <span class="fw-bold text-success" style="color: #10B981 !important;">{{ windowUptimePercent }}%</span>
                                 </div>
-                                <div class="progress rounded-pill overflow-hidden" style="height: 6px; background-color: #1E2D44;">
+                                <div class="progress rounded-pill overflow-hidden" style="height: 6px; background-color: var(--secondary); border: 1px solid var(--border);">
                                     <div class="progress-bar bg-success" :style="{ width: windowUptimePercent + '%' }"></div>
                                 </div>
                             </div>
@@ -608,7 +608,7 @@
                                     <span class="text-muted">24-Hour SLA Target</span>
                                     <span class="fw-bold text-info" style="color: #06B6D4 !important;">99.9%</span>
                                 </div>
-                                <div class="progress rounded-pill overflow-hidden" style="height: 6px; background-color: #1E2D44;">
+                                <div class="progress rounded-pill overflow-hidden" style="height: 6px; background-color: var(--secondary); border: 1px solid var(--border);">
                                     <div class="progress-bar" style="width: 99.9%; background-color: #06B6D4;"></div>
                                 </div>
                             </div>
@@ -618,11 +618,11 @@
                     <!-- 3. Monitor Status Breakdown -->
                     <div class="noc-panel p-3 p-md-4 rounded-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                            <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                 <font-awesome-icon icon="layer-group" class="text-success" style="color: #10B981 !important;" />
                                 <span>Monitor Status Breakdown</span>
                             </div>
-                            <span class="badge rounded-pill bg-dark border border-secondary text-muted" style="font-size: 0.65rem;">
+                            <span class="badge rounded-pill bg-secondary border border-secondary text-muted" style="font-size: 0.65rem;">
                                 {{ monitorTypesCount }} Protocol Types
                             </span>
                         </div>
@@ -646,7 +646,7 @@
                                     <path
                                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                         fill="none"
-                                        stroke="#1E2D44"
+                                        stroke="var(--border)"
                                         stroke-width="4"
                                     />
                                     <path
@@ -658,7 +658,7 @@
                                     />
                                 </svg>
                                 <div class="position-absolute text-center" style="transform: none;">
-                                    <div class="fw-bold fs-5 text-white lh-1">{{ totalMonitors }}</div>
+                                    <div class="fw-bold fs-5 text-foreground lh-1">{{ totalMonitors }}</div>
                                     <div class="text-muted small" style="font-size: 0.6rem;">Total</div>
                                 </div>
                             </div>
@@ -668,19 +668,19 @@
                                     <span class="text-muted d-flex align-items-center gap-1">
                                         <span class="p-1 rounded-circle bg-success d-inline-block"></span> Up
                                     </span>
-                                    <span class="fw-semibold text-white">{{ upCount }} ({{ upPercent }}%)</span>
+                                    <span class="fw-semibold text-foreground">{{ upCount }} ({{ upPercent }}%)</span>
                                 </div>
                                 <div class="d-flex align-items-center justify-content-between gap-3">
                                     <span class="text-muted d-flex align-items-center gap-1">
                                         <span class="p-1 rounded-circle bg-danger d-inline-block"></span> Down
                                     </span>
-                                    <span class="fw-semibold text-white">{{ downCount }} ({{ downPercent }}%)</span>
+                                    <span class="fw-semibold text-foreground">{{ downCount }} ({{ downPercent }}%)</span>
                                 </div>
                                 <div class="d-flex align-items-center justify-content-between gap-3">
                                     <span class="text-muted d-flex align-items-center gap-1">
                                         <span class="p-1 rounded-circle bg-warning d-inline-block"></span> Warning
                                     </span>
-                                    <span class="fw-semibold text-white">{{ pendingCount }} ({{ pendingPercent }}%)</span>
+                                    <span class="fw-semibold text-foreground">{{ pendingCount }} ({{ pendingPercent }}%)</span>
                                 </div>
                             </div>
                         </div>
@@ -689,7 +689,7 @@
                     <!-- 4. Probe Health & Telemetry -->
                     <div class="noc-panel p-3 p-md-4 rounded-4">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="d-flex align-items-center gap-2 text-white small fw-bold">
+                            <div class="d-flex align-items-center gap-2 text-foreground small fw-bold">
                                 <font-awesome-icon icon="satellite-dish" class="text-success" style="color: #10B981 !important;" />
                                 <span>Probe Health & Telemetry</span>
                             </div>
@@ -701,7 +701,7 @@
                         <div class="probe-box p-3 rounded-3 border border-secondary">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div>
-                                    <div class="fw-bold text-white small">Primary Local Probe Agent</div>
+                                    <div class="fw-bold text-foreground small">Primary Local Probe Agent</div>
                                     <div class="text-muted font-monospace" style="font-size: 0.7rem;">Node: 127.0.0.1 (Internal Engine)</div>
                                 </div>
                                 <span class="badge rounded-pill bg-success text-white px-2 py-1" style="font-size: 0.65rem;">
@@ -1069,22 +1069,22 @@ export default {
 .noc-header-indicator {
     width: 4px;
     height: 38px;
-    background: #10B981;
+    background: var(--accent);
     border-radius: 4px;
-    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    box-shadow: 0 0 10px var(--glow-success);
 }
 
 .noc-time-window-group {
-    background-color: #111D30;
+    background-color: var(--secondary);
     padding: 3px;
     border-radius: 50rem;
-    border: 1px solid #24364D;
+    border: 1px solid var(--border);
 }
 
 .noc-time-btn {
     border-radius: 50rem !important;
     border: none;
-    color: #94A3B8;
+    color: var(--muted-foreground);
     font-size: 0.75rem;
     font-weight: 600;
     padding: 0.25rem 0.75rem;
@@ -1093,41 +1093,57 @@ export default {
 }
 
 .noc-time-btn:hover {
-    color: #FFFFFF;
+    color: var(--foreground);
 }
 
 .noc-time-btn.active {
-    background-color: #10B981;
+    background-color: var(--accent);
     color: #FFFFFF;
     font-weight: 700;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 2px 8px var(--glow-success);
 }
 
 /* Alert Banner */
 .noc-alert-banner {
-    border: 1px solid transparent;
+    border: 1px solid var(--border);
     transition: all 0.25s ease-in-out;
 }
 
-.noc-alert-banner.outage {
+body.light .noc-alert-banner.outage,
+[data-theme="light"] .noc-alert-banner.outage {
+    background: linear-gradient(90deg, rgba(239, 68, 68, 0.1) 0%, rgba(254, 242, 242, 0.95) 100%);
+    border-color: rgba(239, 68, 68, 0.35);
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.08);
+}
+
+body.dark .noc-alert-banner.outage,
+[data-theme="dark"] .noc-alert-banner.outage {
     background: linear-gradient(90deg, rgba(239, 68, 68, 0.18) 0%, rgba(17, 29, 48, 0.95) 100%);
     border-color: rgba(239, 68, 68, 0.4);
     box-shadow: 0 4px 20px rgba(239, 68, 68, 0.12);
 }
 
 .noc-alert-banner.outage .alert-icon-box {
-    background: rgba(239, 68, 68, 0.25);
+    background: rgba(239, 68, 68, 0.2);
     color: #EF4444;
-    border: 1px solid rgba(239, 68, 68, 0.4);
+    border: 1px solid rgba(239, 68, 68, 0.35);
     width: 48px;
     height: 48px;
 }
 
 .noc-alert-banner.outage .alert-subtext {
-    color: #FCA5A5;
+    color: var(--muted-foreground);
 }
 
-.noc-alert-banner.nominal {
+body.light .noc-alert-banner.nominal,
+[data-theme="light"] .noc-alert-banner.nominal {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(240, 253, 244, 0.95) 100%);
+    border-color: rgba(16, 185, 129, 0.35);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.06);
+}
+
+body.dark .noc-alert-banner.nominal,
+[data-theme="dark"] .noc-alert-banner.nominal {
     background: linear-gradient(90deg, rgba(16, 185, 129, 0.12) 0%, rgba(17, 29, 48, 0.95) 100%);
     border-color: rgba(16, 185, 129, 0.35);
     box-shadow: 0 4px 20px rgba(16, 185, 129, 0.08);
@@ -1142,14 +1158,14 @@ export default {
 }
 
 .noc-alert-banner.nominal .alert-subtext {
-    color: #94A3B8;
+    color: var(--muted-foreground);
 }
 
 /* KPI Cards */
 .kpi-card {
-    background: #111D30;
-    border: 1px solid #24364D;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    background: var(--card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
     border-radius: 12px;
     min-height: 124px;
     min-width: 0;
@@ -1158,7 +1174,7 @@ export default {
 
 .kpi-card:hover {
     transform: translateY(-2px);
-    border-color: #3B82F6;
+    border-color: var(--ring);
 }
 
 .kpi-icon-box {
@@ -1173,13 +1189,13 @@ export default {
 .kpi-red { background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); }
 .kpi-purple { background: rgba(139, 92, 246, 0.15); color: #8B5CF6; border: 1px solid rgba(139, 92, 246, 0.3); }
 .kpi-indigo { background: rgba(99, 102, 241, 0.15); color: #6366F1; border: 1px solid rgba(99, 102, 241, 0.3); }
-.kpi-darkblue { background: rgba(30, 58, 138, 0.3); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.3); }
+.kpi-darkblue { background: rgba(30, 58, 138, 0.2); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3); }
 .kpi-cyan { background: rgba(6, 182, 212, 0.15); color: #06B6D4; border: 1px solid rgba(6, 182, 212, 0.3); }
 
 .kpi-label {
     font-size: 0.72rem;
     font-weight: 600;
-    color: #94A3B8;
+    color: var(--muted-foreground);
     margin-bottom: 2px;
 }
 
@@ -1192,20 +1208,20 @@ export default {
 
 .kpi-subtext {
     font-size: 0.68rem;
-    color: #64748B;
+    color: var(--muted-foreground);
 }
 
 /* NOC Panels */
 .noc-panel {
-    background: #111D30;
-    border: 1px solid #24364D;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    background: var(--card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
 }
 
 .noc-filter-pill {
     background-color: transparent;
-    border: 1px solid #24364D;
-    color: #94A3B8;
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
     border-radius: 50rem;
     font-size: 0.75rem;
     font-weight: 600;
@@ -1214,13 +1230,13 @@ export default {
 }
 
 .noc-filter-pill:hover {
-    color: #FFFFFF;
-    border-color: #3B82F6;
+    color: var(--foreground);
+    border-color: var(--ring);
 }
 
 .noc-filter-pill.active {
-    background-color: #3B82F6;
-    border-color: #3B82F6;
+    background-color: var(--ring);
+    border-color: var(--ring);
     color: #FFFFFF;
 }
 
@@ -1236,55 +1252,59 @@ export default {
 .dot-amber { background-color: #F59E0B; box-shadow: 0 0 6px #F59E0B; }
 
 .noc-search-box {
-    background: #0E1828;
-    border: 1px solid #24364D;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
 }
 
 .noc-search-input {
     background: transparent;
     border: none;
-    color: #F8FAFC;
+    color: var(--input-text);
     outline: none;
     font-size: 0.85rem;
 }
 
 .noc-search-input::placeholder {
-    color: #64748B;
+    color: var(--muted-foreground);
 }
 
 /* Target Row */
 .target-row {
-    background: #142238;
-    border: 1px solid #1E2D44;
+    background: var(--secondary);
+    border: 1px solid var(--border);
     transition: all 0.15s ease-in-out;
 }
 
 .target-row:hover {
-    background: #192C48;
-    border-color: #3B82F6;
+    background: var(--surface-elevated);
+    border-color: var(--ring);
 }
 
 .target-icon-circle {
     width: 32px;
     height: 32px;
-    background: #0E1828;
-    border: 1px solid #24364D;
+    background: var(--card);
+    border: 1px solid var(--border);
 }
 
 .target-name {
-    color: #F8FAFC;
+    color: var(--foreground);
     font-size: 0.88rem;
+}
+
+.target-name:hover {
+    color: var(--primary);
 }
 
 .target-url {
     font-size: 0.72rem;
-    color: #64748B;
+    color: var(--muted-foreground);
 }
 
 .latency-badge {
-    background: #0E1828;
-    border: 1px solid #24364D;
-    color: #94A3B8;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
     font-size: 0.75rem;
     padding: 0.25rem 0.55rem;
     border-radius: 6px;
@@ -1322,16 +1342,18 @@ export default {
 }
 
 .status-pending {
-    background-color: #24364D !important;
-    color: #94A3B8 !important;
+    background-color: var(--secondary) !important;
+    color: var(--muted-foreground) !important;
+    border: 1px solid var(--border);
 }
 
 .hover-underline:hover {
     text-decoration: underline !important;
-    color: #10B981 !important;
+    color: var(--accent) !important;
 }
 
 .probe-box {
-    background: #0E1828;
+    background: var(--secondary);
+    border: 1px solid var(--border);
 }
 </style>

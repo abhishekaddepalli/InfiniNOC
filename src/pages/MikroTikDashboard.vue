@@ -38,8 +38,8 @@
                         <span class="text-uppercase text-secondary small fw-bold">CPU Load</span>
                         <font-awesome-icon icon="microchip" class="text-warning fs-5" />
                     </div>
-                    <div class="fs-2 fw-bold text-light font-monospace">{{ cpuVal }}%</div>
-                    <div class="progress mt-2" style="height: 6px; background-color: #0f172a;">
+                    <div class="fs-2 fw-bold text-foreground font-monospace">{{ cpuVal }}%</div>
+                    <div class="progress mt-2" style="height: 6px; background-color: var(--secondary); border: 1px solid var(--border);">
                         <div class="progress-bar bg-warning" role="progressbar" :style="{ width: Math.min(100, cpuVal) + '%' }"></div>
                     </div>
                 </div>
@@ -51,8 +51,8 @@
                         <span class="text-uppercase text-secondary small fw-bold">RAM Usage</span>
                         <font-awesome-icon icon="memory" class="text-info fs-5" />
                     </div>
-                    <div class="fs-2 fw-bold text-light font-monospace">{{ ramVal }}%</div>
-                    <div class="progress mt-2" style="height: 6px; background-color: #0f172a;">
+                    <div class="fs-2 fw-bold text-foreground font-monospace">{{ ramVal }}%</div>
+                    <div class="progress mt-2" style="height: 6px; background-color: var(--secondary); border: 1px solid var(--border);">
                         <div class="progress-bar bg-info" role="progressbar" :style="{ width: Math.min(100, ramVal) + '%' }"></div>
                     </div>
                 </div>
@@ -64,7 +64,7 @@
                         <span class="text-uppercase text-secondary small fw-bold">Board Temperature</span>
                         <font-awesome-icon icon="thermometer-half" class="text-danger fs-5" />
                     </div>
-                    <div class="fs-2 fw-bold text-light font-monospace">{{ tempVal }} °C</div>
+                    <div class="fs-2 fw-bold text-foreground font-monospace">{{ tempVal }} °C</div>
                     <span class="small text-secondary">SNMP OID: mtxrHwTemperature</span>
                 </div>
             </div>
@@ -75,7 +75,7 @@
                         <span class="text-uppercase text-secondary small fw-bold">System Uptime</span>
                         <font-awesome-icon icon="clock" class="text-success fs-5" />
                     </div>
-                    <div class="fs-4 fw-bold text-light font-monospace mt-1">{{ uptimeStr }}</div>
+                    <div class="fs-4 fw-bold text-foreground font-monospace mt-1">{{ uptimeStr }}</div>
                     <span class="small text-secondary">sysUpTime</span>
                 </div>
             </div>

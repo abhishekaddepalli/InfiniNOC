@@ -218,7 +218,7 @@
                     </div>
                 </div>
                 <div class="text-center mb-2">
-                    <div class="fw-bold text-white small" style="font-size: 0.85rem; line-height: 1.25;">Network Monitoring<br/><span style="color: #10B981;">Simplified</span></div>
+                    <div class="fw-bold text-foreground small" style="font-size: 0.85rem; line-height: 1.25;">Network Monitoring<br/><span style="color: #10B981;">Simplified</span></div>
                 </div>
                 <div class="d-flex flex-column gap-1 px-1" style="font-size: 0.68rem;">
                     <div class="d-flex align-items-center gap-2 text-muted">
@@ -371,6 +371,13 @@ export default {
 }
 
 .noc-promo-card {
+    background: linear-gradient(180deg, var(--surface-secondary) 0%, var(--secondary) 100%);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+}
+
+body.dark .noc-promo-card,
+[data-theme="dark"] .noc-promo-card {
     background: linear-gradient(180deg, rgba(17, 29, 48, 0.7) 0%, rgba(11, 20, 36, 0.95) 100%);
     border: 1px solid rgba(36, 54, 77, 0.9);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);

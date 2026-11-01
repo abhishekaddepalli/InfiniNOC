@@ -23,7 +23,7 @@
             </ul>
         </div>
         <div class="chart-wrapper" :class="{ loading: loading }">
-            <Line :data="chartData" :options="chartOptions" />
+            <Line :key="`${monitorId}-${$root.theme}`" :data="chartData" :options="chartOptions" />
         </div>
     </div>
 </template>
@@ -644,8 +644,8 @@ export default {
         padding: 2px 15px;
         background: transparent;
         border: 0;
-        color: $link-color;
-        opacity: 0.7;
+        color: var(--foreground);
+        opacity: 0.85;
         font-size: 0.9em;
 
         &::after {
@@ -653,7 +653,7 @@ export default {
         }
 
         .dark & {
-            color: $dark-font-color;
+            color: var(--foreground);
         }
     }
 }

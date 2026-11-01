@@ -92,7 +92,7 @@
                 <div class="noc-card p-4 shadow-sm h-100 d-flex flex-column justify-content-between" :class="{ 'border-warning': summary.plan === 'starter' }">
                     <div>
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h3 class="h5 fw-bold text-white mb-0">Starter Plan</h3>
+                            <h3 class="h5 fw-bold text-foreground mb-0">Starter Plan</h3>
                             <span v-if="summary.plan === 'starter'" class="badge bg-warning text-dark">ACTIVE</span>
                         </div>
                         <div class="display-6 fw-bold text-warning mb-3">₹0 <span class="fs-6 text-muted font-normal">/ mo</span></div>
@@ -194,7 +194,7 @@
                                     {{ inv.plan.toUpperCase() }}
                                 </span>
                             </td>
-                            <td class="fw-bold text-white">₹{{ (inv.amount / 100).toLocaleString() }}</td>
+                            <td class="fw-bold text-foreground">₹{{ (inv.amount / 100).toLocaleString() }}</td>
                             <td>
                                 <span class="badge" :class="inv.status === 'paid' ? 'bg-success' : 'bg-warning text-dark'">
                                     {{ inv.status.toUpperCase() }}
@@ -216,20 +216,20 @@
         <!-- Mock Razorpay Checkout Modal (for local dev verification) -->
         <div v-if="showPaymentModal" class="modal d-block noc-modal-backdrop" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content bg-dark text-white border border-secondary shadow-lg">
+                <div class="modal-content border border-secondary shadow-lg">
                     <div class="modal-header border-secondary">
                         <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2">
                             <font-awesome-icon icon="credit-card" />
                             <span>Razorpay Payment Gateway</span>
                         </h5>
-                        <button type="button" class="btn-close btn-close-white" @click="showPaymentModal = false"></button>
+                        <button type="button" class="btn-close" @click="showPaymentModal = false"></button>
                     </div>
                     <div class="modal-body">
                         <div class="alert alert-info border-info p-3 mb-3 small">
                             <strong>Razorpay Test Checkout Flow</strong><br />
                             Order ID: <code class="text-warning">{{ currentOrder?.orderId }}</code><br />
-                            Target Plan: <strong class="text-white">{{ currentOrder?.planName }}</strong><br />
-                            Amount: <strong class="text-white">₹{{ (currentOrder?.amount / 100).toLocaleString() }}</strong>
+                            Target Plan: <strong class="text-foreground">{{ currentOrder?.planName }}</strong><br />
+                            Amount: <strong class="text-foreground">₹{{ (currentOrder?.amount / 100).toLocaleString() }}</strong>
                         </div>
                         <p class="small text-secondary mb-0">
                             Simulating Razorpay payment gateway response. Clicking "Simulate Successful Payment" verifies the HMAC signature and auto-upgrades your organization plan.
@@ -416,15 +416,15 @@ export default {
 }
 
 .noc-card {
-    background-color: #1e293b;
-    border: 1px solid #334155;
+    background-color: var(--card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
 .noc-card:hover {
     transform: translateY(-3px);
-    border-color: #475569;
+    border-color: var(--ring);
 }
 
 .border-warning { border-color: #ff9933 !important; }
@@ -437,16 +437,16 @@ export default {
 .btn-purple:hover { background-color: #9333ea; }
 
 .noc-section-box {
-    background-color: #1e293b;
-    border: 1px solid #334155;
+    background-color: var(--card);
+    border: 1px solid var(--border);
     border-radius: 10px;
 }
 
 .table-dark-noc {
-    --bs-table-bg: #1e293b;
-    --bs-table-color: #cbd5e1;
-    --bs-table-hover-bg: #27354a;
-    border-color: #334155;
+    --bs-table-bg: var(--card);
+    --bs-table-color: var(--foreground);
+    --bs-table-hover-bg: var(--surface-elevated);
+    border-color: var(--border);
 }
 
 .table-dark-noc th {
@@ -454,8 +454,8 @@ export default {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #ff9933;
-    border-bottom: 2px solid #334155;
+    color: var(--muted-foreground);
+    border-bottom: 2px solid var(--border);
 }
 
 .noc-modal-backdrop {
