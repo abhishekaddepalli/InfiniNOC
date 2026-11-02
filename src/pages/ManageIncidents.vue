@@ -90,16 +90,18 @@
                             <th>ID</th>
                             <th>Severity</th>
                             <th>Status</th>
-                            <th>Title</th>
+                            <th>Incident Title & Failure</th>
+                            <th>Affected Target</th>
+                            <th>Reporting Node</th>
                             <th>Site Location</th>
                             <th>Assigned Engineer</th>
-                            <th>Created At</th>
+                            <th>Detected & Duration</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="inc in incidents" :key="inc.id">
-                            <td class="font-monospace text-muted">#INC-{{ inc.id }}</td>
+                            <td class="font-monospace text-muted text-nowrap">#INC-{{ inc.id }}</td>
                             <td>
                                 <span class="badge" :class="getSeverityBadgeClass(inc.severity)">
                                     {{ inc.severity }}
@@ -111,9 +113,37 @@
                                 </span>
                             </td>
                             <td>
-                                <router-link :to="'/incidents/' + inc.id" class="text-light fw-bold text-decoration-none hover-warning">
+                                <router-link :to="'/incidents/' + inc.id" class="text-light fw-bold text-decoration-none hover-warning d-block">
                                     {{ inc.title }}
                                 </router-link>
+                                <span v-if="inc.failure_reason" class="small text-danger font-monospace text-truncate d-block" style="max-width: 280px;">
+                                    {{ inc.failure_reason }}
+                                </span>
+                            </td>
+                            <td>
+                                <div v-if="inc.monitor_name" class="d-flex flex-column" style="line-height: 1.2;">
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="fw-semibold text-foreground small">{{ inc.monitor_name }}</span>
+                                        <span class="badge bg-secondary font-monospace" style="font-size: 0.6rem;">
+                                            {{ getProtocolLabel(inc.monitor_type) }}
+                                        </span>
+                                    </div>
+                                    <span class="text-muted font-monospace small text-truncate" style="max-width: 200px;">
+                                        {{ getTargetDisplay(inc) }}
+                                    </span>
+                                </div>
+                                <span v-else class="text-muted small">System Level</span>
+                            </td>
+                            <td>
+                                <span v-if="inc.probe_name" class="badge bg-dark border border-secondary text-info font-monospace" style="font-size: 0.7rem;">
+                                    <font-awesome-icon icon="satellite-dish" class="me-1" />{{ inc.probe_name }}
+                                </span>
+                                <span v-else-if="inc.probe_id" class="badge bg-dark border border-secondary text-info font-monospace" style="font-size: 0.7rem;">
+                                    <font-awesome-icon icon="satellite-dish" class="me-1" />Probe #{{ inc.probe_id }}
+                                </span>
+                                <span v-else class="badge bg-dark border border-secondary text-muted font-monospace" style="font-size: 0.7rem;">
+                                    Central Engine
+                                </span>
                             </td>
                             <td>
                                 <span v-if="inc.site_name" class="text-info small"><font-awesome-icon icon="map-marker-alt" class="me-1" />{{ inc.site_name }}</span>
@@ -123,15 +153,25 @@
                                 <span v-if="inc.assigned_username" class="text-warning small font-monospace"><font-awesome-icon icon="user" class="me-1" />{{ inc.assigned_username }}</span>
                                 <span v-else class="text-secondary small fst-italic">Unassigned</span>
                             </td>
-                            <td class="small text-muted">{{ formatDate(inc.created_at) }}</td>
-                            <td class="text-end">
-                                <router-link :to="'/incidents/' + inc.id" class="btn btn-sm btn-outline-warning">
-                                    Manage <font-awesome-icon icon="arrow-right" class="ms-1" />
-                                </router-link>
+                            <td class="small text-muted text-nowrap">
+                                <div>{{ formatDate(inc.created_at) }}</div>
+                                <span class="badge bg-dark border border-secondary text-light font-monospace" style="font-size: 0.65rem;">
+                                    {{ formatDuration(inc.created_at, inc.resolved_at) }}
+                                </span>
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-sm btn-outline-info" title="Quick View Incident" @click="openQuickView(inc)">
+                                        <font-awesome-icon icon="eye" />
+                                    </button>
+                                    <router-link :to="'/incidents/' + inc.id" class="btn btn-sm btn-outline-warning">
+                                        Manage <font-awesome-icon icon="arrow-right" class="ms-1" />
+                                    </router-link>
+                                </div>
                             </td>
                         </tr>
                         <tr v-if="incidents.length === 0">
-                            <td colspan="8" class="text-center py-5 text-muted">
+                            <td colspan="10" class="text-center py-5 text-muted">
                                 <font-awesome-icon icon="check-circle" class="display-3 mb-3 text-success" />
                                 <h5>No Incidents Found</h5>
                                 <p class="small text-secondary">There are no active or historical incidents matching your filter criteria.</p>
@@ -197,10 +237,97 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal: Quick View Incident Details -->
+        <div v-if="quickViewIncident" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); z-index: 1055;">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content noc-modal-content border border-secondary shadow-lg">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge" :class="getSeverityBadgeClass(quickViewIncident.severity)">{{ quickViewIncident.severity }}</span>
+                            <h5 class="modal-title fw-bold text-foreground mb-0">#INC-{{ quickViewIncident.id }}: {{ quickViewIncident.title }}</h5>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" @click="quickViewIncident = null"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="row g-3 mb-3">
+                            <div class="col-6 col-md-3">
+                                <label class="text-secondary small fw-bold text-uppercase">Status</label>
+                                <div>
+                                    <span class="badge" :class="getStatusBadgeClass(quickViewIncident.status)">{{ quickViewIncident.status }}</span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="text-secondary small fw-bold text-uppercase">Duration</label>
+                                <div class="font-monospace text-light small">
+                                    {{ formatDuration(quickViewIncident.created_at, quickViewIncident.resolved_at) }}
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="text-secondary small fw-bold text-uppercase">Reporting Node</label>
+                                <div class="small text-muted font-monospace">
+                                    {{ quickViewIncident.probe_name || (quickViewIncident.probe_id ? 'Probe #' + quickViewIncident.probe_id : 'Central NOC Engine') }}
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="text-secondary small fw-bold text-uppercase">Assigned Engineer</label>
+                                <div class="small text-warning font-monospace">
+                                    {{ quickViewIncident.assigned_username || 'Unassigned' }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="quickViewIncident.monitor_name" class="p-3 bg-dark rounded border border-secondary mb-3">
+                            <label class="text-secondary small fw-bold text-uppercase mb-1">Affected Infrastructure Target</label>
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="fw-bold text-light">{{ quickViewIncident.monitor_name }}</span>
+                                <span class="badge bg-secondary font-monospace">{{ getProtocolLabel(quickViewIncident.monitor_type) }}</span>
+                            </div>
+                            <div class="font-monospace small text-info">{{ getTargetDisplay(quickViewIncident) }}</div>
+                        </div>
+
+                        <div v-if="quickViewIncident.failure_reason" class="mb-3">
+                            <label class="text-secondary small fw-bold text-uppercase">Failure Diagnostic Reason</label>
+                            <div class="p-3 bg-danger-subtle text-danger rounded border border-danger-subtle font-monospace small">
+                                {{ quickViewIncident.failure_reason }}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="text-secondary small fw-bold text-uppercase">Description</label>
+                            <div class="p-3 bg-dark rounded border border-secondary text-secondary small">
+                                {{ quickViewIncident.description || 'No additional description provided.' }}
+                            </div>
+                        </div>
+
+                        <div v-if="quickViewIncident.timeline && quickViewIncident.timeline.length > 0">
+                            <label class="text-secondary small fw-bold text-uppercase mb-2">Audit Timeline</label>
+                            <div class="timeline-list d-flex flex-column gap-2" style="max-height: 180px; overflow-y: auto;">
+                                <div v-for="t in quickViewIncident.timeline" :key="t.id" class="p-2 bg-dark rounded border border-secondary small d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <span class="badge bg-secondary me-2 font-monospace">{{ t.event_type }}</span>
+                                        <span class="text-light">{{ t.message }}</span>
+                                    </div>
+                                    <span class="text-muted font-monospace" style="font-size: 0.7rem;">{{ formatDate(t.created_at) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-2">
+                        <router-link :to="'/incidents/' + quickViewIncident.id" class="btn btn-sm btn-outline-warning">
+                            Manage Full Incident <font-awesome-icon icon="arrow-right" class="ms-1" />
+                        </router-link>
+                        <button type="button" class="btn btn-sm btn-secondary" @click="quickViewIncident = null">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
 <script>
+import { getMonitorTargetDisplay, getMonitorProtocolLabel } from "../util-frontend";
+
 export default {
     data() {
         return {
@@ -211,6 +338,7 @@ export default {
             selectedStatus: "ALL",
             selectedSeverity: "ALL",
             showCreateModal: false,
+            quickViewIncident: null,
             newInc: {
                 title: "",
                 description: "",
@@ -340,6 +468,39 @@ export default {
                 return "--";
             }
             return new Date(dateStr).toLocaleString();
+        },
+        getTargetDisplay(inc) {
+            if (!inc) return "--";
+            const mockMon = {
+                type: inc.monitor_type,
+                hostname: inc.monitor_hostname,
+                url: inc.monitor_url,
+                port: inc.monitor_port,
+            };
+            return getMonitorTargetDisplay(mockMon) || "--";
+        },
+        getProtocolLabel(type) {
+            return getMonitorProtocolLabel(type);
+        },
+        formatDuration(startStr, endStr) {
+            if (!startStr) return "--";
+            const start = new Date(startStr).getTime();
+            const end = endStr ? new Date(endStr).getTime() : Date.now();
+            const diffMin = Math.max(0, Math.round((end - start) / (1000 * 60)));
+            if (diffMin < 60) return `${diffMin}m`;
+            const diffHours = Math.floor(diffMin / 60);
+            const remainMin = diffMin % 60;
+            if (diffHours < 24) return `${diffHours}h ${remainMin}m`;
+            const diffDays = Math.floor(diffHours / 24);
+            return `${diffDays}d ${diffHours % 24}h`;
+        },
+        openQuickView(inc) {
+            this.quickViewIncident = inc;
+            this.$root.getSocket().emit("getIncidentDetails", inc.id, (res) => {
+                if (res && res.ok && res.incident) {
+                    this.quickViewIncident = res.incident;
+                }
+            });
         },
     },
 };

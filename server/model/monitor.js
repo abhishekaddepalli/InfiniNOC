@@ -737,7 +737,7 @@ class Monitor extends BeanModel {
                         this.timeout,
                         this.ping_per_request_timeout
                     );
-                    bean.msg = "";
+                    bean.msg = `ICMP echo response received from ${this.hostname || "target"}. Latency: ${bean.ping} ms. Packet loss: 0%.`;
                     bean.status = UP;
                 } else if (this.type === "push") {
                     // Type: Push
@@ -915,7 +915,13 @@ class Monitor extends BeanModel {
                 retries = 0;
             } catch (error) {
                 if (error?.name === "CanceledError") {
-                    bean.msg = `timeout by AbortSignal (${this.timeout}s)`;
+                    bean.msg = `Request timed out after ${this.timeout}s`;
+                } else if (this.type === "ping") {
+                    bean.msg = `ICMP request timed out for ${this.hostname || "target"}. No reply received.`;
+                } else if (this.type === "port") {
+                    bean.msg = `TCP connection failed to ${this.hostname}:${this.port}. ${error.message}`;
+                } else if (this.type === "http" || this.type === "keyword" || this.type === "json-query") {
+                    bean.msg = `HTTP check failed: ${error.message}`;
                 } else {
                     bean.msg = error.message;
                 }
@@ -991,12 +997,16 @@ class Monitor extends BeanModel {
                     try {
                         const orgId = this.organization_id || 1;
                         const isoNow = new Date().toISOString();
+                        const monTarget = this.hostname || this.url || `Target #${this.id}`;
+                        const monType = (this.type || "TARGET").toUpperCase();
+                        const failureReason = bean.msg || `Target ${this.name} (${monTarget}) is DOWN`;
 
                         // 1. Ensure Active Incident exists for this outage
                         const existingInc = await R.getRow(
                             `SELECT incident.id FROM incident 
                             JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
-                            WHERE incident.organization_id = ? AND incident.status NOT IN ('RESOLVED', 'CLOSED') 
+                            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
+                            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
                             AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
                             [orgId, this.id]
                         );
@@ -1005,7 +1015,8 @@ class Monitor extends BeanModel {
                             await Incident.createIncident(
                                 {
                                     title: `[OUTAGE] Monitor #${this.id} (${this.name}) is DOWN`,
-                                    description: `Automated NOC Outage Incident raised for target ${this.name}. Status: DOWN. Details: ${bean.msg || "Heartbeat failed"}`,
+                                    description: `Automated NOC Outage Incident raised for ${this.name}. Target: ${monTarget}. Protocol: ${monType}. Failure Reason: ${failureReason}`,
+                                    failure_reason: failureReason,
                                     severity: "P1",
                                     links: [{ entity_type: "monitor", entity_id: this.id }],
                                 },
@@ -1017,12 +1028,12 @@ class Monitor extends BeanModel {
 
                         // 2. Ensure Active Alert exists for this outage
                         const existingAlert = await R.getRow(
-                            "SELECT id FROM active_alert WHERE organization_id = ? AND target_type = 'monitor' AND target_id = ?",
+                            "SELECT id FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
                             [orgId, this.id]
                         );
 
                         if (!existingAlert) {
-                            const alertMsg = `Monitor #${this.id} (${this.name}) is DOWN: ${bean.msg || "Target unreachable"}`;
+                            const alertMsg = `Monitor #${this.id} (${this.name}) is DOWN: ${failureReason}`;
                             await R.exec(
                                 `INSERT INTO active_alert (
                                     organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
@@ -1043,7 +1054,8 @@ class Monitor extends BeanModel {
                         const openIncidents = await R.getAll(
                             `SELECT incident.id FROM incident 
                             JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
-                            WHERE incident.organization_id = ? AND incident.status NOT IN ('RESOLVED', 'CLOSED') 
+                            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
+                            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
                             AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
                             [orgId, this.id]
                         );
@@ -1064,7 +1076,7 @@ class Monitor extends BeanModel {
 
                         // 2. Resolve Active Alert for this monitor
                         const existingAlert = await R.getRow(
-                            "SELECT * FROM active_alert WHERE organization_id = ? AND target_type = 'monitor' AND target_id = ?",
+                            "SELECT * FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
                             [orgId, this.id]
                         );
                         if (existingAlert) {

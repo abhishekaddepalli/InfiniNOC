@@ -2950,6 +2950,74 @@ let needSetup = false;
             }
         });
 
+        socket.on("getProbeDetails", async (probeId, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const probe = await Probe.getProbeDetails(probeId, activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, probe });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("assignMonitorProbe", async (data, callback) => {
+            try {
+                checkLogin(socket);
+                const { monitorId, probeId } = data || {};
+                if (!monitorId) {
+                    throw new Error("monitorId is required.");
+                }
+                await R.exec(
+                    "UPDATE monitor SET probe_id = ? WHERE id = ?",
+                    [probeId ? Number(probeId) : null, Number(monitorId)]
+                );
+                if (typeof callback === "function") {
+                    callback({ ok: true, monitorId, probeId });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getProbeTasks", async (data, callback) => {
+            try {
+                if (!data || !data.probeId || !data.apiKey) {
+                    throw new Error("Probe ID and API key required.");
+                }
+                const tasks = await Probe.getAssignedTasks(data.probeId, data.apiKey);
+                if (typeof callback === "function") {
+                    callback({ ok: true, tasks });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("submitProbeTaskResult", async (data, callback) => {
+            try {
+                if (!data || !data.probeId || !data.apiKey) {
+                    throw new Error("Probe ID and API key required.");
+                }
+                const result = await Probe.submitTaskResult(data.probeId, data.apiKey, data.payload);
+                if (typeof callback === "function") {
+                    callback({ ok: true, ...result });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
         // ===================================
         // InfiniNOC Real SNMP Monitoring Socket Endpoints
         // ===================================

@@ -126,10 +126,10 @@ class TCPMonitorType extends MonitorType {
         try {
             const resp = await tcping(monitor.hostname, monitor.port);
             heartbeat.ping = resp;
-            heartbeat.msg = `${resp} ms`;
+            heartbeat.msg = `TCP connection established to ${monitor.hostname}:${monitor.port} in ${resp} ms.`;
             heartbeat.status = UP;
-        } catch {
-            throw new Error("Connection failed");
+        } catch (err) {
+            throw new Error(`TCP connection to ${monitor.hostname}:${monitor.port} failed. ${err?.message || "Connection refused or timed out."}`);
         }
 
         let socket_;

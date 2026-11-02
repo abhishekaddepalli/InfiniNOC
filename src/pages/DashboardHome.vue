@@ -79,15 +79,16 @@
                 </div>
             </div>
 
-            <!-- 8 KPI Cards (2 Rows of 4 on Desktop, 2-Col Grid on Mobile) -->
+            <!-- 8 KPI Cards (2 Rows of 4 on Desktop, 2-Col Grid on Mobile) with Functional Filter & Page Navigation -->
             <div class="row g-3 mb-4">
                 <!-- 1. Total Monitors -->
                 <div class="col-6 col-md-3">
-                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
+                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between interactive-kpi" @click="filterTargets('all')" title="View all configured targets">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div class="kpi-icon-box kpi-blue d-flex align-items-center justify-content-center rounded-3">
                                 <font-awesome-icon icon="desktop" />
                             </div>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.65rem;">VIEW ALL</span>
                         </div>
                         <div>
                             <div class="kpi-label">Total Monitors</div>
@@ -99,11 +100,12 @@
 
                 <!-- 2. Online -->
                 <div class="col-6 col-md-3">
-                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
+                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between interactive-kpi" @click="filterTargets('up')" title="Filter targets to UP">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div class="kpi-icon-box kpi-green d-flex align-items-center justify-content-center rounded-3">
                                 <font-awesome-icon icon="check-circle" />
                             </div>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace" style="font-size: 0.65rem;">FILTER UP</span>
                         </div>
                         <div>
                             <div class="kpi-label">Online</div>
@@ -115,11 +117,12 @@
 
                 <!-- 3. Warning -->
                 <div class="col-6 col-md-3">
-                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
+                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between interactive-kpi" @click="filterTargets('pending')" title="Filter targets to Degraded / Warning">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div class="kpi-icon-box kpi-amber d-flex align-items-center justify-content-center rounded-3">
                                 <font-awesome-icon icon="exclamation-triangle" />
                             </div>
+                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle font-monospace" style="font-size: 0.65rem;">DEGRADED</span>
                         </div>
                         <div>
                             <div class="kpi-label">Warning</div>
@@ -131,11 +134,12 @@
 
                 <!-- 4. Down -->
                 <div class="col-6 col-md-3">
-                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
+                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between interactive-kpi" @click="filterTargets('down')" title="Filter targets to Outages / DOWN">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div class="kpi-icon-box kpi-red d-flex align-items-center justify-content-center rounded-3">
                                 <font-awesome-icon icon="times-circle" />
                             </div>
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace" style="font-size: 0.65rem;">OUTAGES</span>
                         </div>
                         <div>
                             <div class="kpi-label">Down</div>
@@ -147,68 +151,80 @@
 
                 <!-- 5. Maintenance -->
                 <div class="col-6 col-md-3">
-                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="kpi-icon-box kpi-purple d-flex align-items-center justify-content-center rounded-3">
-                                <font-awesome-icon icon="wrench" />
+                    <router-link to="/maintenance" class="text-decoration-none d-block h-100">
+                        <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between interactive-kpi" title="View scheduled maintenance windows">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="kpi-icon-box kpi-purple d-flex align-items-center justify-content-center rounded-3">
+                                    <font-awesome-icon icon="wrench" />
+                                </div>
+                                <span class="badge bg-purple-subtle text-purple border border-purple-subtle font-monospace" style="font-size: 0.65rem;">SCHEDULE</span>
+                            </div>
+                            <div>
+                                <div class="kpi-label">Maintenance</div>
+                                <div class="kpi-value text-purple" style="color: #8B5CF6 !important;">{{ maintenanceCount }}</div>
+                                <div class="kpi-subtext">Scheduled work</div>
                             </div>
                         </div>
-                        <div>
-                            <div class="kpi-label">Maintenance</div>
-                            <div class="kpi-value text-purple" style="color: #8B5CF6 !important;">{{ maintenanceCount }}</div>
-                            <div class="kpi-subtext">Scheduled work</div>
-                        </div>
-                    </div>
+                    </router-link>
                 </div>
 
                 <!-- 6. Active Alerts -->
                 <div class="col-6 col-md-3">
-                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="kpi-icon-box kpi-indigo d-flex align-items-center justify-content-center rounded-3">
-                                <font-awesome-icon icon="bell" />
+                    <router-link to="/alerts" class="text-decoration-none d-block h-100">
+                        <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between interactive-kpi" title="View active firing alerts">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="kpi-icon-box kpi-indigo d-flex align-items-center justify-content-center rounded-3">
+                                    <font-awesome-icon icon="bell" />
+                                </div>
+                                <span class="badge bg-indigo-subtle text-indigo border border-indigo-subtle font-monospace" style="font-size: 0.65rem;">ALERTS</span>
+                            </div>
+                            <div>
+                                <div class="kpi-label">Active Alerts</div>
+                                <div class="kpi-value text-indigo" style="color: #6366F1 !important;">{{ activeAlertsCount }}</div>
+                                <div class="kpi-subtext">Firing alerts</div>
                             </div>
                         </div>
-                        <div>
-                            <div class="kpi-label">Active Alerts</div>
-                            <div class="kpi-value text-indigo" style="color: #6366F1 !important;">{{ activeAlertsCount }}</div>
-                            <div class="kpi-subtext">Firing alerts</div>
-                        </div>
-                    </div>
+                    </router-link>
                 </div>
 
                 <!-- 7. Active Incidents -->
                 <div class="col-6 col-md-3">
-                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="kpi-icon-box kpi-darkblue d-flex align-items-center justify-content-center rounded-3">
-                                <font-awesome-icon icon="layer-group" />
+                    <router-link to="/incidents?status=OPEN" class="text-decoration-none d-block h-100">
+                        <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between interactive-kpi" title="View open and unresolved incidents">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="kpi-icon-box kpi-darkblue d-flex align-items-center justify-content-center rounded-3">
+                                    <font-awesome-icon icon="layer-group" />
+                                </div>
+                                <span class="badge font-monospace" :class="activeIncidentCount > 0 ? 'bg-danger text-white' : 'bg-secondary-subtle text-secondary'" style="font-size: 0.65rem;">INCIDENTS</span>
+                            </div>
+                            <div>
+                                <div class="kpi-label">Active Incidents</div>
+                                <div class="kpi-value" :class="activeIncidentCount > 0 ? 'text-danger' : 'text-foreground'">
+                                    {{ activeIncidentCount }}
+                                </div>
+                                <div class="kpi-subtext">System outages</div>
                             </div>
                         </div>
-                        <div>
-                            <div class="kpi-label">Active Incidents</div>
-                            <div class="kpi-value" :class="activeIncidentCount > 0 ? 'text-danger' : 'text-foreground'">
-                                {{ activeIncidentCount }}
-                            </div>
-                            <div class="kpi-subtext">System outages</div>
-                        </div>
-                    </div>
+                    </router-link>
                 </div>
 
                 <!-- 8. Overall Availability -->
                 <div class="col-6 col-md-3">
-                    <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="kpi-icon-box kpi-cyan d-flex align-items-center justify-content-center rounded-3">
-                                <font-awesome-icon icon="chart-line" />
+                    <router-link to="/reports" class="text-decoration-none d-block h-100">
+                        <div class="kpi-card p-3 rounded-4 h-100 d-flex flex-column justify-content-between interactive-kpi" title="View SLA and availability reports">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="kpi-icon-box kpi-cyan d-flex align-items-center justify-content-center rounded-3">
+                                    <font-awesome-icon icon="chart-line" />
+                                </div>
+                                <span class="badge bg-info-subtle text-info border border-info-subtle font-monospace" style="font-size: 0.65rem;">SLA REPORT</span>
+                            </div>
+                            <div>
+                                <div class="kpi-label">Availability</div>
+                                <div class="kpi-value text-info" style="color: #06B6D4 !important;">{{ overallAvailability }}%</div>
+                                <div class="kpi-subtext">Avg 30-day uptime</div>
                             </div>
                         </div>
-                        <div>
-                            <div class="kpi-label">Availability</div>
-                            <div class="kpi-value text-info" style="color: #06B6D4 !important;">{{ overallAvailability }}%</div>
-                            <div class="kpi-subtext">Avg 30-day uptime</div>
-                        </div>
-                    </div>
+                    </router-link>
                 </div>
             </div>
 
@@ -301,30 +317,73 @@
                                     </div>
 
                                     <div class="d-flex flex-column overflow-hidden" style="line-height: 1.25;">
-                                        <router-link :to="`/dashboard/${m.id}`" class="target-name fw-bold text-truncate text-decoration-none">
-                                            {{ m.name }}
-                                        </router-link>
-                                        <span class="target-url text-muted text-truncate font-monospace">
-                                            {{ m.url || m.hostname || m.type }}
+                                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                                            <router-link :to="`/dashboard/${m.id}`" class="target-name fw-bold text-truncate text-decoration-none">
+                                                {{ m.name }}
+                                            </router-link>
+                                            <span class="badge protocol-tag font-monospace" style="font-size: 0.65rem;">
+                                                {{ getProtocolLabel(m.type) }}
+                                            </span>
+                                            <span v-if="m.probe_id" class="badge bg-dark border border-secondary text-info font-monospace" style="font-size: 0.65rem;">
+                                                <font-awesome-icon icon="satellite-dish" class="me-1" />Probe #{{ m.probe_id }}
+                                            </span>
+                                        </div>
+                                        <span class="target-url text-muted text-truncate font-monospace small">
+                                            {{ getTargetDisplay(m) }}
                                         </span>
                                     </div>
                                 </div>
 
                                 <div class="d-flex align-items-center gap-2 ms-auto">
-                                    <!-- Latency Badge -->
-                                    <span class="latency-badge font-monospace">
-                                        {{ getMonitorPing(m.id) }}
-                                    </span>
+                                    <!-- Latency & Packet Loss -->
+                                    <div class="d-flex flex-column align-items-end" style="line-height: 1.1;">
+                                        <span class="latency-badge font-monospace">
+                                            {{ getMonitorPing(m.id) }}
+                                        </span>
+                                        <span v-if="m.type === 'ping'" class="text-success font-monospace" style="font-size: 0.65rem;">
+                                            0% loss
+                                        </span>
+                                    </div>
 
                                     <!-- Status Badge Pill -->
                                     <span class="status-pill text-uppercase font-monospace fw-bold" :class="getStatusBadgeClass(m.id)">
                                         {{ getMonitorStatusText(m.id) }}
                                     </span>
 
-                                    <!-- Context Link -->
-                                    <router-link :to="`/dashboard/${m.id}`" class="btn btn-sm btn-outline-secondary p-1 rounded-2 text-muted" title="View Target Details">
-                                        <font-awesome-icon icon="ellipsis-v" />
-                                    </router-link>
+                                    <!-- Contextual Action Dropdown -->
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary p-1 rounded-2 text-muted dropdown-toggle no-arrow" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Target Operations">
+                                            <font-awesome-icon icon="ellipsis-v" />
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                            <li>
+                                                <router-link :to="`/dashboard/${m.id}`" class="dropdown-item small">
+                                                    <font-awesome-icon icon="info-circle" class="me-2 text-info" />View Details
+                                                </router-link>
+                                            </li>
+                                            <li>
+                                                <button class="dropdown-item small" @click="openTelemetryModalForMonitor(m.id)">
+                                                    <font-awesome-icon icon="history" class="me-2 text-primary" />View Telemetry
+                                                </button>
+                                            </li>
+                                            <li>
+                                                <router-link :to="`/edit/${m.id}`" class="dropdown-item small">
+                                                    <font-awesome-icon icon="edit" class="me-2 text-warning" />Edit Monitor
+                                                </router-link>
+                                            </li>
+                                            <li><hr class="dropdown-divider my-1"></li>
+                                            <li v-if="m.active">
+                                                <button class="dropdown-item small text-warning" @click="toggleMonitorPause(m.id, true)">
+                                                    <font-awesome-icon icon="pause" class="me-2" />Pause Monitoring
+                                                </button>
+                                            </li>
+                                            <li v-else>
+                                                <button class="dropdown-item small text-success" @click="toggleMonitorPause(m.id, false)">
+                                                    <font-awesome-icon icon="play" class="me-2" />Resume Monitoring
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -413,44 +472,93 @@
 
                     <!-- 3. Recent Telemetry Events Table -->
                     <div id="events" class="noc-panel p-3 p-md-4 rounded-4">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <div class="d-flex align-items-center gap-2">
                                 <font-awesome-icon icon="history" class="text-success" style="color: #10B981 !important;" />
                                 <h2 class="h6 fw-bold mb-0 text-foreground">Recent Telemetry Events</h2>
                             </div>
-                            <span class="small text-muted font-monospace">Window: {{ selectedTimeRangeLabel }}</span>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm"
+                                        :class="telemetryFilter === 'all' ? 'btn-success text-white fw-bold' : 'btn-outline-secondary'"
+                                        @click="telemetryFilter = 'all'"
+                                    >
+                                        All
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm"
+                                        :class="telemetryFilter === 'up' ? 'btn-success text-white fw-bold' : 'btn-outline-secondary'"
+                                        @click="telemetryFilter = 'up'"
+                                    >
+                                        Up
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm"
+                                        :class="telemetryFilter === 'down' ? 'btn-danger text-white fw-bold' : 'btn-outline-secondary'"
+                                        @click="telemetryFilter = 'down'"
+                                    >
+                                        Down
+                                    </button>
+                                </div>
+                                <span class="small text-muted font-monospace d-none d-md-inline">Window: {{ selectedTimeRangeLabel }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Telemetry Search Filter -->
+                        <div class="mb-3">
+                            <input
+                                v-model="telemetrySearch"
+                                type="text"
+                                class="form-control form-control-sm noc-search-input"
+                                placeholder="Search telemetry message, error reason, or target name..."
+                            />
                         </div>
 
                         <div class="table-responsive">
-                            <table class="table table-borderless align-middle mb-0 small">
+                            <table class="table table-borderless align-middle mb-0 small table-hover">
                                 <thead>
                                     <tr class="text-muted border-bottom border-secondary font-monospace" style="font-size: 0.7rem; text-transform: uppercase;">
                                         <th scope="col" class="pb-2">TARGET NAME</th>
                                         <th scope="col" class="pb-2">STATUS</th>
                                         <th scope="col" class="pb-2">TIMESTAMP</th>
-                                        <th scope="col" class="pb-2">DETAILS / MESSAGE</th>
+                                        <th scope="col" class="pb-2">DIAGNOSTIC DETAILS / MESSAGE</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="(event, idx) in displayedEvents" :key="idx" class="border-bottom border-secondary">
-                                        <td class="fw-bold text-foreground py-2">
-                                            {{ $root.monitorList[event.monitorID] ? $root.monitorList[event.monitorID].name : 'Target #' + event.monitorID }}
+                                    <tr
+                                        v-for="(event, idx) in displayedEvents"
+                                        :key="idx"
+                                        class="border-bottom border-secondary cursor-pointer hover-row"
+                                        @click="openEventDetailsModal(event)"
+                                        title="Click to inspect full diagnostic telemetry"
+                                    >
+                                        <td class="fw-bold text-foreground py-2 text-nowrap">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span>{{ $root.monitorList[event.monitorID] ? $root.monitorList[event.monitorID].name : 'Target #' + event.monitorID }}</span>
+                                                <span v-if="$root.monitorList[event.monitorID]" class="badge protocol-tag font-monospace" style="font-size: 0.6rem;">
+                                                    {{ getProtocolLabel($root.monitorList[event.monitorID].type) }}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td class="py-2">
                                             <span class="status-pill text-uppercase font-monospace fw-bold" :class="event.status === 1 ? 'status-up' : 'status-down'">
                                                 {{ event.status === 1 ? 'Up' : 'Down' }}
                                             </span>
                                         </td>
-                                        <td class="text-muted font-monospace py-2" style="font-size: 0.75rem;">
+                                        <td class="text-muted font-monospace py-2 text-nowrap" style="font-size: 0.75rem;">
                                             {{ new Date(event.time).toISOString().replace('T', ' ').substring(0, 19) }}
                                         </td>
-                                        <td class="text-muted text-truncate font-monospace py-2" style="max-width: 240px; font-size: 0.75rem;">
-                                            {{ event.msg || '—' }}
+                                        <td class="text-muted text-truncate font-monospace py-2" style="max-width: 320px; font-size: 0.75rem;">
+                                            {{ getTelemetryMessage(event) }}
                                         </td>
                                     </tr>
                                     <tr v-if="displayedEvents.length === 0">
                                         <td colspan="4" class="text-center text-muted py-4">
-                                            No events recorded in this time window.
+                                            No events recorded matching your filter criteria.
                                         </td>
                                     </tr>
                                 </tbody>
@@ -729,12 +837,94 @@
         <div v-else>
             <router-view :key="$route.fullPath" />
         </div>
+
+        <!-- Telemetry Event Details Modal -->
+        <div v-if="showEventModal && selectedEvent" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px); z-index: 1055;">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content noc-modal-content border border-secondary shadow-lg">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="history" class="text-success" />
+                            <h5 class="modal-title fw-bold text-foreground mb-0">Telemetry Diagnostic Inspector</h5>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" @click="showEventModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="row g-3 mb-3">
+                            <div class="col-12 col-md-6">
+                                <label class="text-secondary small fw-bold text-uppercase">Target Name</label>
+                                <div class="fw-bold text-foreground fs-5">
+                                    {{ $root.monitorList[selectedEvent.monitorID] ? $root.monitorList[selectedEvent.monitorID].name : 'Target #' + selectedEvent.monitorID }}
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="text-secondary small fw-bold text-uppercase">Protocol</label>
+                                <div>
+                                    <span class="badge protocol-tag font-monospace">
+                                        {{ $root.monitorList[selectedEvent.monitorID] ? getProtocolLabel($root.monitorList[selectedEvent.monitorID].type) : 'UNKNOWN' }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="text-secondary small fw-bold text-uppercase">Health State</label>
+                                <div>
+                                    <span class="status-pill text-uppercase font-monospace fw-bold" :class="selectedEvent.status === 1 ? 'status-up' : 'status-down'">
+                                        {{ selectedEvent.status === 1 ? 'Operational (UP)' : 'Outage (DOWN)' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-12 col-md-6">
+                                <label class="text-secondary small fw-bold text-uppercase">Target Address</label>
+                                <div class="font-monospace small text-light bg-dark p-2 rounded border border-secondary">
+                                    {{ $root.monitorList[selectedEvent.monitorID] ? getTargetDisplay($root.monitorList[selectedEvent.monitorID]) : '--' }}
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="text-secondary small fw-bold text-uppercase">Latency / Ping</label>
+                                <div class="font-monospace fw-bold text-info fs-6">
+                                    {{ selectedEvent.ping !== undefined && selectedEvent.ping !== null ? selectedEvent.ping + ' ms' : '--' }}
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label class="text-secondary small fw-bold text-uppercase">Reporting Node</label>
+                                <div class="small text-muted font-monospace">
+                                    <span v-if="selectedEvent.probe_id">Distributed Probe #{{ selectedEvent.probe_id }}</span>
+                                    <span v-else>Central NOC Engine</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="text-secondary small fw-bold text-uppercase">Event Diagnostic Details</label>
+                            <div class="p-3 bg-dark rounded border border-secondary font-monospace small text-success-subtle">
+                                {{ getTelemetryMessage(selectedEvent) }}
+                            </div>
+                        </div>
+
+                        <div class="row g-2 small text-muted font-monospace border-top border-secondary pt-3">
+                            <div class="col-6">Timestamp: {{ new Date(selectedEvent.time).toISOString() }}</div>
+                            <div class="col-6 text-end">Monitor ID: #{{ selectedEvent.monitorID }}</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-2">
+                        <router-link :to="`/dashboard/${selectedEvent.monitorID}`" class="btn btn-sm btn-outline-info" @click="showEventModal = false">
+                            <font-awesome-icon icon="external-link-alt" class="me-1" /> View Full Monitor
+                        </router-link>
+                        <button type="button" class="btn btn-sm btn-secondary" @click="showEventModal = false">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </transition>
 </template>
 
 <script>
 import Status from "../components/Status.vue";
 import Datetime from "../components/Datetime.vue";
+import { getMonitorTargetDisplay, getMonitorProtocolLabel, formatTelemetryMessage } from "../util-frontend";
 
 export default {
     components: {
@@ -758,6 +948,10 @@ export default {
             activeAlertsList: [],
             monitorFilterStatus: "all",
             monitorSearchQuery: "",
+            telemetryFilter: "all",
+            telemetrySearch: "",
+            selectedEvent: null,
+            showEventModal: false,
         };
     },
 
@@ -766,9 +960,17 @@ export default {
             this.loadIncidentStats();
             this.loadActiveAlerts();
         },
+        "$route.query.status"(newStatus) {
+            if (newStatus) {
+                this.monitorFilterStatus = newStatus.toLowerCase();
+            }
+        },
     },
 
     mounted() {
+        if (this.$route.query.status) {
+            this.monitorFilterStatus = this.$route.query.status.toLowerCase();
+        }
         this.loadIncidentStats();
         this.loadActiveAlerts();
         if (this.$root.getSocket()) {
@@ -968,12 +1170,69 @@ export default {
                 }
             });
 
-            events.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-            return events.slice(0, 10);
+            let filtered = events;
+            if (this.telemetryFilter === "up") {
+                filtered = filtered.filter((e) => e.status === 1);
+            } else if (this.telemetryFilter === "down") {
+                filtered = filtered.filter((e) => e.status === 0);
+            }
+
+            if (this.telemetrySearch && this.telemetrySearch.trim()) {
+                const q = this.telemetrySearch.trim().toLowerCase();
+                filtered = filtered.filter((e) => {
+                    const mon = this.$root.monitorList[e.monitorID];
+                    const name = (mon ? mon.name : "").toLowerCase();
+                    const target = (mon ? (mon.hostname || mon.url || "") : "").toLowerCase();
+                    const msg = (e.msg || "").toLowerCase();
+                    return name.includes(q) || target.includes(q) || msg.includes(q);
+                });
+            }
+
+            filtered.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+            return filtered.slice(0, 15);
         },
     },
 
     methods: {
+        getTargetDisplay(m) {
+            return getMonitorTargetDisplay(m);
+        },
+        getProtocolLabel(type) {
+            return getMonitorProtocolLabel(type);
+        },
+        getTelemetryMessage(event) {
+            return formatTelemetryMessage(event, this.$root.monitorList[event.monitorID]);
+        },
+        filterTargets(st) {
+            this.monitorFilterStatus = st;
+            this.$router.replace({ query: { ...this.$route.query, status: st } });
+            const el = document.getElementById("live-targets-panel");
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        },
+        openEventDetailsModal(event) {
+            this.selectedEvent = event;
+            this.showEventModal = true;
+        },
+        openTelemetryModalForMonitor(monitorId) {
+            const beats = this.$root.heartbeatList[monitorId];
+            const event = Array.isArray(beats) && beats.length > 0
+                ? { ...beats[beats.length - 1], monitorID: monitorId }
+                : { monitorID: monitorId, status: 1, ping: 0, time: new Date().toISOString() };
+            this.openEventDetailsModal(event);
+        },
+        toggleMonitorPause(monitorId, pause) {
+            const socket = this.$root.getSocket();
+            if (!socket) return;
+            socket.emit(pause ? "pauseMonitor" : "resumeMonitor", monitorId, (res) => {
+                if (res && res.ok) {
+                    this.$root.toastSuccess(pause ? "Monitoring paused" : "Monitoring resumed");
+                } else {
+                    this.$root.toastError(res ? res.msg : "Operation failed");
+                }
+            });
+        },
         getMonitorStatusClass(id) {
             const beat = (this.$root.lastHeartbeatList || {})[id];
             if (!beat) return "bg-secondary";
@@ -1387,5 +1646,34 @@ body.dark .noc-alert-banner.nominal,
 .probe-box {
     background: var(--secondary);
     border: 1px solid var(--border);
+}
+
+.interactive-kpi {
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.interactive-kpi:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    border-color: var(--accent) !important;
+}
+
+.protocol-tag {
+    background-color: var(--secondary);
+    color: var(--foreground);
+    border: 1px solid var(--border);
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.hover-row:hover {
+    background-color: var(--secondary) !important;
+}
+
+.no-arrow::after {
+    display: none !important;
 }
 </style>

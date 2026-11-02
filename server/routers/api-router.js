@@ -696,4 +696,90 @@ router.get("/api/platform/backups/:fileName/download", async (request, response)
     }
 });
 
+// ==========================================
+// InfiniNOC Remote Distributed Probes REST API
+// ==========================================
+const Probe = require("../model/probe");
+
+/**
+ * Probe Registration: Exchange one-time token for persistent API key
+ */
+router.post("/api/probe/register", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const { probeId, registrationToken, version, os_info, region } = request.body || {};
+        if (!probeId || !registrationToken) {
+            return response.status(400).json({ ok: false, msg: "probeId and registrationToken are required." });
+        }
+        const ipAddress = request.headers["x-forwarded-for"] || request.socket.remoteAddress || "127.0.0.1";
+        const result = await Probe.registerProbe(probeId, registrationToken, ipAddress, version || "1.0.0", {
+            os_info,
+            region,
+        });
+        response.json({ ok: true, ...result });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+/**
+ * Probe Heartbeat: Ingest system telemetry (CPU, RAM, Disk, Latency)
+ */
+router.post("/api/probe/heartbeat", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const probeId = request.headers["x-probe-id"] || request.body?.probeId;
+        const apiKey = request.headers["x-api-key"] || request.body?.apiKey;
+        if (!probeId || !apiKey) {
+            return response.status(401).json({ ok: false, msg: "Probe ID and API key are required." });
+        }
+        const ipAddress = request.headers["x-forwarded-for"] || request.socket.remoteAddress || undefined;
+        const telemetry = {
+            ...(request.body || {}),
+            ip_address: ipAddress,
+        };
+        const result = await Probe.recordHeartbeat(probeId, apiKey, telemetry);
+        response.json({ ok: true, ...result });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+/**
+ * Probe Tasks: Get assigned monitors for this probe
+ */
+router.get("/api/probe/tasks", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const probeId = request.headers["x-probe-id"] || request.query?.probeId;
+        const apiKey = request.headers["x-api-key"] || request.query?.apiKey;
+        if (!probeId || !apiKey) {
+            return response.status(401).json({ ok: false, msg: "Probe ID and API key are required." });
+        }
+        const tasks = await Probe.getAssignedTasks(probeId, apiKey);
+        response.json({ ok: true, tasks });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+/**
+ * Probe Results: Ingest monitoring check execution result
+ */
+router.post("/api/probe/results", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const probeId = request.headers["x-probe-id"] || request.body?.probeId;
+        const apiKey = request.headers["x-api-key"] || request.body?.apiKey;
+        if (!probeId || !apiKey) {
+            return response.status(401).json({ ok: false, msg: "Probe ID and API key are required." });
+        }
+        const payload = request.body?.payload || request.body;
+        const result = await Probe.submitTaskResult(probeId, apiKey, payload);
+        response.json({ ok: true, ...result });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
 module.exports = router;

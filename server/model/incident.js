@@ -15,16 +15,18 @@ class Incident {
         }
 
         const isoNow = new Date().toISOString();
+        const failureReason = data.failure_reason || (data.description ? data.description.substring(0, 500) : null);
 
         await R.exec(
             `INSERT INTO incident (
-                organization_id, title, content, description, severity, status, site_id, assigned_user_id, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?)`,
+                organization_id, title, content, description, failure_reason, severity, status, site_id, assigned_user_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?)`,
             [
                 orgId,
                 data.title.trim(),
                 data.description || data.title.trim(),
                 data.description || null,
+                failureReason,
                 data.severity || "P3",
                 data.site_id || null,
                 data.assigned_user_id || null,
@@ -33,7 +35,10 @@ class Incident {
             ]
         );
 
-        const incidentId = await R.getCell("SELECT MAX(id) FROM incident WHERE organization_id = ?", [orgId]);
+        const incidentId = await R.getCell(
+            "SELECT MAX(id) FROM incident WHERE (organization_id = ? OR organization_id IS NULL)",
+            [orgId]
+        );
 
         // Log timeline entry
         await R.exec(
@@ -67,7 +72,10 @@ class Incident {
      */
     static async assignEngineer(incidentId, assignedUserId, currentUserId, organizationId) {
         const orgId = organizationId || 1;
-        const incident = await R.getRow("SELECT * FROM incident WHERE id = ? AND organization_id = ?", [incidentId, orgId]);
+        const incident = await R.getRow(
+            "SELECT * FROM incident WHERE id = ? AND (organization_id = ? OR organization_id IS NULL)",
+            [incidentId, orgId]
+        );
         if (!incident) {
             throw new Error("Incident not found or access denied.");
         }
@@ -97,7 +105,10 @@ class Incident {
      */
     static async addNote(incidentId, note, userId, organizationId) {
         const orgId = organizationId || 1;
-        const incident = await R.getCell("SELECT id FROM incident WHERE id = ? AND organization_id = ?", [incidentId, orgId]);
+        const incident = await R.getCell(
+            "SELECT id FROM incident WHERE id = ? AND (organization_id = ? OR organization_id IS NULL)",
+            [incidentId, orgId]
+        );
         if (!incident) {
             throw new Error("Incident not found or access denied.");
         }
@@ -126,13 +137,17 @@ class Incident {
      */
     static async updateStatus(incidentId, newStatus, userId, extraData, organizationId) {
         const orgId = organizationId || 1;
-        const incident = await R.getRow("SELECT * FROM incident WHERE id = ? AND organization_id = ?", [incidentId, orgId]);
+        const incident = await R.getRow(
+            "SELECT * FROM incident WHERE id = ? AND (organization_id = ? OR organization_id IS NULL)",
+            [incidentId, orgId]
+        );
         if (!incident) {
             throw new Error("Incident not found or access denied.");
         }
 
         const validStatuses = ["OPEN", "ACKNOWLEDGED", "IN_PROGRESS", "MONITORING", "RESOLVED", "CLOSED"];
-        if (!validStatuses.includes(newStatus)) {
+        const normalizedStatus = String(newStatus).toUpperCase();
+        if (!validStatuses.includes(normalizedStatus)) {
             throw new Error(`Invalid status: ${newStatus}`);
         }
 
@@ -141,16 +156,16 @@ class Incident {
         let resAt = incident.resolved_at;
         let clsAt = incident.closed_at;
 
-        if (newStatus === "ACKNOWLEDGED" && !ackAt) {
+        if (normalizedStatus === "ACKNOWLEDGED" && !ackAt) {
             ackAt = isoNow;
         }
-        if (newStatus === "RESOLVED" && !resAt) {
+        if (normalizedStatus === "RESOLVED" && !resAt) {
             resAt = isoNow;
             if (!ackAt) {
                 ackAt = isoNow;
             }
         }
-        if (newStatus === "CLOSED") {
+        if (normalizedStatus === "CLOSED") {
             clsAt = isoNow;
             if (!resAt) {
                 resAt = isoNow;
@@ -167,11 +182,11 @@ class Incident {
             `UPDATE incident SET
                 status = ?, acknowledged_at = ?, resolved_at = ?, closed_at = ?, root_cause = ?, resolution = ?, updated_at = ?
             WHERE id = ?`,
-            [newStatus, ackAt, resAt, clsAt, rootCause, resolution, isoNow, incidentId]
+            [normalizedStatus, ackAt, resAt, clsAt, rootCause, resolution, isoNow, incidentId]
         );
 
-        let msg = `Incident status changed to ${newStatus}`;
-        if (newStatus === "RESOLVED" && resolution) {
+        let msg = `Incident status changed to ${normalizedStatus}`;
+        if (normalizedStatus === "RESOLVED" && resolution) {
             msg += `. Resolution: ${resolution}`;
         }
 
@@ -192,7 +207,10 @@ class Incident {
      */
     static async reopenIncident(incidentId, userId, organizationId) {
         const orgId = organizationId || 1;
-        const incident = await R.getRow("SELECT * FROM incident WHERE id = ? AND organization_id = ?", [incidentId, orgId]);
+        const incident = await R.getRow(
+            "SELECT * FROM incident WHERE id = ? AND (organization_id = ? OR organization_id IS NULL)",
+            [incidentId, orgId]
+        );
         if (!incident) {
             throw new Error("Incident not found or access denied.");
         }
@@ -223,7 +241,7 @@ class Incident {
         const isoNow = new Date().toISOString();
 
         const activeList = await R.getAll(
-            "SELECT id FROM incident WHERE organization_id = ? AND status NOT IN ('RESOLVED', 'CLOSED')",
+            "SELECT id FROM incident WHERE (organization_id = ? OR organization_id IS NULL) AND UPPER(status) NOT IN ('RESOLVED', 'CLOSED')",
             [orgId]
         );
 
@@ -274,7 +292,7 @@ class Incident {
     }
 
     /**
-     * Get incident list scoped to organization
+     * Get incident list scoped to organization with enriched monitor and probe information
      * @param {number} organizationId Organization ID
      * @param {object} filters Status / severity filters
      * @returns {Promise<Array>} List of incidents
@@ -282,21 +300,45 @@ class Incident {
     static async getIncidents(organizationId, filters) {
         const orgId = organizationId || 1;
         let sql = `
-            SELECT incident.*, site.name as site_name, user.username as assigned_username
+            SELECT
+                incident.*,
+                site.name AS site_name,
+                user.username AS assigned_username,
+                mon.id AS monitor_id,
+                mon.name AS monitor_name,
+                mon.type AS monitor_type,
+                mon.url AS monitor_url,
+                mon.hostname AS monitor_hostname,
+                mon.port AS monitor_port,
+                probe.id AS probe_id,
+                probe.name AS probe_name
             FROM incident
             LEFT JOIN site ON incident.site_id = site.id
             LEFT JOIN user ON incident.assigned_user_id = user.id
-            WHERE incident.organization_id = ?
+            LEFT JOIN (
+                SELECT incident_id, MIN(entity_id) AS first_monitor_id
+                FROM incident_entity_link
+                WHERE entity_type = 'monitor'
+                GROUP BY incident_id
+            ) mlink ON incident.id = mlink.incident_id
+            LEFT JOIN monitor mon ON mlink.first_monitor_id = mon.id
+            LEFT JOIN probe ON mon.probe_id = probe.id
+            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL)
         `;
         const params = [orgId];
 
-        if (filters && filters.status) {
-            sql += " AND incident.status = ?";
-            params.push(filters.status);
+        if (filters && filters.status && String(filters.status).toUpperCase() !== "ALL") {
+            const st = String(filters.status).toUpperCase();
+            if (st === "OPEN" || st === "ACTIVE") {
+                sql += " AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')";
+            } else {
+                sql += " AND UPPER(incident.status) = ?";
+                params.push(st);
+            }
         }
-        if (filters && filters.severity) {
-            sql += " AND incident.severity = ?";
-            params.push(filters.severity);
+        if (filters && filters.severity && String(filters.severity).toUpperCase() !== "ALL") {
+            sql += " AND UPPER(incident.severity) = ?";
+            params.push(String(filters.severity).toUpperCase());
         }
 
         sql += " ORDER BY incident.id DESC";
@@ -312,11 +354,30 @@ class Incident {
     static async getIncidentDetails(incidentId, organizationId) {
         const orgId = organizationId || 1;
         const incident = await R.getRow(
-            `SELECT incident.*, site.name as site_name, user.username as assigned_username
+            `SELECT
+                incident.*,
+                site.name AS site_name,
+                user.username AS assigned_username,
+                mon.id AS monitor_id,
+                mon.name AS monitor_name,
+                mon.type AS monitor_type,
+                mon.url AS monitor_url,
+                mon.hostname AS monitor_hostname,
+                mon.port AS monitor_port,
+                probe.id AS probe_id,
+                probe.name AS probe_name
             FROM incident
             LEFT JOIN site ON incident.site_id = site.id
             LEFT JOIN user ON incident.assigned_user_id = user.id
-            WHERE incident.id = ? AND incident.organization_id = ?`,
+            LEFT JOIN (
+                SELECT incident_id, MIN(entity_id) AS first_monitor_id
+                FROM incident_entity_link
+                WHERE entity_type = 'monitor'
+                GROUP BY incident_id
+            ) mlink ON incident.id = mlink.incident_id
+            LEFT JOIN monitor mon ON mlink.first_monitor_id = mon.id
+            LEFT JOIN probe ON mon.probe_id = probe.id
+            WHERE incident.id = ? AND (incident.organization_id = ? OR incident.organization_id IS NULL)`,
             [incidentId, orgId]
         );
 
@@ -328,14 +389,14 @@ class Incident {
             `SELECT incident_timeline.*, user.username
             FROM incident_timeline
             LEFT JOIN user ON incident_timeline.user_id = user.id
-            WHERE incident_timeline.incident_id = ? AND incident_timeline.organization_id = ?
+            WHERE incident_timeline.incident_id = ?
             ORDER BY incident_timeline.id ASC`,
-            [incidentId, orgId]
+            [incidentId]
         );
 
         const links = await R.getAll(
-            "SELECT * FROM incident_entity_link WHERE incident_id = ? AND organization_id = ?",
-            [incidentId, orgId]
+            "SELECT * FROM incident_entity_link WHERE incident_id = ?",
+            [incidentId]
         );
 
         return {
@@ -354,21 +415,21 @@ class Incident {
         const orgId = organizationId || 1;
 
         const activeCount = await R.getCell(
-            "SELECT COUNT(*) FROM incident WHERE organization_id = ? AND status NOT IN ('RESOLVED', 'CLOSED')",
+            "SELECT COUNT(*) FROM incident WHERE (organization_id = ? OR organization_id IS NULL) AND UPPER(status) NOT IN ('RESOLVED', 'CLOSED')",
             [orgId]
         );
         const p1Count = await R.getCell(
-            "SELECT COUNT(*) FROM incident WHERE organization_id = ? AND severity = 'P1' AND status NOT IN ('RESOLVED', 'CLOSED')",
+            "SELECT COUNT(*) FROM incident WHERE (organization_id = ? OR organization_id IS NULL) AND severity = 'P1' AND UPPER(status) NOT IN ('RESOLVED', 'CLOSED')",
             [orgId]
         );
         const p2Count = await R.getCell(
-            "SELECT COUNT(*) FROM incident WHERE organization_id = ? AND severity = 'P2' AND status NOT IN ('RESOLVED', 'CLOSED')",
+            "SELECT COUNT(*) FROM incident WHERE (organization_id = ? OR organization_id IS NULL) AND severity = 'P2' AND UPPER(status) NOT IN ('RESOLVED', 'CLOSED')",
             [orgId]
         );
 
         // Compute MTTR (Mean Time To Resolve) across resolved/closed incidents
         const resolvedIncidents = await R.getAll(
-            "SELECT created_at, resolved_at, closed_at FROM incident WHERE organization_id = ? AND (resolved_at IS NOT NULL OR closed_at IS NOT NULL)",
+            "SELECT created_at, resolved_at, closed_at FROM incident WHERE (organization_id = ? OR organization_id IS NULL) AND (resolved_at IS NOT NULL OR closed_at IS NOT NULL)",
             [orgId]
         );
 
@@ -386,10 +447,21 @@ class Incident {
         const mttrMinutes = count > 0 ? Math.round(totalResolveTimeMinutes / count) : 0;
 
         const recentIncidents = await R.getAll(
-            `SELECT incident.*, site.name as site_name
+            `SELECT
+                incident.*,
+                site.name AS site_name,
+                mon.name AS monitor_name,
+                mon.type AS monitor_type
             FROM incident
             LEFT JOIN site ON incident.site_id = site.id
-            WHERE incident.organization_id = ?
+            LEFT JOIN (
+                SELECT incident_id, MIN(entity_id) AS first_monitor_id
+                FROM incident_entity_link
+                WHERE entity_type = 'monitor'
+                GROUP BY incident_id
+            ) mlink ON incident.id = mlink.incident_id
+            LEFT JOIN monitor mon ON mlink.first_monitor_id = mon.id
+            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL)
             ORDER BY incident.id DESC LIMIT 10`,
             [orgId]
         );

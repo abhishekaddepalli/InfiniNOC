@@ -70,7 +70,7 @@
 
                     <div class="btn-group btn-group-sm">
                         <button
-                            v-for="type in ['ALL', 'ROUTER', 'SWITCH', 'SERVER', 'MONITOR']"
+                            v-for="type in ['ALL', 'ROUTER', 'SWITCH', 'SERVER', 'PROBE', 'MONITOR']"
                             :key="type"
                             type="button"
                             class="btn btn-sm"
@@ -286,6 +286,13 @@
                             >
                                 <font-awesome-icon icon="chart-line" class="me-1" /> View Live Telemetry
                             </button>
+                            <button
+                                v-if="selectedNode.probe_id"
+                                class="btn btn-sm btn-info fw-bold text-white"
+                                @click="$router.push('/probes')"
+                            >
+                                <font-awesome-icon icon="network-wired" class="me-1" /> View Probe Details
+                            </button>
                             <button class="btn btn-sm btn-outline-warning" @click="showAddModal = true; newDep.parentDeviceId = selectedNode.id">
                                 <font-awesome-icon icon="plus" class="me-1" /> Connect Downstream Child
                             </button>
@@ -431,6 +438,7 @@ export default {
         return {
             viewMode: "canvas", // 'canvas' | 'table'
             devices: [],
+            probes: [],
             dependencyList: [],
             nodes: [],
             selectedNode: null,
@@ -553,8 +561,13 @@ export default {
                 if (res && res.ok) {
                     this.devices = res.devices || [];
                 }
-                this.buildNetworkNodes();
-                this.loadAllDependencies();
+                this.$root.getSocket().emit("getProbeList", (pRes) => {
+                    if (pRes && pRes.ok) {
+                        this.probes = pRes.probes || [];
+                    }
+                    this.buildNetworkNodes();
+                    this.loadAllDependencies();
+                });
             });
         },
         loadAllDependencies() {
@@ -616,6 +629,26 @@ export default {
                 });
             }
 
+            // Append distributed probes to topology
+            if (this.probes && this.probes.length > 0) {
+                for (const p of this.probes) {
+                    let pStatus = "UP";
+                    if (p.status === "offline" || p.status === "revoked") pStatus = "DOWN";
+                    else if (p.status === "degraded") pStatus = "PENDING";
+                    initialList.push({
+                        id: `probe-${p.id}`,
+                        name: p.name || `Probe #${p.id}`,
+                        ip: p.ip_address || p.location || "Distributed Node",
+                        type: "PROBE",
+                        status: pStatus,
+                        ping: p.latency ? `${Math.round(p.latency)}ms` : "1.8ms",
+                        probe_id: p.id,
+                        x: 100,
+                        y: 100,
+                    });
+                }
+            }
+
             // Apply saved or auto positions
             this.nodes = initialList.map((node, index) => {
                 if (savedPositions[node.id]) {
@@ -664,6 +697,7 @@ export default {
                 case "SERVER": return "🖳";
                 case "OLT": return "📡";
                 case "FIREWALL": return "🛡";
+                case "PROBE": return "🛰";
                 default: return "●";
             }
         },
@@ -693,7 +727,7 @@ export default {
             }
         },
         autoLayoutNodes() {
-            const tiers = { ROUTER: [], SWITCH: [], OLT: [], SERVER: [], MONITOR: [] };
+            const tiers = { ROUTER: [], SWITCH: [], OLT: [], PROBE: [], SERVER: [], MONITOR: [] };
             for (const n of this.nodes) {
                 if (tiers[n.type]) {
                     tiers[n.type].push(n);
@@ -703,7 +737,7 @@ export default {
             }
 
             let currentY = 100;
-            for (const tierKey of ["ROUTER", "SWITCH", "OLT", "SERVER", "MONITOR"]) {
+            for (const tierKey of ["ROUTER", "SWITCH", "OLT", "PROBE", "SERVER", "MONITOR"]) {
                 const group = tiers[tierKey];
                 if (group.length > 0) {
                     const startX = Math.max(100, 600 - (group.length * 240) / 2);
