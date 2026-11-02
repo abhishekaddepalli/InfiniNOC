@@ -787,6 +787,7 @@ router.post("/api/probe/results", async (request, response) => {
 // ==========================================
 const FiberNoc = require("../model/fiber-noc");
 const FiberFaultEngine = require("../model/fiber-fault-engine");
+const FiberInfrastructure = require("../model/fiber-infrastructure");
 
 router.get("/api/fiber-noc/overview", async (request, response) => {
     allowAllOrigin(response);
@@ -834,6 +835,50 @@ router.get("/api/fiber-noc/onus", async (request, response) => {
         };
         const onus = await FiberNoc.getOnuList(orgId, filters);
         response.json({ ok: true, onus });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+// FTTH Physical Infrastructure Endpoints
+router.get("/api/ftth/splitters", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const orgId = Number(request.query.organizationId) || 1;
+        const splitters = await FiberInfrastructure.getSplitters(orgId, request.query || {});
+        response.json({ ok: true, splitters });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+router.get("/api/ftth/cables", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const orgId = Number(request.query.organizationId) || 1;
+        const cables = await FiberInfrastructure.getCables(orgId, request.query || {});
+        response.json({ ok: true, cables });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+router.get("/api/ftth/closures", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const orgId = Number(request.query.organizationId) || 1;
+        const closures = await FiberInfrastructure.getClosures(orgId);
+        response.json({ ok: true, closures });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+router.get("/api/ftth/loss-budget", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const calculation = FiberInfrastructure.calculateOpticalLossBudget(request.query || {});
+        response.json({ ok: true, calculation });
     } catch (error) {
         response.status(400).json({ ok: false, msg: error.message });
     }

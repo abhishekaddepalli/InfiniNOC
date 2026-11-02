@@ -1,5 +1,6 @@
 const { R } = require("redbean-node");
 const Incident = require("./incident");
+const { toSqlDatetime } = require("../util-server");
 
 class DependencyCorrelation {
     /**
@@ -13,19 +14,33 @@ class DependencyCorrelation {
      */
     static async addDependency(parentDeviceId, childDeviceId, dependencyType, organizationId, extraData = {}) {
         const orgId = organizationId || 1;
-        const pId = Number(parentDeviceId);
-        const cId = Number(childDeviceId);
+        const pId = parseInt(parentDeviceId, 10);
+        const cId = parseInt(childDeviceId, 10);
 
+        if (isNaN(pId) || pId <= 0) {
+            throw new Error("Please select a valid upstream device.");
+        }
+        if (isNaN(cId) || cId <= 0) {
+            throw new Error("Please select a valid downstream device.");
+        }
         if (pId === cId) {
             throw new Error("A device cannot depend on itself.");
         }
 
-        // Verify devices exist in org
+        // Verify devices exist and belong to the authenticated organization
         const parentExists = await R.getCell("SELECT id FROM device WHERE id = ? AND organization_id = ?", [pId, orgId]);
         const childExists = await R.getCell("SELECT id FROM device WHERE id = ? AND organization_id = ?", [cId, orgId]);
-
         if (!parentExists || !childExists) {
             throw new Error("Parent or child device not found in organization.");
+        }
+
+        // Check if devices are already connected
+        const existing = await R.getCell(
+            "SELECT id FROM device_dependency WHERE organization_id = ? AND parent_device_id = ? AND child_device_id = ?",
+            [orgId, pId, cId]
+        );
+        if (existing && !extraData.allowUpdate) {
+            throw new Error("These devices are already connected.");
         }
 
         const type = dependencyType || "UPSTREAM";
@@ -38,7 +53,7 @@ class DependencyCorrelation {
         const latency = Number(extraData.latency_ms || extraData.latencyMs || 0);
         const loss = Number(extraData.packet_loss_pct || extraData.packetLossPct || 0);
         const relSource = extraData.relationship_source || extraData.relationshipSource || "MANUAL";
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `INSERT INTO device_dependency (
@@ -90,7 +105,7 @@ class DependencyCorrelation {
             throw new Error("Dependency link not found or access denied.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         const linkType = updateData.link_type || existing.link_type || "FIBER";
         const linkSpeed = updateData.link_speed || existing.link_speed || "1 Gbps";
         const srcIf = updateData.source_interface !== undefined ? updateData.source_interface : existing.source_interface;
@@ -316,7 +331,7 @@ class DependencyCorrelation {
                 estImpact = "High";
             }
 
-            const isoNow = new Date().toISOString();
+            const isoNow = toSqlDatetime();
             await R.exec(
                 `UPDATE incident SET
                     affected_devices_count = ?, affected_sites_count = ?, affected_monitors_count = ?, estimated_impact = ?, updated_at = ?
@@ -363,7 +378,7 @@ class DependencyCorrelation {
         );
 
         // Update root_device_id and impact counts
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         await R.exec(
             `UPDATE incident SET
                 root_device_id = ?, affected_devices_count = ?, affected_sites_count = ?, affected_monitors_count = ?, estimated_impact = ?, updated_at = ?

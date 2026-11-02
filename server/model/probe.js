@@ -1,6 +1,7 @@
 const { R } = require("redbean-node");
 const crypto = require("crypto");
 const dayjs = require("dayjs");
+const { toSqlDatetime } = require("../util-server");
 
 class Probe {
     /**
@@ -28,9 +29,9 @@ class Probe {
         const rawRegistrationToken = "prb_reg_" + crypto.randomBytes(24).toString("hex");
         const tokenHash = Probe.hashToken(rawRegistrationToken);
 
-        // One-time token expires in 24 hours
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-        const isoNow = new Date().toISOString();
+        // One-time token expires in 24 hours (Formatted in standard SQL UTC DATETIME)
+        const expiresAt = toSqlDatetime(Date.now() + 24 * 60 * 60 * 1000);
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `INSERT INTO probe (
@@ -100,14 +101,18 @@ class Probe {
             throw new Error("Invalid registration token.");
         }
 
-        if (probe.token_expires_at && new Date(probe.token_expires_at) < new Date()) {
-            throw new Error("Registration token has expired.");
+        if (probe.token_expires_at) {
+            const expStr = String(probe.token_expires_at);
+            const expTime = new Date(expStr.includes("T") ? expStr : expStr.replace(" ", "T") + "Z").getTime();
+            if (!isNaN(expTime) && expTime < Date.now()) {
+                throw new Error("Registration token has expired.");
+            }
         }
 
         // Generate persistent API key and mark token as used
         const rawApiKey = "prb_key_" + crypto.randomBytes(32).toString("hex");
         const apiKeyHash = Probe.hashToken(rawApiKey);
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `UPDATE probe SET
@@ -191,7 +196,7 @@ class Probe {
         const tasksFailed = telemetry.tasks_failed !== undefined ? Number(telemetry.tasks_failed) : null;
         const queueBacklog = telemetry.queue_backlog !== undefined ? Number(telemetry.queue_backlog) : null;
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `UPDATE probe SET
@@ -293,7 +298,7 @@ class Probe {
             throw new Error(`Monitor #${payload.monitor_id} not found.`);
         }
 
-        const isoNow = payload.timestamp || new Date().toISOString();
+        const isoNow = toSqlDatetime(payload.timestamp || new Date());
         const status = Number(payload.status) === 1 ? 1 : 0;
         const pingMs = payload.ping !== undefined ? Math.round(Number(payload.ping)) : null;
         const msg = payload.msg || (status === 1 ? `UP via Probe #${probeId}` : `DOWN via Probe #${probeId}`);
@@ -334,7 +339,7 @@ class Probe {
             const now = Date.now();
             const probes = await R.getAll("SELECT * FROM probe WHERE status IN ('online', 'pending')");
             let newlyOffline = 0;
-            const isoNow = new Date().toISOString();
+            const isoNow = toSqlDatetime();
 
             for (const p of probes) {
                 if (p.last_heartbeat) {
@@ -393,7 +398,7 @@ class Probe {
             throw new Error("Probe not found or access denied.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         await R.exec(
             "UPDATE probe SET status = 'revoked', api_key_hash = NULL, updated_at = ? WHERE id = ?",
             [isoNow, probeId]
@@ -420,8 +425,8 @@ class Probe {
 
         const rawRegistrationToken = "prb_reg_" + crypto.randomBytes(24).toString("hex");
         const tokenHash = Probe.hashToken(rawRegistrationToken);
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-        const isoNow = new Date().toISOString();
+        const expiresAt = toSqlDatetime(Date.now() + 24 * 60 * 60 * 1000);
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `UPDATE probe SET

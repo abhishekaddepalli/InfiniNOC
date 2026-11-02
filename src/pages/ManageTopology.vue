@@ -21,15 +21,7 @@
                         :class="viewMode === 'canvas' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
                         @click="viewMode = 'canvas'"
                     >
-                        <font-awesome-icon icon="sitemap" class="me-1" /> Network Canvas
-                    </button>
-                    <button
-                        type="button"
-                        class="btn"
-                        :class="viewMode === 'table' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
-                        @click="viewMode = 'table'"
-                    >
-                        <font-awesome-icon icon="list" class="me-1" /> Links ({{ dependencyList.length }})
+                        <font-awesome-icon icon="sitemap" class="me-1" /> Canvas
                     </button>
                     <button
                         type="button"
@@ -38,6 +30,38 @@
                         @click="viewMode = 'splitters'"
                     >
                         <font-awesome-icon icon="code-branch" class="me-1" /> Splitters ({{ splittersList.length }})
+                    </button>
+                    <button
+                        type="button"
+                        class="btn"
+                        :class="viewMode === 'cables' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
+                        @click="viewMode = 'cables'"
+                    >
+                        <font-awesome-icon icon="project-diagram" class="me-1" /> Cables ({{ cablesList.length }})
+                    </button>
+                    <button
+                        type="button"
+                        class="btn"
+                        :class="viewMode === 'closures' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
+                        @click="viewMode = 'closures'"
+                    >
+                        <font-awesome-icon icon="box" class="me-1" /> Closures ({{ closuresList.length }})
+                    </button>
+                    <button
+                        type="button"
+                        class="btn"
+                        :class="viewMode === 'calculator' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
+                        @click="viewMode = 'calculator'"
+                    >
+                        <font-awesome-icon icon="calculator" class="me-1" /> Loss Budget
+                    </button>
+                    <button
+                        type="button"
+                        class="btn"
+                        :class="viewMode === 'table' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
+                        @click="viewMode = 'table'"
+                    >
+                        <font-awesome-icon icon="list" class="me-1" /> Links ({{ dependencyList.length }})
                     </button>
                     <button
                         type="button"
@@ -77,6 +101,27 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end bg-card border-secondary shadow">
                         <li>
+                            <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="showSplitterModal = true">
+                                <font-awesome-icon icon="code-branch" class="me-2 text-warning" /> Add Fiber Splitter
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="showCableModal = true">
+                                <font-awesome-icon icon="project-diagram" class="me-2 text-info" /> Add Fiber Cable
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="showClosureModal = true">
+                                <font-awesome-icon icon="box" class="me-2 text-primary" /> Add Splice Closure
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="viewMode = 'calculator'">
+                                <font-awesome-icon icon="calculator" class="me-2 text-success" /> Optical Loss Calculator
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider border-secondary" /></li>
+                        <li>
                             <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="exportTopologyFile">
                                 <font-awesome-icon icon="download" class="me-2 text-info" /> Export Topology JSON
                             </a>
@@ -84,11 +129,6 @@
                         <li>
                             <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="showImportModal = true">
                                 <font-awesome-icon icon="upload" class="me-2 text-success" /> Import Topology JSON
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="showSplitterModal = true">
-                                <font-awesome-icon icon="code-branch" class="me-2 text-warning" /> Add Fiber Splitter
                             </a>
                         </li>
                     </ul>
@@ -579,6 +619,7 @@
                             <th>Parent Splitter</th>
                             <th>Feeding OLT & PON</th>
                             <th>Location / Enclosure</th>
+                            <th class="text-center">Port Occupancy</th>
                             <th>Attenuation</th>
                             <th class="text-end">Actions</th>
                         </tr>
@@ -590,24 +631,315 @@
                                 {{ s.name }}
                             </td>
                             <td><span class="badge bg-secondary font-monospace">{{ s.splitter_type }}</span></td>
-                            <td>Tier {{ s.tier_level }}</td>
+                            <td><span class="badge bg-dark border border-secondary">Tier {{ s.tier_level }}</span></td>
                             <td class="text-info font-monospace">{{ s.parent_splitter_name || 'Root (Direct OLT)' }}</td>
                             <td class="font-monospace text-muted">{{ s.olt_name ? (s.olt_name + ' / ' + (s.pon_port || 'PON')) : 'Unassigned' }}</td>
                             <td>{{ s.location || 'Pole/Chamber' }}</td>
-                            <td class="font-monospace">{{ s.attenuation_db ? (s.attenuation_db + ' dB') : '3.5 dB' }}</td>
+                            <td class="text-center font-monospace">
+                                <span class="badge px-2 py-1" :class="(s.available_ports === 0) ? 'bg-danger' : 'bg-success'">
+                                    {{ s.used_port_count || 0 }}/{{ s.output_port_count || 8 }} Ports
+                                </span>
+                            </td>
+                            <td>
+                                <span class="text-warning font-monospace">{{ s.nominal_loss_db || s.attenuation_db || '10.5' }} dB</span>
+                                <span v-if="s.measured_loss_db" class="badge bg-secondary ms-1 small">Actual: {{ s.measured_loss_db }} dB</span>
+                            </td>
                             <td class="text-end">
+                                <button class="btn btn-sm btn-outline-info me-1" title="Visual Port Diagram" @click="openSplitterDiagram(s)">
+                                    <font-awesome-icon icon="eye" class="me-1" /> Diagram
+                                </button>
                                 <button class="btn btn-sm btn-outline-danger" @click="deleteSplitter(s.id)">
                                     <font-awesome-icon icon="trash" />
                                 </button>
                             </td>
                         </tr>
                         <tr v-if="splittersList.length === 0">
-                            <td colspan="8" class="text-center py-4 text-muted">
+                            <td colspan="9" class="text-center py-4 text-muted">
                                 No fiber splitters configured. Click "Add Splitter" to build your FTTH distribution tree.
                             </td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- FIBER CABLES & STRANDS VIEW MODE -->
+        <div v-show="viewMode === 'cables'" class="noc-section-box p-3 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-info mb-0 d-flex align-items-center gap-2">
+                    <font-awesome-icon icon="project-diagram" />
+                    <span>Physical Fiber Cable & TIA-598 Strand Management</span>
+                </h5>
+                <button class="btn btn-sm btn-info fw-bold" @click="showCableModal = true">
+                    <font-awesome-icon icon="plus" class="me-1" /> Add Fiber Cable
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr class="text-secondary text-uppercase small" style="font-size: 0.75rem;">
+                            <th>Cable Name & ID</th>
+                            <th>Type</th>
+                            <th>Length</th>
+                            <th>Strands (Used/Total)</th>
+                            <th>Attenuation</th>
+                            <th>Source Endpoint</th>
+                            <th>Target Endpoint</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="c in cablesList" :key="c.id">
+                            <td class="fw-bold text-foreground">
+                                <font-awesome-icon icon="project-diagram" class="me-2 text-info" />
+                                {{ c.name }}
+                                <div class="small text-muted font-monospace">{{ c.cable_identifier || ('CBL-' + c.id) }}</div>
+                            </td>
+                            <td><span class="badge bg-dark border border-secondary">{{ c.cable_type }}</span></td>
+                            <td class="font-monospace">{{ c.cable_length_meters ? (c.cable_length_meters >= 1000 ? (c.cable_length_meters / 1000).toFixed(2) + ' km' : c.cable_length_meters + ' m') : '1.0 km' }}</td>
+                            <td>
+                                <span class="badge px-2 py-1" :class="(c.available_strands === 0) ? 'bg-danger' : 'bg-success'">
+                                    {{ c.used_strands || 0 }} / {{ c.strand_count || 12 }} Strands
+                                </span>
+                            </td>
+                            <td class="font-monospace text-muted">{{ c.attenuation_db_per_km || 0.35 }} dB/km</td>
+                            <td class="font-monospace small text-primary">{{ c.source_label || c.source_type || 'Core OLT' }}</td>
+                            <td class="font-monospace small text-warning">{{ c.target_label || c.target_type || 'FDC Cabinet' }}</td>
+                            <td><span class="badge" :class="c.status === 'ACTIVE' ? 'bg-success' : 'bg-warning'">{{ c.status }}</span></td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-info me-1" title="Inspect TIA-598 Color Strands" @click="openStrandsModal(c)">
+                                    <font-awesome-icon icon="palette" class="me-1" /> Strands
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" @click="deleteCable(c.id)">
+                                    <font-awesome-icon icon="trash" />
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="cablesList.length === 0">
+                            <td colspan="9" class="text-center py-4 text-muted">
+                                No physical fiber cables configured. Click "Add Fiber Cable" to register feeder, distribution, and drop cables.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SPLICE CLOSURES & CABINETS VIEW MODE -->
+        <div v-show="viewMode === 'closures'" class="noc-section-box p-3 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-primary mb-0 d-flex align-items-center gap-2">
+                    <font-awesome-icon icon="box" />
+                    <span>Splice Closures, FDC Hubs & Fiber Access Terminals</span>
+                </h5>
+                <button class="btn btn-sm btn-primary fw-bold" @click="showClosureModal = true">
+                    <font-awesome-icon icon="plus" class="me-1" /> Add Splice Closure
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr class="text-secondary text-uppercase small" style="font-size: 0.75rem;">
+                            <th>Closure Name</th>
+                            <th>Type</th>
+                            <th>Location / Coordinates</th>
+                            <th>Trays</th>
+                            <th>Splice Capacity</th>
+                            <th>Utilization</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="cl in closuresList" :key="cl.id">
+                            <td class="fw-bold text-foreground">
+                                <font-awesome-icon icon="box" class="me-2 text-primary" />
+                                {{ cl.name }}
+                                <div class="small text-muted font-monospace">{{ cl.closure_identifier || ('CLS-' + cl.id) }}</div>
+                            </td>
+                            <td><span class="badge bg-secondary">{{ cl.closure_type }}</span></td>
+                            <td>{{ cl.location || 'Pole/Pedestal' }}</td>
+                            <td>{{ cl.tray_capacity || 4 }} Trays</td>
+                            <td class="font-monospace">{{ cl.used_splice_capacity || 0 }} / {{ cl.total_splice_capacity || 48 }} Splices</td>
+                            <td style="width: 160px;">
+                                <div class="progress" style="height: 8px;">
+                                    <div
+                                        class="progress-bar bg-primary"
+                                        role="progressbar"
+                                        :style="{ width: ((cl.used_splice_capacity || 0) / (cl.total_splice_capacity || 48) * 100) + '%' }"
+                                    ></div>
+                                </div>
+                            </td>
+                            <td><span class="badge" :class="cl.status === 'ACTIVE' ? 'bg-success' : 'bg-warning'">{{ cl.status }}</span></td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-1" title="Perform Fusion Splice" @click="openSpliceModal(cl)">
+                                    <font-awesome-icon icon="bolt" class="me-1" /> Splice
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="closuresList.length === 0">
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                No splice closures or FDC cabinets registered. Click "Add Splice Closure" to configure outdoor junction enclosures.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- OPTICAL LOSS BUDGET & POWER CALCULATOR VIEW MODE -->
+        <div v-show="viewMode === 'calculator'" class="noc-section-box p-3 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-success mb-0 d-flex align-items-center gap-2">
+                    <font-awesome-icon icon="calculator" />
+                    <span>Optical Power & Link Loss Budget Calculator</span>
+                </h5>
+                <span class="badge bg-success font-monospace px-3 py-2">ITU-T G.984 GPON Standard</span>
+            </div>
+
+            <div class="row g-3">
+                <!-- Calculator Inputs -->
+                <div class="col-lg-5">
+                    <div class="p-3 border border-secondary rounded-3 bg-surface">
+                        <h6 class="fw-bold text-uppercase small text-secondary mb-3">Physical Path Parameters</h6>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">Wavelength</label>
+                                <select v-model="opticalCalc.wavelength" class="form-select form-select-sm noc-input" @change="runOpticalCalculation">
+                                    <option value="1310">1310 nm Upstream (0.35 dB/km)</option>
+                                    <option value="1490">1490 nm Downstream (0.22 dB/km)</option>
+                                    <option value="1550">1550 nm Video / Overlay (0.20 dB/km)</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">Fiber Run Length (km)</label>
+                                <input v-model.number="opticalCalc.cableLengthKm" type="number" step="0.1" class="form-control form-control-sm noc-input" @input="runOpticalCalculation" />
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">Primary Split Ratio</label>
+                                <select v-model="opticalCalc.primarySplitRatio" class="form-select form-select-sm noc-input" @change="runOpticalCalculation">
+                                    <option value="1:2">1:2 (3.5 dB)</option>
+                                    <option value="1:4">1:4 (7.2 dB)</option>
+                                    <option value="1:8">1:8 (10.5 dB)</option>
+                                    <option value="1:16">1:16 (13.8 dB)</option>
+                                    <option value="1:32">1:32 (17.1 dB)</option>
+                                    <option value="1:64">1:64 (20.5 dB)</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">Cascaded Secondary Splitter</label>
+                                <select v-model="opticalCalc.secondarySplitRatio" class="form-select form-select-sm noc-input" @change="runOpticalCalculation">
+                                    <option :value="null">None (Single Tier)</option>
+                                    <option value="1:2">1:2 (3.5 dB)</option>
+                                    <option value="1:4">1:4 (7.2 dB)</option>
+                                    <option value="1:8">1:8 (10.5 dB)</option>
+                                    <option value="1:16">1:16 (13.8 dB)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">Mated Connectors (Pairs)</label>
+                                <input v-model.number="opticalCalc.connectorCount" type="number" class="form-control form-control-sm noc-input" @input="runOpticalCalculation" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">Fusion Splices</label>
+                                <input v-model.number="opticalCalc.spliceCount" type="number" class="form-control form-control-sm noc-input" @input="runOpticalCalculation" />
+                            </div>
+                        </div>
+
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">OLT Launch Power (dBm)</label>
+                                <input v-model.number="opticalCalc.oltTxPowerDbm" type="number" step="0.1" class="form-control form-control-sm noc-input" @input="runOpticalCalculation" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">ONU Sensitivity (dBm)</label>
+                                <input v-model.number="opticalCalc.onuSensitivityDbm" type="number" step="0.1" class="form-control form-control-sm noc-input" @input="runOpticalCalculation" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Calculation Results Output -->
+                <div class="col-lg-7">
+                    <div v-if="opticalCalc.result" class="p-3 border border-secondary rounded-3 bg-surface h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold text-uppercase small text-secondary mb-0">Calculated Link Budget Results</h6>
+                                <span
+                                    class="badge px-3 py-2 fw-bold"
+                                    :class="opticalCalc.result.budgetStatus === 'PASS_OPTIMAL' ? 'bg-success' : (opticalCalc.result.budgetStatus === 'PASS_MARGINAL' ? 'bg-warning text-dark' : 'bg-danger')"
+                                >
+                                    {{ opticalCalc.result.budgetStatus.replace(/_/g, ' ') }}
+                                </span>
+                            </div>
+
+                            <div class="row g-2 text-center mb-3">
+                                <div class="col-4">
+                                    <div class="p-2 border border-secondary rounded bg-card">
+                                        <div class="text-secondary small">Total Path Loss</div>
+                                        <div class="fs-4 fw-bold text-warning font-monospace">{{ opticalCalc.result.totalEstimatedLossDb }} dB</div>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-2 border border-secondary rounded bg-card">
+                                        <div class="text-secondary small">Expected Rx Power</div>
+                                        <div class="fs-4 fw-bold font-monospace" :class="opticalCalc.result.expectedRxPowerDbm < -27 ? 'text-danger' : 'text-success'">
+                                            {{ opticalCalc.result.expectedRxPowerDbm }} dBm
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-2 border border-secondary rounded bg-card">
+                                        <div class="text-secondary small">Power Margin</div>
+                                        <div class="fs-4 fw-bold font-monospace text-info">{{ opticalCalc.result.opticalPowerMarginDb }} dB</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered text-foreground small font-monospace mb-2">
+                                    <tbody>
+                                        <tr>
+                                            <td class="text-secondary">Fiber Cable Attenuation ({{ opticalCalc.result.cableLengthKm }} km @ {{ opticalCalc.result.wavelengthNm }}nm)</td>
+                                            <td class="text-end fw-bold">{{ opticalCalc.result.fiberLossDb }} dB</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-secondary">Splitters Insertion Loss ({{ opticalCalc.result.primarySplitRatio }} {{ opticalCalc.result.secondarySplitRatio ? '+ ' + opticalCalc.result.secondarySplitRatio : '' }})</td>
+                                            <td class="text-end fw-bold">{{ opticalCalc.result.totalSplitterLossDb }} dB</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-secondary">Connector Losses ({{ opticalCalc.result.connectorCount }} mated pairs)</td>
+                                            <td class="text-end fw-bold">{{ opticalCalc.result.totalConnectorLossDb }} dB</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-secondary">Fusion Splice Losses ({{ opticalCalc.result.spliceCount }} splices)</td>
+                                            <td class="text-end fw-bold">{{ opticalCalc.result.totalSpliceLossDb }} dB</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-secondary">Safety Engineering Buffer</td>
+                                            <td class="text-end fw-bold">{{ opticalCalc.result.safetyMarginDb }} dB</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="p-2 px-3 rounded bg-card border border-secondary text-secondary small">
+                            <font-awesome-icon icon="info-circle" class="me-1 text-info" />
+                            <strong>Engineering Guidance:</strong> {{ opticalCalc.result.recommendation }}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -675,21 +1007,25 @@
                     </div>
                     <div class="modal-body px-4 py-3">
                         <div class="mb-3">
-                            <label class="form-label text-foreground small fw-bold text-uppercase">Upstream Parent Device</label>
-                            <select v-model="newDep.parentDeviceId" class="form-select noc-input">
-                                <option v-for="d in allSelectableEntities" :key="'p-' + d.id" :value="d.id">
-                                    {{ d.name }} ({{ d.ip || d.type }})
+                            <label class="form-label text-foreground small fw-bold text-uppercase">
+                                Upstream Parent Device <span class="text-danger">*</span>
+                            </label>
+                            <select v-model="newDep.parentDeviceId" class="form-select noc-input" required>
+                                <option :value="null" disabled>-- Select Upstream Device --</option>
+                                <option v-for="d in selectableDevices" :key="'p-' + d.id" :value="d.id">
+                                    {{ d.name }} ({{ d.ip }} - {{ d.type }})
                                 </option>
                             </select>
+                            <div class="form-text text-muted small">Select feeding core router, aggregation switch, or OLT.</div>
                         </div>
                         <div class="row g-2 mb-3">
                             <div class="col-6">
                                 <label class="form-label text-foreground small fw-bold text-uppercase">Link Type</label>
                                 <select v-model="newDep.linkType" class="form-select noc-input">
-                                    <option value="FIBER">Fiber Optic</option>
-                                    <option value="ETHERNET">Copper Ethernet</option>
-                                    <option value="WIRELESS">Wireless PtP</option>
-                                    <option value="LOGICAL">Logical / Tunnel</option>
+                                    <option value="FIBER">Fiber Optic (Single-Mode)</option>
+                                    <option value="ETHERNET">Copper Ethernet (Cat6A)</option>
+                                    <option value="WIRELESS">Wireless PtP Link</option>
+                                    <option value="LOGICAL">Logical / Tunnel / MPLS</option>
                                 </select>
                             </div>
                             <div class="col-6">
@@ -698,6 +1034,7 @@
                                     <option value="1 Gbps">1 Gbps</option>
                                     <option value="10 Gbps">10 Gbps SFP+</option>
                                     <option value="25 Gbps">25 Gbps SFP28</option>
+                                    <option value="40 Gbps">40 Gbps QSFP+</option>
                                     <option value="100 Gbps">100 Gbps QSFP28</option>
                                     <option value="GPON 2.5G/1.25G">GPON 2.5G/1.25G</option>
                                 </select>
@@ -706,20 +1043,24 @@
                         <div class="row g-2 mb-3">
                             <div class="col-6">
                                 <label class="form-label text-foreground small fw-bold text-uppercase">Source Interface</label>
-                                <input v-model="newDep.sourceInterface" type="text" class="form-control noc-input" placeholder="e.g. xe-0/0/1" />
+                                <input v-model="newDep.sourceInterface" type="text" class="form-control noc-input" placeholder="e.g. xe-0/0/1, SFP+1" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label text-foreground small fw-bold text-uppercase">Target Interface</label>
-                                <input v-model="newDep.targetInterface" type="text" class="form-control noc-input" placeholder="e.g. eth0 / Combo1" />
+                                <input v-model="newDep.targetInterface" type="text" class="form-control noc-input" placeholder="e.g. eth0, uplink-1" />
                             </div>
                         </div>
                         <div>
-                            <label class="form-label text-foreground small fw-bold text-uppercase">Downstream Child Device</label>
-                            <select v-model="newDep.childDeviceId" class="form-select noc-input">
-                                <option v-for="d in allSelectableEntities" :key="'c-' + d.id" :value="d.id">
-                                    {{ d.name }} ({{ d.ip || d.type }})
+                            <label class="form-label text-foreground small fw-bold text-uppercase">
+                                Downstream Child Device <span class="text-danger">*</span>
+                            </label>
+                            <select v-model="newDep.childDeviceId" class="form-select noc-input" required>
+                                <option :value="null" disabled>-- Select Downstream Device --</option>
+                                <option v-for="d in selectableDevices" :key="'c-' + d.id" :value="d.id">
+                                    {{ d.name }} ({{ d.ip }} - {{ d.type }})
                                 </option>
                             </select>
+                            <div class="form-text text-muted small">Select subordinate switch, OLT, probe, or edge device.</div>
                         </div>
                     </div>
                     <div class="modal-footer border-top border-secondary px-4 py-3">
@@ -727,7 +1068,7 @@
                         <button
                             type="button"
                             class="btn noc-create-btn px-4 fw-bold"
-                            :disabled="!newDep.parentDeviceId || !newDep.childDeviceId || newDep.parentDeviceId === newDep.childDeviceId"
+                            :disabled="!isValidDependency"
                             @click="saveDependency"
                         >
                             Establish Link
@@ -875,6 +1216,440 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal: Visual Splitter Port Diagram -->
+        <div v-if="showSplitterDiagramModal && activeSplitterDetail" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="code-branch" class="text-warning fs-5" />
+                            <div>
+                                <h5 class="modal-title fw-bold text-foreground mb-0">
+                                    {{ activeSplitterDetail.name }}
+                                </h5>
+                                <div class="small text-muted font-monospace">
+                                    Ratio: {{ activeSplitterDetail.splitter_type }} | Tier {{ activeSplitterDetail.tier_level }} | Nom Loss: {{ activeSplitterDetail.nominal_loss_db || '10.5' }} dB
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" @click="showSplitterDiagramModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <!-- Optical Schematic Block -->
+                        <div class="p-3 mb-4 rounded-3 bg-surface border border-secondary">
+                            <div class="text-uppercase small fw-bold text-secondary mb-2">Optical Feeder & Branch Schematic</div>
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <div class="p-2 px-3 rounded bg-dark border border-secondary font-monospace small">
+                                    <span class="text-muted">FEEDER IN:</span>
+                                    <strong class="text-success ms-1">{{ activeSplitterDetail.parent_splitter_name || activeSplitterDetail.olt_name || 'Core OLT Port' }}</strong>
+                                </div>
+                                <font-awesome-icon icon="arrow-right" class="text-muted" />
+                                <div class="p-2 px-3 rounded bg-primary text-white font-monospace small fw-bold">
+                                    PLC Splitter Box ({{ activeSplitterDetail.splitter_type }})
+                                </div>
+                                <font-awesome-icon icon="arrow-right" class="text-muted" />
+                                <div class="small text-secondary">
+                                    <strong>{{ (activeSplitterDetail.ports || []).filter(p => p.port_status === 'CONNECTED').length }}</strong> of <strong>{{ activeSplitterDetail.output_port_count || 8 }}</strong> output ports in service
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ports Matrix Grid -->
+                        <h6 class="fw-bold text-uppercase small text-secondary mb-3">Output Distribution Ports (OUT-1 to OUT-{{ activeSplitterDetail.output_port_count || 8 }})</h6>
+                        <div class="row g-2">
+                            <div
+                                v-for="port in (activeSplitterDetail.ports || [])"
+                                :key="port.id"
+                                class="col-md-6 col-lg-3"
+                            >
+                                <div
+                                    class="p-2 rounded-3 border h-100 d-flex flex-column justify-content-between"
+                                    :class="port.port_status === 'CONNECTED' ? 'border-primary bg-card' : (port.port_status === 'FAULTY' ? 'border-danger bg-danger-subtle' : 'border-secondary bg-surface')"
+                                >
+                                    <div>
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="font-monospace fw-bold small text-foreground">{{ port.port_identifier }}</span>
+                                            <span
+                                                class="badge font-monospace"
+                                                :class="port.port_status === 'CONNECTED' ? 'bg-primary' : (port.port_status === 'AVAILABLE' ? 'bg-success' : 'bg-secondary')"
+                                                style="font-size: 0.7rem;"
+                                            >
+                                                {{ port.port_status }}
+                                            </span>
+                                        </div>
+                                        <div class="small text-truncate mb-2" :title="port.connected_entity_name || 'Available'">
+                                            <font-awesome-icon icon="plug" class="me-1 small text-muted" />
+                                            <span v-if="port.port_status === 'CONNECTED'" class="text-info fw-semibold">{{ port.connected_entity_name || port.connected_entity_type }}</span>
+                                            <span v-else class="text-muted fst-italic">Unconnected</span>
+                                        </div>
+                                        <div v-if="port.measured_loss_db" class="small text-warning font-monospace mb-2">
+                                            {{ port.measured_loss_db }} dB
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 pt-2 border-top border-secondary d-flex justify-content-between align-items-center">
+                                        <button
+                                            v-if="port.port_status === 'AVAILABLE'"
+                                            class="btn btn-xs btn-outline-success w-100 py-1 font-monospace"
+                                            style="font-size: 0.75rem;"
+                                            @click="openConnectPortModal(port)"
+                                        >
+                                            Connect
+                                        </button>
+                                        <button
+                                            v-else-if="port.port_status === 'CONNECTED'"
+                                            class="btn btn-xs btn-outline-danger w-100 py-1 font-monospace"
+                                            style="font-size: 0.75rem;"
+                                            @click="disconnectPort(port.id)"
+                                        >
+                                            Disconnect
+                                        </button>
+                                        <span v-else class="badge bg-secondary w-100 text-center">{{ port.port_status }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-4" @click="showSplitterDiagramModal = false">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Connect Splitter Port -->
+        <div v-if="showConnectPortModal && selectedPortForConnect" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <h5 class="modal-title fw-bold text-success d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="plug" />
+                            <span>Connect Port {{ selectedPortForConnect.port_identifier }}</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showConnectPortModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Connected Entity Type</label>
+                            <select v-model="newPortConnect.connected_entity_type" class="form-select noc-input">
+                                <option value="ONU">Subscriber ONU / ONT</option>
+                                <option value="SPLITTER">Cascaded Tier-2 Splitter</option>
+                                <option value="DROP_CABLE">Customer Drop Cable</option>
+                                <option value="FDB">Fiber Distribution Box</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">
+                                Connected Entity Name / Subscriber ID <span class="text-danger">*</span>
+                            </label>
+                            <input v-model="newPortConnect.connected_entity_name" type="text" class="form-control noc-input" placeholder="e.g. ONT-SUB-1082 or FAT-04-In" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Measured Insertion Loss (dB)</label>
+                            <input v-model.number="newPortConnect.measured_loss_db" type="number" step="0.1" class="form-control noc-input" placeholder="e.g. 10.4" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Notes / Circuit ID</label>
+                            <input v-model="newPortConnect.notes" type="text" class="form-control noc-input" placeholder="e.g. Circuit #4812 - 100Mbps FTTH" />
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-3" @click="showConnectPortModal = false">Cancel</button>
+                        <button type="button" class="btn btn-success px-4 fw-bold" :disabled="!newPortConnect.connected_entity_name" @click="submitConnectPort">
+                            Complete Connection
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Add Fiber Cable -->
+        <div v-if="showCableModal" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <h5 class="modal-title fw-bold text-info d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="project-diagram" />
+                            <span>Add Physical Fiber Cable</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showCableModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">
+                                Cable Name <span class="text-danger">*</span>
+                            </label>
+                            <input v-model="newCable.name" type="text" class="form-control noc-input" placeholder="e.g. Feeder Cable Ring North" required />
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Cable Identifier</label>
+                                <input v-model="newCable.cable_identifier" type="text" class="form-control noc-input" placeholder="e.g. FDR-CBL-01" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Cable Type</label>
+                                <select v-model="newCable.cable_type" class="form-select noc-input">
+                                    <option value="BACKBONE">Backbone Trunk</option>
+                                    <option value="FEEDER">Feeder Ring</option>
+                                    <option value="DISTRIBUTION">Distribution Branch</option>
+                                    <option value="DROP">Drop Cable</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Strand Count</label>
+                                <select v-model.number="newCable.strand_count" class="form-select noc-input">
+                                    <option :value="4">4 Strands</option>
+                                    <option :value="8">8 Strands</option>
+                                    <option :value="12">12 Strands</option>
+                                    <option :value="24">24 Strands</option>
+                                    <option :value="48">48 Strands</option>
+                                    <option :value="96">96 Strands</option>
+                                    <option :value="144">144 Strands</option>
+                                    <option :value="288">288 Strands</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Length (Meters)</label>
+                                <input v-model.number="newCable.cable_length_meters" type="number" class="form-control noc-input" placeholder="e.g. 1500" />
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Source Endpoint</label>
+                                <input v-model="newCable.source_label" type="text" class="form-control noc-input" placeholder="e.g. Central Office OLT" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Target Endpoint</label>
+                                <input v-model="newCable.target_label" type="text" class="form-control noc-input" placeholder="e.g. FDC Hub #01" />
+                            </div>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Installation Type</label>
+                                <select v-model="newCable.installation_type" class="form-select noc-input">
+                                    <option value="AERIAL">Aerial / ADSS</option>
+                                    <option value="UNDERGROUND">Underground Duct</option>
+                                    <option value="DIRECT_BURIED">Direct Buried (Armored)</option>
+                                    <option value="INDOOR">Indoor Riser</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Attenuation (dB/km)</label>
+                                <input v-model.number="newCable.attenuation_db_per_km" type="number" step="0.01" class="form-control noc-input" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-3" @click="showCableModal = false">Cancel</button>
+                        <button type="button" class="btn btn-info px-4 fw-bold" :disabled="!newCable.name" @click="saveCable">
+                            Save Cable
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: TIA-598 Color Strands Inspector -->
+        <div v-if="showStrandsModal && activeCableDetail" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="palette" class="text-info fs-5" />
+                            <div>
+                                <h5 class="modal-title fw-bold text-foreground mb-0">
+                                    {{ activeCableDetail.name }} Strands
+                                </h5>
+                                <div class="small text-muted font-monospace">
+                                    TIA-598 Standard 12-Color Sequence | {{ (activeCableDetail.strands || []).length }} Strands
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" @click="showStrandsModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0 small">
+                                <thead>
+                                    <tr class="text-secondary text-uppercase small" style="font-size: 0.75rem;">
+                                        <th>#</th>
+                                        <th>TIA-598 Color</th>
+                                        <th>Strand Identifier</th>
+                                        <th>Status</th>
+                                        <th>Allocated Circuit / Target</th>
+                                        <th>Wavelength</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="st in (activeCableDetail.strands || [])" :key="st.id">
+                                        <td class="font-monospace fw-bold">{{ st.strand_number }}</td>
+                                        <td>
+                                            <span class="d-inline-flex align-items-center gap-2">
+                                                <span
+                                                    class="d-inline-block rounded-circle border border-dark"
+                                                    :style="{ width: '14px', height: '14px', backgroundColor: st.color_hex || '#0055A5' }"
+                                                ></span>
+                                                <strong class="font-monospace">{{ st.color_name }}</strong>
+                                            </span>
+                                        </td>
+                                        <td class="font-monospace text-muted">{{ st.strand_identifier }}</td>
+                                        <td>
+                                            <span
+                                                class="badge font-monospace"
+                                                :class="st.status === 'ACTIVE' ? 'bg-success' : (st.status === 'AVAILABLE' ? 'bg-primary' : (st.status === 'RESERVED' ? 'bg-warning text-dark' : 'bg-danger'))"
+                                            >
+                                                {{ st.status }}
+                                            </span>
+                                        </td>
+                                        <td class="font-monospace text-info">{{ st.destination_point || 'None (Dark Fiber)' }}</td>
+                                        <td class="font-monospace text-muted">{{ st.operating_wavelength || 1490 }} nm</td>
+                                        <td class="text-end">
+                                            <button
+                                                v-if="st.status === 'AVAILABLE'"
+                                                class="btn btn-xs btn-outline-success font-monospace px-2 py-0"
+                                                @click="allocateStrand(st, 'ACTIVE')"
+                                            >
+                                                Activate
+                                            </button>
+                                            <button
+                                                v-else-if="st.status === 'ACTIVE'"
+                                                class="btn btn-xs btn-outline-secondary font-monospace px-2 py-0"
+                                                @click="allocateStrand(st, 'AVAILABLE')"
+                                            >
+                                                Release
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-4" @click="showStrandsModal = false">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Add Splice Closure -->
+        <div v-if="showClosureModal" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <h5 class="modal-title fw-bold text-primary d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="box" />
+                            <span>Add Splice Closure / FDC Cabinet</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showClosureModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">
+                                Closure Name <span class="text-danger">*</span>
+                            </label>
+                            <input v-model="newClosure.name" type="text" class="form-control noc-input" placeholder="e.g. FDC Hub North Sector" required />
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Identifier</label>
+                                <input v-model="newClosure.closure_identifier" type="text" class="form-control noc-input" placeholder="e.g. FDC-01" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Closure Type</label>
+                                <select v-model="newClosure.closure_type" class="form-select noc-input">
+                                    <option value="FDC">Fiber Distribution Cabinet (FDC)</option>
+                                    <option value="FAT">Fiber Access Terminal (FAT)</option>
+                                    <option value="FDB">Fiber Distribution Box (FDB)</option>
+                                    <option value="SPLICE_CLOSURE">Outdoor Splice Closure (Dome/Inline)</option>
+                                    <option value="PATCH_PANEL">Patch Panel (ODF)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Physical Location / Pole / Chamber</label>
+                            <input v-model="newClosure.location" type="text" class="form-control noc-input" placeholder="e.g. Corner 5th & Main Pole #42" />
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Tray Capacity</label>
+                                <input v-model.number="newClosure.tray_capacity" type="number" class="form-control noc-input" placeholder="4" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Splice Capacity</label>
+                                <input v-model.number="newClosure.total_splice_capacity" type="number" class="form-control noc-input" placeholder="48" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-3" @click="showClosureModal = false">Cancel</button>
+                        <button type="button" class="btn btn-primary px-4 fw-bold" :disabled="!newClosure.name" @click="saveClosure">
+                            Save Splice Closure
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Perform Fusion Splice -->
+        <div v-if="showSpliceModal && activeClosureDetail" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="bolt" />
+                            <span>Perform Fusion Splice ({{ activeClosureDetail.name }})</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showSpliceModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Incoming Feeder Cable</label>
+                            <select v-model="newSplice.incoming_cable_id" class="form-select noc-input">
+                                <option :value="null">-- Select Incoming Cable --</option>
+                                <option v-for="c in cablesList" :key="'in-' + c.id" :value="c.id">
+                                    {{ c.name }} ({{ c.cable_type }})
+                                </option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Outgoing Distribution Cable</label>
+                            <select v-model="newSplice.outgoing_cable_id" class="form-select noc-input">
+                                <option :value="null">-- Select Outgoing Cable --</option>
+                                <option v-for="c in cablesList" :key="'out-' + c.id" :value="c.id">
+                                    {{ c.name }} ({{ c.cable_type }})
+                                </option>
+                            </select>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Splice Type</label>
+                                <select v-model="newSplice.splice_type" class="form-select noc-input">
+                                    <option value="FUSION">Fusion Splice (Arc Welded)</option>
+                                    <option value="MECHANICAL">Mechanical Splice</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Splice Loss (dB)</label>
+                                <input v-model.number="newSplice.splice_loss_db" type="number" step="0.01" class="form-control noc-input" placeholder="0.05" />
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Splice Tray Number</label>
+                            <input v-model.number="newSplice.tray_number" type="number" class="form-control noc-input" placeholder="1" />
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-3" @click="showSpliceModal = false">Cancel</button>
+                        <button type="button" class="btn btn-warning px-4 fw-bold" :disabled="!newSplice.incoming_cable_id || !newSplice.outgoing_cable_id" @click="submitSplice">
+                            Record Splice
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -882,11 +1657,14 @@
 export default {
     data() {
         return {
-            viewMode: "canvas", // 'canvas' | 'table' | 'splitters' | 'faults'
+            viewMode: "canvas", // 'canvas' | 'table' | 'splitters' | 'cables' | 'closures' | 'calculator' | 'faults'
             mapMode: "LOGICAL", // 'LOGICAL' | 'FIBER' | 'OLT_PON' | 'SWITCH' | 'FAULTS' | 'PROBES'
             devices: [],
             probes: [],
             splittersList: [],
+            cablesList: [],
+            closuresList: [],
+            patchCordsList: [],
             activeFaults: [],
             sitesList: [],
             selectedSiteId: null,
@@ -899,10 +1677,22 @@ export default {
             showAddModal: false,
             showEditLinkModal: false,
             showSplitterModal: false,
+            showCableModal: false,
+            showStrandsModal: false,
+            showClosureModal: false,
+            showSpliceModal: false,
+            showSplitterDiagramModal: false,
+            showConnectPortModal: false,
             showImportModal: false,
             editingLink: null,
             importJsonText: "",
             isFullscreen: false,
+
+            // Active details for modals
+            activeSplitterDetail: null,
+            activeCableDetail: null,
+            activeClosureDetail: null,
+            selectedPortForConnect: null,
 
             // Tracing state
             highlightedDownstreamIds: [],
@@ -937,6 +1727,62 @@ export default {
                 tier_level: 1,
                 location: "",
             },
+
+            newCable: {
+                name: "",
+                cable_identifier: "",
+                cable_type: "FEEDER",
+                installation_type: "AERIAL",
+                strand_count: 12,
+                cable_length_meters: 1000,
+                attenuation_db_per_km: 0.35,
+                source_type: "CORE_OLT",
+                source_label: "Core Central Office",
+                target_type: "SPLICE_CLOSURE",
+                target_label: "FDC Cabinet 1",
+                status: "ACTIVE",
+            },
+
+            newClosure: {
+                name: "",
+                closure_identifier: "",
+                closure_type: "FDC",
+                location: "",
+                tray_capacity: 4,
+                total_splice_capacity: 48,
+                status: "ACTIVE",
+            },
+
+            newSplice: {
+                splice_closure_id: null,
+                incoming_cable_id: null,
+                incoming_strand_id: null,
+                outgoing_cable_id: null,
+                outgoing_strand_id: null,
+                splice_type: "FUSION",
+                splice_loss_db: 0.05,
+                tray_number: 1,
+            },
+
+            newPortConnect: {
+                port_id: null,
+                connected_entity_type: "ONU",
+                connected_entity_name: "",
+                measured_loss_db: null,
+                notes: "",
+            },
+
+            opticalCalc: {
+                wavelength: 1490,
+                cableLengthKm: 12.5,
+                primarySplitRatio: "1:8",
+                secondarySplitRatio: "1:4",
+                connectorCount: 4,
+                spliceCount: 6,
+                oltTxPowerDbm: 4.5,
+                onuSensitivityDbm: -28.0,
+                result: null,
+            },
         };
     },
     computed: {
@@ -945,6 +1791,17 @@ export default {
         },
         activeOrgName() {
             return this.activeOrgObj ? this.activeOrgObj.name : "Default Organization";
+        },
+        selectableDevices() {
+            return this.devices.filter((d) => {
+                const id = parseInt(d.id, 10);
+                return !isNaN(id) && id > 0;
+            });
+        },
+        isValidDependency() {
+            const p = parseInt(this.newDep.parentDeviceId, 10);
+            const c = parseInt(this.newDep.childDeviceId, 10);
+            return !isNaN(p) && !isNaN(c) && p > 0 && c > 0 && p !== c;
         },
         allSelectableEntities() {
             if (this.nodes.length > 0) {
@@ -1067,17 +1924,30 @@ export default {
                         this.probes = pRes.probes || [];
                     }
                     // Load splitters
-                    this.$root.getSocket().emit("getFiberSplitters", (sRes) => {
+                    this.$root.getSocket().emit("getFtthSplitters", (sRes) => {
                         if (sRes && sRes.ok) {
                             this.splittersList = sRes.splitters || [];
                         }
-                        // Load active fiber faults
-                        this.$root.getSocket().emit("getActiveFiberFaults", (fRes) => {
-                            if (fRes && fRes.ok) {
-                                this.activeFaults = fRes.faults || [];
+                        // Load cables
+                        this.$root.getSocket().emit("getFtthCables", (cRes) => {
+                            if (cRes && cRes.ok) {
+                                this.cablesList = cRes.cables || [];
                             }
-                            this.buildNetworkNodes();
-                            this.loadAllDependencies();
+                            // Load closures
+                            this.$root.getSocket().emit("getFtthClosures", (clRes) => {
+                                if (clRes && clRes.ok) {
+                                    this.closuresList = clRes.closures || [];
+                                }
+                                // Load active fiber faults
+                                this.$root.getSocket().emit("getActiveFiberFaults", (fRes) => {
+                                    if (fRes && fRes.ok) {
+                                        this.activeFaults = fRes.faults || [];
+                                    }
+                                    this.buildNetworkNodes();
+                                    this.loadAllDependencies();
+                                    this.runOpticalCalculation();
+                                });
+                            });
                         });
                     });
                 });
@@ -1396,13 +2266,26 @@ export default {
 
         // Dependency Link Actions
         saveDependency() {
-            if (!this.newDep.parentDeviceId || !this.newDep.childDeviceId) {
+            const pId = parseInt(this.newDep.parentDeviceId, 10);
+            const cId = parseInt(this.newDep.childDeviceId, 10);
+            if (isNaN(pId) || pId <= 0) {
+                this.$root.toastError("Please select a valid upstream parent device.");
+                return;
+            }
+            if (isNaN(cId) || cId <= 0) {
+                this.$root.toastError("Please select a valid downstream child device.");
+                return;
+            }
+            if (pId === cId) {
+                this.$root.toastError("A device cannot depend on itself.");
                 return;
             }
             this.$root.getSocket().emit("addDeviceDependency", this.newDep, (res) => {
                 if (res && res.ok) {
                     this.$root.toastSuccess("Dependency link created");
                     this.showAddModal = false;
+                    this.newDep.parentDeviceId = null;
+                    this.newDep.childDeviceId = null;
                     this.loadData();
                 } else {
                     this.$root.toastError(res ? res.msg : "Error establishing link");
@@ -1443,9 +2326,13 @@ export default {
             return dev ? `${dev.name} (${dev.ip || dev.type})` : `Target #${devId}`;
         },
 
-        // Splitter Actions
+        // FTTH Splitter & Port Actions
         saveSplitter() {
-            this.$root.getSocket().emit("saveFiberSplitter", this.newSplitter, (res) => {
+            if (!this.newSplitter.name) {
+                this.$root.toastError("Splitter name is required.");
+                return;
+            }
+            this.$root.getSocket().emit("saveFtthSplitter", this.newSplitter, (res) => {
                 if (res && res.ok) {
                     this.$root.toastSuccess("Fiber splitter registered");
                     this.showSplitterModal = false;
@@ -1467,6 +2354,194 @@ export default {
                     }
                 });
             }
+        },
+        openSplitterDiagram(splitter) {
+            this.$root.getSocket().emit("getFtthSplitterDetails", splitter.id, (res) => {
+                if (res && res.ok && res.splitter) {
+                    this.activeSplitterDetail = res.splitter;
+                    this.showSplitterDiagramModal = true;
+                } else {
+                    this.$root.toastError(res ? res.msg : "Failed to load splitter diagram");
+                }
+            });
+        },
+        openConnectPortModal(port) {
+            this.selectedPortForConnect = port;
+            this.newPortConnect = {
+                port_id: port.id,
+                connected_entity_type: "ONU",
+                connected_entity_name: "",
+                measured_loss_db: null,
+                notes: "",
+            };
+            this.showConnectPortModal = true;
+        },
+        submitConnectPort() {
+            if (!this.newPortConnect.connected_entity_name) {
+                this.$root.toastError("Connected entity name / subscriber ID is required.");
+                return;
+            }
+            this.$root.getSocket().emit("connectSplitterPort", this.newPortConnect, (res) => {
+                if (res && res.ok) {
+                    this.$root.toastSuccess("Splitter port connected");
+                    this.showConnectPortModal = false;
+                    if (this.activeSplitterDetail) {
+                        this.openSplitterDiagram(this.activeSplitterDetail);
+                    }
+                    this.loadData();
+                } else {
+                    this.$root.toastError(res ? res.msg : "Error connecting port");
+                }
+            });
+        },
+        disconnectPort(portId) {
+            if (confirm("Disconnect this fiber splitter port?")) {
+                this.$root.getSocket().emit("disconnectSplitterPort", portId, (res) => {
+                    if (res && res.ok) {
+                        this.$root.toastSuccess("Port disconnected");
+                        if (this.activeSplitterDetail) {
+                            this.openSplitterDiagram(this.activeSplitterDetail);
+                        }
+                        this.loadData();
+                    } else {
+                        this.$root.toastError(res ? res.msg : "Error disconnecting port");
+                    }
+                });
+            }
+        },
+
+        // FTTH Physical Fiber Cable Actions
+        saveCable() {
+            if (!this.newCable.name) {
+                this.$root.toastError("Cable name is required.");
+                return;
+            }
+            this.$root.getSocket().emit("saveFtthCable", this.newCable, (res) => {
+                if (res && res.ok) {
+                    this.$root.toastSuccess("Fiber cable registered successfully");
+                    this.showCableModal = false;
+                    this.newCable = {
+                        name: "",
+                        cable_identifier: "",
+                        cable_type: "FEEDER",
+                        installation_type: "AERIAL",
+                        strand_count: 12,
+                        cable_length_meters: 1000,
+                        attenuation_db_per_km: 0.35,
+                        source_type: "CORE_OLT",
+                        source_label: "Core Central Office",
+                        target_type: "SPLICE_CLOSURE",
+                        target_label: "FDC Cabinet 1",
+                        status: "ACTIVE",
+                    };
+                    this.loadData();
+                } else {
+                    this.$root.toastError(res ? res.msg : "Error saving cable");
+                }
+            });
+        },
+        deleteCable(cableId) {
+            if (confirm("Delete this physical fiber cable and its strands?")) {
+                this.$root.getSocket().emit("deleteFtthCable", cableId, (res) => {
+                    if (res && res.ok) {
+                        this.$root.toastSuccess("Fiber cable removed");
+                        this.loadData();
+                    } else {
+                        this.$root.toastError(res ? res.msg : "Error removing cable");
+                    }
+                });
+            }
+        },
+        openStrandsModal(cable) {
+            this.$root.getSocket().emit("getFtthCableDetails", cable.id, (res) => {
+                if (res && res.ok && res.cable) {
+                    this.activeCableDetail = res.cable;
+                    this.showStrandsModal = true;
+                } else {
+                    this.$root.toastError(res ? res.msg : "Failed to load cable strands");
+                }
+            });
+        },
+        allocateStrand(strand, newStatus) {
+            this.$root.getSocket().emit("allocateFiberStrand", {
+                strand_id: strand.id,
+                status: newStatus,
+                destination_point: newStatus === "ACTIVE" ? "Connected Circuit" : null,
+            }, (res) => {
+                if (res && res.ok) {
+                    this.$root.toastSuccess(`Strand status updated to ${newStatus}`);
+                    if (this.activeCableDetail) {
+                        this.openStrandsModal(this.activeCableDetail);
+                    }
+                    this.loadData();
+                } else {
+                    this.$root.toastError(res ? res.msg : "Error allocating strand");
+                }
+            });
+        },
+
+        // FTTH Splice Closures & Cabinets Actions
+        saveClosure() {
+            if (!this.newClosure.name) {
+                this.$root.toastError("Splice closure name is required.");
+                return;
+            }
+            this.$root.getSocket().emit("saveFtthClosure", this.newClosure, (res) => {
+                if (res && res.ok) {
+                    this.$root.toastSuccess("Splice closure registered");
+                    this.showClosureModal = false;
+                    this.newClosure = {
+                        name: "",
+                        closure_identifier: "",
+                        closure_type: "FDC",
+                        location: "",
+                        tray_capacity: 4,
+                        total_splice_capacity: 48,
+                        status: "ACTIVE",
+                    };
+                    this.loadData();
+                } else {
+                    this.$root.toastError(res ? res.msg : "Error saving closure");
+                }
+            });
+        },
+        openSpliceModal(closure) {
+            this.activeClosureDetail = closure;
+            this.newSplice = {
+                splice_closure_id: closure.id,
+                incoming_cable_id: null,
+                incoming_strand_id: null,
+                outgoing_cable_id: null,
+                outgoing_strand_id: null,
+                splice_type: "FUSION",
+                splice_loss_db: 0.05,
+                tray_number: 1,
+            };
+            this.showSpliceModal = true;
+        },
+        submitSplice() {
+            if (!this.newSplice.incoming_cable_id || !this.newSplice.outgoing_cable_id) {
+                this.$root.toastError("Please select both incoming and outgoing cables.");
+                return;
+            }
+            this.$root.getSocket().emit("addFiberSplice", this.newSplice, (res) => {
+                if (res && res.ok) {
+                    this.$root.toastSuccess("Fusion splice recorded");
+                    this.showSpliceModal = false;
+                    this.loadData();
+                } else {
+                    this.$root.toastError(res ? res.msg : "Error saving splice");
+                }
+            });
+        },
+
+        // Optical Loss Budget Calculator
+        runOpticalCalculation() {
+            this.$root.getSocket().emit("calculateOpticalLossBudget", this.opticalCalc, (res) => {
+                if (res && res.ok && res.calculation) {
+                    this.opticalCalc.result = res.calculation;
+                }
+            });
         },
 
         // Topology Export & Import

@@ -1051,6 +1051,21 @@ module.exports.printServerUrls = (tag, port, hostname, isHTTPS = false) => {
 };
 
 /**
+ * Format a Date, timestamp, or string into standard SQL DATETIME 'YYYY-MM-DD HH:mm:ss' (UTC)
+ * Safe and compliant for MySQL, MariaDB, PostgreSQL, and SQLite without syntax errors.
+ * @param {Date|string|number} d Date input
+ * @returns {string} Formatted UTC datetime string
+ */
+function toSqlDatetime(d = new Date()) {
+    const date = (d instanceof Date) ? d : new Date(d);
+    if (isNaN(date.getTime())) {
+        return new Date().toISOString().slice(0, 19).replace("T", " ");
+    }
+    return date.toISOString().slice(0, 19).replace("T", " ");
+}
+exports.toSqlDatetime = toSqlDatetime;
+
+/**
  * Construct a URL a bit more safely
  * @param {boolean} isHTTPS Whether the URL should use HTTPS protocol
  * @param {string} hostname The hostname to use in the URL
