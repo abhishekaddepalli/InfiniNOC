@@ -1,5 +1,6 @@
 const { R } = require("redbean-node");
 const Incident = require("./incident");
+const { toSqlDatetime } = require("../util-server");
 
 class FiberFaultEngine {
     /**
@@ -9,7 +10,7 @@ class FiberFaultEngine {
      */
     static async analyzeAndCorrelateFaults(organizationId) {
         const orgId = organizationId || 1;
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         const activeFaults = [];
 
         // 1. Fetch all OLT devices
@@ -191,7 +192,7 @@ class FiberFaultEngine {
      * @private
      */
     static async _upsertFaultIncident(orgId, faultData) {
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         // Check if an existing ACTIVE fault matches this category and PON port/OLT
         let existing = null;
@@ -287,7 +288,7 @@ class FiberFaultEngine {
      */
     static async _resolveStaleFaults(orgId, currentActiveFaults) {
         const activeIds = currentActiveFaults.map((f) => f.id);
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         if (activeIds.length > 0) {
             const placeholders = activeIds.map(() => "?").join(",");

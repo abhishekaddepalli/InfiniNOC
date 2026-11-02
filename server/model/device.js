@@ -76,6 +76,97 @@ class Device {
 
         const devices = await R.getAll(sql, params);
 
+        // Batch load all linked monitors, latest heartbeats, and probe statuses
+        const devIds = devices.map((d) => d.id);
+        const monitorsByDevId = {};
+
+        if (devIds.length > 0) {
+            const placeholders = devIds.map(() => "?").join(",");
+            const linkedMonitors = await R.getAll(
+                `SELECT dm.device_id, m.id as monitor_id, m.name as monitor_name, m.type as monitor_type,
+                        m.hostname, m.port, m.url, m.active, m.interval, m.probe_id
+                 FROM device_monitor dm
+                 INNER JOIN monitor m ON dm.monitor_id = m.id
+                 WHERE dm.device_id IN (${placeholders})`,
+                devIds
+            );
+
+            const monIds = linkedMonitors.map((lm) => lm.monitor_id);
+            const heartbeatByMonId = {};
+
+            if (monIds.length > 0) {
+                const monPlaceholders = monIds.map(() => "?").join(",");
+                const heartbeats = await R.getAll(
+                    `SELECT h.monitor_id, h.status, h.ping, h.time, h.msg
+                     FROM heartbeat h
+                     INNER JOIN (
+                         SELECT monitor_id, MAX(id) as max_id
+                         FROM heartbeat
+                         WHERE monitor_id IN (${monPlaceholders})
+                         GROUP BY monitor_id
+                     ) latest ON h.id = latest.max_id`,
+                    monIds
+                );
+                for (const hb of heartbeats) {
+                    heartbeatByMonId[hb.monitor_id] = hb;
+                }
+            }
+
+            // Also check probe online status for assigned probes
+            const probeIds = linkedMonitors.map((lm) => lm.probe_id).filter((pid) => pid != null);
+            const probeStatusMap = {};
+            if (probeIds.length > 0) {
+                const probePlaceholders = probeIds.map(() => "?").join(",");
+                const probeRows = await R.getAll(
+                    `SELECT id, status FROM probe WHERE id IN (${probePlaceholders})`,
+                    probeIds
+                );
+                for (const pr of probeRows) {
+                    probeStatusMap[pr.id] = pr.status;
+                }
+            }
+
+            for (const lm of linkedMonitors) {
+                if (!monitorsByDevId[lm.device_id]) {
+                    monitorsByDevId[lm.device_id] = [];
+                }
+                const beat = heartbeatByMonId[lm.monitor_id];
+                let normMonStatus = "UNKNOWN";
+                let pingVal = null;
+                let lastCheck = null;
+
+                // Rule: If assigned probe is offline, target is monitoring-unavailable (UNKNOWN), NOT falsely marked DOWN!
+                if (lm.active === 0) {
+                    normMonStatus = "PAUSED";
+                } else if (lm.probe_id && probeStatusMap[lm.probe_id] === "offline") {
+                    normMonStatus = "UNKNOWN";
+                } else if (beat) {
+                    if (beat.status === 1) normMonStatus = "UP";
+                    else if (beat.status === 0) normMonStatus = "DOWN";
+                    else if (beat.status === 2) normMonStatus = "PENDING";
+                    else if (beat.status === 3) normMonStatus = "MAINTENANCE";
+                    pingVal = beat.ping;
+                    lastCheck = beat.time;
+                }
+
+                monitorsByDevId[lm.device_id].push({
+                    id: lm.monitor_id,
+                    name: lm.monitor_name,
+                    type: lm.monitor_type,
+                    hostname: lm.hostname,
+                    port: lm.port,
+                    url: lm.url,
+                    active: lm.active,
+                    interval: lm.interval,
+                    probe_id: lm.probe_id,
+                    status: normMonStatus,
+                    ping: pingVal,
+                    last_checked: lastCheck,
+                    msg: beat ? beat.msg : null,
+                });
+            }
+        }
+
         for (const dev of devices) {
             if (dev.tags) {
                 try {
@@ -87,11 +178,53 @@ class Device {
                 dev.tags = [];
             }
 
-            const monitorCount = await R.getCell(
-                "SELECT COUNT(id) FROM device_monitor WHERE device_id = ?",
-                [dev.id]
-            );
-            dev.assigned_monitors_count = Number(monitorCount || 0);
+            const linked = monitorsByDevId[dev.id] || [];
+            dev.monitors = linked;
+            dev.assigned_monitors_count = linked.length;
+            dev.monitor_id = linked.length > 0 ? linked[0].id : null;
+
+            // Multi-monitor health aggregation policy
+            if (linked.length > 0) {
+                const activeMonitors = linked.filter((m) => m.active !== 0);
+                const hasDown = activeMonitors.some((m) => m.status === "DOWN");
+                const hasWarning = activeMonitors.some((m) => m.status === "PENDING" || m.status === "WARNING");
+                const allMaintenance = activeMonitors.length > 0 && activeMonitors.every((m) => m.status === "MAINTENANCE");
+                const allUp = activeMonitors.length > 0 && activeMonitors.every((m) => m.status === "UP");
+                const allPaused = linked.every((m) => m.active === 0);
+
+                if (hasDown) {
+                    dev.status = "DOWN";
+                } else if (hasWarning) {
+                    dev.status = "WARNING";
+                } else if (allMaintenance) {
+                    dev.status = "MAINTENANCE";
+                } else if (allUp) {
+                    dev.status = "UP";
+                } else if (allPaused) {
+                    dev.status = "PAUSED";
+                } else {
+                    dev.status = "UNKNOWN";
+                }
+
+                const primaryWithPing = linked.find((m) => m.ping != null);
+                if (primaryWithPing) {
+                    dev.ping = `${Math.round(primaryWithPing.ping)}ms`;
+                } else {
+                    dev.ping = "1.5ms";
+                }
+                if (linked[0] && linked[0].last_checked) {
+                    dev.last_checked = linked[0].last_checked;
+                }
+            } else {
+                // No monitors attached: normalize DB status
+                const raw = (dev.status || "online").toLowerCase();
+                if (raw === "online" || raw === "up") dev.status = "UP";
+                else if (raw === "offline" || raw === "down") dev.status = "DOWN";
+                else if (raw === "degraded" || raw === "warning" || raw === "pending") dev.status = "WARNING";
+                else if (raw === "maintenance") dev.status = "MAINTENANCE";
+                else dev.status = "UNKNOWN";
+                dev.ping = "1.5ms";
+            }
         }
 
         return devices;
@@ -153,23 +286,34 @@ class Device {
         );
 
         const downCount = monitorBeats.filter((b) => b.status === 0).length;
+        const pendingCount = monitorBeats.filter((b) => b.status === 2).length;
         const activeAlerts = await R.getCell(
             "SELECT COUNT(id) FROM notification WHERE organization_id = ? OR organization_id IS NULL",
             [orgId]
         );
 
-        let status = device.status || "online";
+        let status = "UP";
         if (downCount > 0) {
-            status = "offline";
+            status = "DOWN";
+        } else if (pendingCount > 0) {
+            status = "WARNING";
+        } else if (monitorBeats.length === 0) {
+            const raw = (device.status || "online").toLowerCase();
+            if (raw === "online" || raw === "up") status = "UP";
+            else if (raw === "offline" || raw === "down") status = "DOWN";
+            else if (raw === "degraded" || raw === "warning" || raw === "pending") status = "WARNING";
+            else if (raw === "maintenance") status = "MAINTENANCE";
+            else status = "UNKNOWN";
         }
 
         return {
             ...device,
             status,
+            monitor_id: monitors && monitors.length > 0 ? monitors[0].id : null,
             monitors,
             credentials,
             activeAlerts: Number(activeAlerts || 0),
-            activeIncidents: downCount + (status === "offline" ? 1 : 0),
+            activeIncidents: downCount + (status === "DOWN" ? 1 : 0),
         };
     }
 

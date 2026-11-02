@@ -785,6 +785,8 @@ router.post("/api/probe/results", async (request, response) => {
 // ==========================================
 // InfiniNOC Fiber NOC & GPON REST API
 // ==========================================
+const Device = require("../model/device");
+const DependencyCorrelation = require("../model/dependency-correlation");
 const FiberNoc = require("../model/fiber-noc");
 const FiberFaultEngine = require("../model/fiber-fault-engine");
 const FiberInfrastructure = require("../model/fiber-infrastructure");
@@ -879,6 +881,62 @@ router.get("/api/ftth/loss-budget", async (request, response) => {
     try {
         const calculation = FiberInfrastructure.calculateOpticalLossBudget(request.query || {});
         response.json({ ok: true, calculation });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+// GET /api/topology/snapshot - Centralized authoritative topology snapshot
+router.get("/api/topology/snapshot", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const orgId = Number(request.query.organizationId) || 1;
+        const devices = await Device.getDeviceList(orgId);
+        const links = await DependencyCorrelation.getAllDependencies(orgId);
+        const splitters = await FiberInfrastructure.getSplitters(orgId);
+        const cables = await FiberInfrastructure.getCables(orgId);
+        const closures = await FiberInfrastructure.getClosures(orgId);
+        const faults = await FiberFaultEngine.getActiveFiberFaults(orgId);
+        const probes = await Probe.getProbeList(orgId);
+
+        const onlineCount = devices.filter((d) => d.status === "UP").length;
+        const downCount = devices.filter((d) => d.status === "DOWN").length;
+        const warningCount = devices.filter((d) => d.status === "WARNING" || d.status === "PENDING").length;
+        const maintCount = devices.filter((d) => d.status === "MAINTENANCE" || d.status === "PAUSED").length;
+        const unknownCount = devices.filter((d) => !["UP", "DOWN", "WARNING", "PENDING", "MAINTENANCE", "PAUSED"].includes(d.status)).length;
+
+        const downLinksCount = links.filter((l) => {
+            const p = devices.find((d) => d.id === l.parent_device_id);
+            const c = devices.find((d) => d.id === l.child_device_id);
+            return (p && p.status === "DOWN") || (c && c.status === "DOWN") || l.status === "down";
+        }).length;
+
+        const { toSqlDatetime } = require("../util-server");
+
+        response.json({
+            ok: true,
+            devices,
+            links,
+            splitters,
+            cables,
+            closures,
+            faults,
+            probes,
+            summary: {
+                totalNodes: devices.length,
+                online: onlineCount,
+                down: downCount,
+                warning: warningCount,
+                maintenance: maintCount,
+                unknown: unknownCount,
+                totalLinks: links.length,
+                downLinks: downLinksCount,
+                activeFaults: faults.length,
+                onlineProbes: probes.filter((p) => p.status === "online").length,
+                offlineProbes: probes.filter((p) => p.status === "offline").length,
+            },
+            timestamp: toSqlDatetime(),
+        });
     } catch (error) {
         response.status(400).json({ ok: false, msg: error.message });
     }

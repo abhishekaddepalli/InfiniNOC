@@ -3561,6 +3561,63 @@ let needSetup = false;
         // ===================================
         // InfiniNOC Fiber NOC & Intelligent Topology Endpoints
         // ===================================
+        socket.on("getTopologySnapshot", async (callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const devices = await Device.getDeviceList(activeOrgId);
+                const links = await DependencyCorrelation.getAllDependencies(activeOrgId);
+                const splitters = await FiberInfrastructure.getSplitters(activeOrgId);
+                const cables = await FiberInfrastructure.getCables(activeOrgId);
+                const closures = await FiberInfrastructure.getClosures(activeOrgId);
+                const faults = await FiberFaultEngine.getActiveFiberFaults(activeOrgId);
+                const probes = await Probe.getProbeList(activeOrgId);
+
+                const onlineCount = devices.filter((d) => d.status === "UP").length;
+                const downCount = devices.filter((d) => d.status === "DOWN").length;
+                const warningCount = devices.filter((d) => d.status === "WARNING" || d.status === "PENDING").length;
+                const maintCount = devices.filter((d) => d.status === "MAINTENANCE" || d.status === "PAUSED").length;
+                const unknownCount = devices.filter((d) => !["UP", "DOWN", "WARNING", "PENDING", "MAINTENANCE", "PAUSED"].includes(d.status)).length;
+
+                const downLinksCount = links.filter((l) => {
+                    const p = devices.find((d) => d.id === l.parent_device_id);
+                    const c = devices.find((d) => d.id === l.child_device_id);
+                    return (p && p.status === "DOWN") || (c && c.status === "DOWN") || l.status === "down";
+                }).length;
+
+                if (typeof callback === "function") {
+                    callback({
+                        ok: true,
+                        devices,
+                        links,
+                        splitters,
+                        cables,
+                        closures,
+                        faults,
+                        probes,
+                        summary: {
+                            totalNodes: devices.length,
+                            online: onlineCount,
+                            down: downCount,
+                            warning: warningCount,
+                            maintenance: maintCount,
+                            unknown: unknownCount,
+                            totalLinks: links.length,
+                            downLinks: downLinksCount,
+                            activeFaults: faults.length,
+                            onlineProbes: probes.filter((p) => p.status === "online").length,
+                            offlineProbes: probes.filter((p) => p.status === "offline").length,
+                        },
+                        timestamp: toSqlDatetime(),
+                    });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
         socket.on("getAllDependencies", async (callback) => {
             try {
                 checkLogin(socket);

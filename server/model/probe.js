@@ -343,7 +343,9 @@ class Probe {
 
             for (const p of probes) {
                 if (p.last_heartbeat) {
-                    const elapsed = now - new Date(p.last_heartbeat).getTime();
+                    const hbStr = String(p.last_heartbeat);
+                    const lastBeatTime = new Date(hbStr.includes("T") ? hbStr : hbStr.replace(" ", "T") + "Z").getTime();
+                    const elapsed = now - (isNaN(lastBeatTime) ? new Date(p.last_heartbeat).getTime() : lastBeatTime);
                     // If no heartbeat for > 60 seconds, mark offline
                     if (elapsed > 60000 && p.status === "online") {
                         await R.exec(

@@ -157,6 +157,82 @@
             </div>
         </div>
 
+        <!-- Real-Time Operational Health & Synchronization Bar -->
+        <div class="topology-health-bar d-flex align-items-center justify-content-between p-2 px-3 mb-3 rounded-3 bg-surface border border-secondary shadow-sm flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="status-indicator-dot" :class="syncIndicatorClass"></span>
+                    <span class="small fw-bold text-foreground">Sync: <span :class="syncStatusText === 'Live' ? 'text-success' : 'text-warning'">{{ syncStatusText }}</span></span>
+                    <span class="badge bg-dark text-muted font-monospace small border border-secondary">{{ lastSyncTimeAgo }}</span>
+                </div>
+                <div class="vr bg-secondary d-none d-sm-block"></div>
+                <div class="small text-muted d-flex align-items-center gap-1">
+                    <font-awesome-icon icon="network-wired" class="text-info" />
+                    <span>Probes:</span>
+                    <strong class="text-foreground">{{ onlineProbeCount }} Online</strong>
+                    <span v-if="offlineProbeCount > 0" class="badge bg-danger small ms-1">{{ offlineProbeCount }} Offline</span>
+                </div>
+                <div class="vr bg-secondary d-none d-sm-block"></div>
+                <div class="small text-muted d-flex align-items-center gap-1">
+                    <font-awesome-icon icon="bolt" class="text-warning" />
+                    <span>Event Stream:</span>
+                    <span class="badge" :class="$root.socket && $root.socket.connected ? 'bg-success' : 'bg-danger'">
+                        {{ $root.socket && $root.socket.connected ? 'Connected' : 'Disconnected' }}
+                    </span>
+                </div>
+                <div class="vr bg-secondary d-none d-sm-block"></div>
+                <div class="small text-muted d-flex align-items-center gap-1">
+                    <font-awesome-icon icon="check-circle" class="text-success" />
+                    <span>Freshness:</span>
+                    <span class="text-success fw-bold font-monospace">Verified</span>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-outline-secondary py-1 px-2 d-flex align-items-center gap-1" title="Force Reconciliation" @click="loadData">
+                    <font-awesome-icon icon="sync-alt" :class="{ 'fa-spin': isRefreshing }" />
+                    <span>Reconcile</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Real-Time Operational Health & Synchronization Bar -->
+        <div class="topology-health-bar d-flex align-items-center justify-content-between p-2 px-3 mb-3 rounded-3 bg-surface border border-secondary shadow-sm flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="status-indicator-dot" :class="syncIndicatorClass"></span>
+                    <span class="small fw-bold text-foreground">Sync: <span :class="syncStatusText === 'Live' ? 'text-success' : 'text-warning'">{{ syncStatusText }}</span></span>
+                    <span class="badge bg-dark text-muted font-monospace small border border-secondary">{{ lastSyncTimeAgo }}</span>
+                </div>
+                <div class="vr bg-secondary d-none d-sm-block"></div>
+                <div class="small text-muted d-flex align-items-center gap-1">
+                    <font-awesome-icon icon="network-wired" class="text-info" />
+                    <span>Probes:</span>
+                    <strong class="text-foreground">{{ onlineProbeCount }} Online</strong>
+                    <span v-if="offlineProbeCount > 0" class="badge bg-danger small ms-1">{{ offlineProbeCount }} Offline</span>
+                </div>
+                <div class="vr bg-secondary d-none d-sm-block"></div>
+                <div class="small text-muted d-flex align-items-center gap-1">
+                    <font-awesome-icon icon="bolt" class="text-warning" />
+                    <span>Event Stream:</span>
+                    <span class="badge" :class="$root.socket && $root.socket.connected ? 'bg-success' : 'bg-danger'">
+                        {{ $root.socket && $root.socket.connected ? 'Connected' : 'Disconnected' }}
+                    </span>
+                </div>
+                <div class="vr bg-secondary d-none d-sm-block"></div>
+                <div class="small text-muted d-flex align-items-center gap-1">
+                    <font-awesome-icon icon="check-circle" class="text-success" />
+                    <span>Freshness:</span>
+                    <span class="text-success fw-bold font-monospace">Verified</span>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-outline-secondary py-1 px-2 d-flex align-items-center gap-1" title="Force Reconciliation" @click="loadData">
+                    <font-awesome-icon icon="sync-alt" :class="{ 'fa-spin': isRefreshing }" />
+                    <span>Reconcile</span>
+                </button>
+            </div>
+        </div>
+
         <!-- CANVAS VIEW MODE -->
         <div v-show="viewMode === 'canvas'" class="topology-canvas-container position-relative rounded-4 overflow-hidden border border-secondary shadow-sm">
             <!-- Canvas HUD Toolbar (Zoom, Search, Filter) -->
@@ -303,16 +379,17 @@
                                 'is-selected': selectedNode && selectedNode.id === node.id,
                                 'is-highlighted-downstream': highlightedDownstreamIds.includes(node.id),
                                 'is-highlighted-upstream': highlightedUpstreamIds.includes(node.id),
-                                'is-down': node.status === 'DOWN',
-                                'is-healthy': node.status === 'UP',
-                                'is-warning': node.status === 'PENDING' || node.status === 'DEGRADED'
+                                'is-down': node.status === 'DOWN' || node.status === 'OFFLINE',
+                                'is-healthy': node.status === 'UP' || node.status === 'ONLINE',
+                                'is-warning': node.status === 'PENDING' || node.status === 'DEGRADED' || node.status === 'WARNING',
+                                'is-maintenance': node.status === 'MAINTENANCE' || node.status === 'PAUSED'
                             }"
                             :transform="`translate(${node.x}, ${node.y})`"
                             @mousedown.stop="handleNodeMouseDown($event, node)"
                             @click.stop="selectNode(node)"
                         >
                             <!-- Animated Pulse Glow Ring for Outages -->
-                            <circle v-if="node.status === 'DOWN'" cx="90" cy="38" r="44" class="outage-pulse-circle" />
+                            <circle v-if="node.status === 'DOWN' || node.status === 'OFFLINE'" cx="90" cy="38" r="44" class="outage-pulse-circle" />
 
                             <!-- Main Node Card Box -->
                             <rect x="0" y="0" width="180" height="76" rx="10" class="node-box" />
@@ -326,7 +403,7 @@
                             </text>
 
                             <!-- Status Dot Beacon -->
-                            <circle cx="50" cy="20" r="5" class="status-beacon" :class="'beacon-' + node.status.toLowerCase()" />
+                            <circle cx="50" cy="20" r="5" class="status-beacon" :class="'beacon-' + getNodeBeaconClass(node.status)" />
 
                             <!-- Node Info: Name & Target/IP -->
                             <text x="68" y="32" class="node-name-text">
@@ -351,18 +428,43 @@
                 </svg>
 
                 <!-- Floating Canvas Minimap / Status Overview (Dude style) -->
-                <div class="canvas-legend p-2 rounded-3 shadow-sm border border-secondary bg-surface position-absolute bottom-0 start-0 m-3">
-                    <div class="small fw-bold text-foreground mb-1 d-flex align-items-center gap-2 flex-wrap">
-                        <span class="status-indicator-dot dot-green"></span>
-                        <span>Online: {{ onlineNodeCount }}</span>
-                        <span class="status-indicator-dot dot-red ms-2"></span>
-                        <span>Down: {{ downNodeCount }}</span>
-                        <span v-if="splittersList.length > 0" class="badge bg-secondary ms-2 font-monospace">
+                <div class="canvas-legend p-2 px-3 rounded-3 shadow-sm border border-secondary bg-surface position-absolute bottom-0 start-0 m-3">
+                    <div class="small fw-bold text-foreground mb-1 d-flex align-items-center gap-3 flex-wrap">
+                        <span class="d-inline-flex align-items-center gap-1">
+                            <span class="status-indicator-dot dot-green"></span>
+                            <span>Online: <strong>{{ onlineNodeCount }}</strong></span>
+                        </span>
+                        <span class="d-inline-flex align-items-center gap-1">
+                            <span class="status-indicator-dot dot-red"></span>
+                            <span>Down: <strong>{{ downNodeCount }}</strong></span>
+                        </span>
+                        <span v-if="warningNodeCount > 0" class="d-inline-flex align-items-center gap-1">
+                            <span class="status-indicator-dot dot-amber"></span>
+                            <span>Warning: <strong>{{ warningNodeCount }}</strong></span>
+                        </span>
+                        <span v-if="maintenanceNodeCount > 0" class="d-inline-flex align-items-center gap-1">
+                            <span class="status-indicator-dot dot-blue"></span>
+                            <span>Maint: <strong>{{ maintenanceNodeCount }}</strong></span>
+                        </span>
+                        <span v-if="unknownNodeCount > 0" class="d-inline-flex align-items-center gap-1">
+                            <span class="status-indicator-dot dot-gray"></span>
+                            <span>Unknown: <strong>{{ unknownNodeCount }}</strong></span>
+                        </span>
+                        <span class="badge bg-secondary font-monospace">
+                            Nodes: {{ totalNodeCount }}
+                        </span>
+                        <span class="badge bg-secondary font-monospace">
+                            Links: {{ totalLinkCount }} <span v-if="downLinkCount > 0" class="text-danger fw-bold">({{ downLinkCount }} Down)</span>
+                        </span>
+                        <span v-if="affectedNodeCount > 0" class="badge bg-danger font-monospace">
+                            ⚠️ {{ affectedNodeCount }} Inferred Impacted
+                        </span>
+                        <span v-if="splittersList.length > 0" class="badge bg-secondary font-monospace">
                             🔱 {{ splittersList.length }} Splitters
                         </span>
                     </div>
                     <div class="text-muted small" style="font-size: 0.68rem;">
-                        Drag nodes to move · Scroll to zoom · Click node or link to inspect
+                        Total = Online ({{ onlineNodeCount }}) + Down ({{ downNodeCount }})<span v-if="warningNodeCount > 0"> + Warning ({{ warningNodeCount }})</span><span v-if="maintenanceNodeCount > 0"> + Maint ({{ maintenanceNodeCount }})</span><span v-if="unknownNodeCount > 0"> + Unknown ({{ unknownNodeCount }})</span> · Drag nodes to move · Scroll to zoom
                     </div>
                 </div>
 
@@ -426,44 +528,164 @@
                         <div class="p-2 rounded bg-card border border-secondary">
                             <div class="fw-bold fs-6 text-foreground text-truncate">{{ selectedNode.name }}</div>
                             <div class="text-muted font-monospace">{{ selectedNode.ip || 'No IP configured' }}</div>
-                            <div class="mt-2 d-flex align-items-center gap-2">
-                                <span class="badge" :class="selectedNode.status === 'UP' ? 'bg-success' : (selectedNode.status === 'DOWN' ? 'bg-danger' : 'bg-warning text-dark')">
+                            <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                                <span class="badge" :class="selectedNode.status === 'UP' || selectedNode.status === 'ONLINE' ? 'bg-success' : (selectedNode.status === 'DOWN' || selectedNode.status === 'OFFLINE' ? 'bg-danger' : 'bg-warning text-dark')">
                                     {{ selectedNode.status }}
                                 </span>
                                 <span class="badge bg-secondary font-monospace">{{ selectedNode.type }}</span>
                                 <span v-if="selectedNode.ping" class="badge bg-info font-monospace">{{ selectedNode.ping }}</span>
+                                <span v-if="selectedNode.site_name" class="badge bg-dark border border-secondary font-monospace">{{ selectedNode.site_name }}</span>
                             </div>
                         </div>
 
-                        <!-- Upstream / Downstream Connections -->
-                        <div class="p-2 rounded bg-card border border-secondary">
-                            <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Topology Connections</div>
-                            <div class="mb-2">
-                                <span class="text-muted d-block small">Upstream Parents:</span>
-                                <div v-if="getNodeParents(selectedNode.id).length === 0" class="text-muted fst-italic">None (Root Core)</div>
-                                <div v-for="p in getNodeParents(selectedNode.id)" :key="p.id" class="text-info fw-bold font-monospace cursor-pointer" @click="selectNode(p)">
-                                    ↑ {{ p.name }} ({{ p.type }})
+                        <!-- Inspector Tab Selector -->
+                        <div class="btn-group btn-group-sm w-100" role="group">
+                            <button
+                                type="button"
+                                class="btn btn-sm"
+                                :class="inspectorTab === 'overview' ? 'btn-secondary fw-bold text-foreground' : 'btn-outline-secondary text-muted'"
+                                @click="inspectorTab = 'overview'"
+                            >
+                                Overview
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-sm"
+                                :class="inspectorTab === 'telemetry' ? 'btn-secondary fw-bold text-foreground' : 'btn-outline-secondary text-muted'"
+                                @click="inspectorTab = 'telemetry'"
+                            >
+                                Telemetry
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-sm"
+                                :class="inspectorTab === 'topology' ? 'btn-secondary fw-bold text-foreground' : 'btn-outline-secondary text-muted'"
+                                @click="inspectorTab = 'topology'"
+                            >
+                                Links
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-sm"
+                                :class="inspectorTab === 'alerts' ? 'btn-secondary fw-bold text-foreground' : 'btn-outline-secondary text-muted'"
+                                @click="inspectorTab = 'alerts'"
+                            >
+                                Alerts
+                            </button>
+                        </div>
+
+                        <!-- TAB: OVERVIEW -->
+                        <div v-show="inspectorTab === 'overview'" class="d-flex flex-column gap-2">
+                            <div class="p-2 rounded bg-card border border-secondary">
+                                <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Target Profile</div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Target Host:</span>
+                                    <span class="text-foreground font-monospace">{{ selectedNode.ip }}</span>
                                 </div>
-                            </div>
-                            <div>
-                                <span class="text-muted d-block small">Downstream Children:</span>
-                                <div v-if="getNodeChildren(selectedNode.id).length === 0" class="text-muted fst-italic">None (Edge Device)</div>
-                                <div v-for="c in getNodeChildren(selectedNode.id)" :key="c.id" class="text-warning fw-bold font-monospace cursor-pointer" @click="selectNode(c)">
-                                    ↓ {{ c.name }} ({{ c.type }})
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Node Category:</span>
+                                    <span class="text-info fw-bold">{{ selectedNode.type }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Current Latency:</span>
+                                    <span class="text-success font-monospace fw-bold">{{ selectedNode.ping || 'N/A' }}</span>
+                                </div>
+                                <div v-if="selectedNode.last_checked" class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted">Last Verified:</span>
+                                    <span class="text-foreground font-monospace">{{ selectedNode.last_checked }}</span>
+                                </div>
+                                <div v-if="selectedNode.probe_id" class="d-flex justify-content-between">
+                                    <span class="text-muted">Assigned Probe:</span>
+                                    <span class="text-warning font-monospace">Probe #{{ selectedNode.probe_id }}</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Dependency Tracing Buttons -->
-                        <div class="p-2 rounded bg-card border border-secondary">
-                            <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Fault Impact Tracing</div>
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-info flex-fill" @click="traceUpstream(selectedNode.id)">
-                                    Trace Upstream
-                                </button>
-                                <button class="btn btn-sm btn-outline-warning flex-fill" @click="traceDownstream(selectedNode.id)">
-                                    Trace Impact
-                                </button>
+                        <!-- TAB: TELEMETRY -->
+                        <div v-show="inspectorTab === 'telemetry'" class="d-flex flex-column gap-2">
+                            <div class="p-2 rounded bg-card border border-secondary">
+                                <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Active Check Telemetry</div>
+                                <div v-if="selectedNode.monitors && selectedNode.monitors.length > 0">
+                                    <div v-for="m in selectedNode.monitors" :key="m.id" class="border-bottom border-secondary pb-2 mb-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="fw-bold text-foreground">{{ m.name }}</span>
+                                            <span class="badge" :class="m.status === 'UP' ? 'bg-success' : (m.status === 'DOWN' ? 'bg-danger' : 'bg-warning text-dark')">
+                                                {{ m.status }}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex justify-content-between text-muted small font-monospace">
+                                            <span>Type: {{ (m.type || 'PING').toUpperCase() }}</span>
+                                            <span>{{ m.ping != null ? Math.round(m.ping) + 'ms' : 'N/A' }}</span>
+                                        </div>
+                                        <div v-if="m.msg" class="text-secondary small font-monospace mt-1 text-truncate">
+                                            {{ m.msg }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-else-if="selectedNode.monitor_id" class="text-muted small">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span>Primary Monitor ID:</span>
+                                        <span class="font-monospace text-foreground">#{{ selectedNode.monitor_id }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span>Ping:</span>
+                                        <span class="font-monospace text-success">{{ selectedNode.ping }}</span>
+                                    </div>
+                                </div>
+                                <div v-else class="text-muted fst-italic py-2 text-center">
+                                    No direct monitor linked (Calculated from Infrastructure)
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- TAB: TOPOLOGY LINKS -->
+                        <div v-show="inspectorTab === 'topology'" class="d-flex flex-column gap-2">
+                            <div class="p-2 rounded bg-card border border-secondary">
+                                <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Topology Connections</div>
+                                <div class="mb-2">
+                                    <span class="text-muted d-block small">Upstream Parents:</span>
+                                    <div v-if="getNodeParents(selectedNode.id).length === 0" class="text-muted fst-italic">None (Root Core)</div>
+                                    <div v-for="p in getNodeParents(selectedNode.id)" :key="p.id" class="text-info fw-bold font-monospace cursor-pointer" @click="selectNode(p)">
+                                        ↑ {{ p.name }} ({{ p.type }})
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="text-muted d-block small">Downstream Children:</span>
+                                    <div v-if="getNodeChildren(selectedNode.id).length === 0" class="text-muted fst-italic">None (Edge Device)</div>
+                                    <div v-for="c in getNodeChildren(selectedNode.id)" :key="c.id" class="text-warning fw-bold font-monospace cursor-pointer" @click="selectNode(c)">
+                                        ↓ {{ c.name }} ({{ c.type }})
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Dependency Tracing Buttons -->
+                            <div class="p-2 rounded bg-card border border-secondary">
+                                <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Fault Impact Tracing</div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-info flex-fill" @click="traceUpstream(selectedNode.id)">
+                                        Trace Upstream
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning flex-fill" @click="traceDownstream(selectedNode.id)">
+                                        Trace Impact
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- TAB: ALERTS / INCIDENTS -->
+                        <div v-show="inspectorTab === 'alerts'" class="d-flex flex-column gap-2">
+                            <div class="p-2 rounded bg-card border border-secondary">
+                                <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Active Alarms & Incidents</div>
+                                <div v-if="activeAlertsList.filter(a => a.target_id === selectedNode.id || a.target_id === selectedNode.monitor_id).length > 0">
+                                    <div v-for="a in activeAlertsList.filter(a => a.target_id === selectedNode.id || a.target_id === selectedNode.monitor_id)" :key="a.id" class="alert alert-danger p-2 mb-2 small">
+                                        <div class="fw-bold">{{ a.metric || 'Alert' }}: {{ a.state }}</div>
+                                        <div class="small">{{ a.message }}</div>
+                                    </div>
+                                </div>
+                                <div v-else class="text-success small py-2 text-center">
+                                    <font-awesome-icon icon="check-circle" class="me-1" />
+                                    No active alarms for this target
+                                </div>
                             </div>
                         </div>
 
@@ -1699,6 +1921,16 @@ export default {
             highlightedDownstreamIds: [],
             highlightedUpstreamIds: [],
 
+            // Real-Time Health & Synchronization state
+            inspectorTab: "overview", // 'overview' | 'telemetry' | 'topology' | 'alerts'
+            activeAlertsList: [],
+            activeIncidentsList: [],
+            isRefreshing: false,
+            lastSyncTime: Date.now(),
+            syncSecondsAgo: 0,
+            syncTimer: null,
+            fallbackPollTimer: null,
+
             // Canvas Pan & Zoom State
             zoomLevel: 1.0,
             panX: 80,
@@ -1835,10 +2067,77 @@ export default {
             return this.devices;
         },
         onlineNodeCount() {
-            return this.nodes.filter((n) => n.status === "UP").length;
+            return this.filteredNodes.filter((n) => n.status === "UP" || n.status === "ONLINE").length;
         },
         downNodeCount() {
-            return this.nodes.filter((n) => n.status === "DOWN").length;
+            return this.filteredNodes.filter((n) => n.status === "DOWN" || n.status === "OFFLINE").length;
+        },
+        warningNodeCount() {
+            return this.filteredNodes.filter((n) => n.status === "PENDING" || n.status === "WARNING" || n.status === "DEGRADED").length;
+        },
+        maintenanceNodeCount() {
+            return this.filteredNodes.filter((n) => n.status === "MAINTENANCE" || n.status === "PAUSED").length;
+        },
+        unknownNodeCount() {
+            return this.filteredNodes.filter((n) => !["UP", "ONLINE", "DOWN", "OFFLINE", "PENDING", "WARNING", "DEGRADED", "MAINTENANCE", "PAUSED"].includes(n.status)).length;
+        },
+        totalNodeCount() {
+            return this.filteredNodes.length;
+        },
+        totalLinkCount() {
+            return this.dependencyList.length;
+        },
+        downLinkCount() {
+            return this.dependencyList.filter((d) => {
+                const parent = this.nodes.find((n) => n.id === d.parent_device_id);
+                const child = this.nodes.find((n) => n.id === d.child_device_id);
+                return (parent && (parent.status === "DOWN" || parent.status === "OFFLINE")) ||
+                       (child && (child.status === "DOWN" || child.status === "OFFLINE")) ||
+                       d.status === "down";
+            }).length;
+        },
+        affectedNodeCount() {
+            const downParentIds = this.nodes
+                .filter((n) => n.status === "DOWN" || n.status === "OFFLINE")
+                .map((n) => n.id);
+            const affected = new Set();
+            for (const pId of downParentIds) {
+                const queue = [pId];
+                while (queue.length > 0) {
+                    const cur = queue.shift();
+                    const children = this.dependencyList
+                        .filter((d) => d.parent_device_id === cur)
+                        .map((d) => d.child_device_id);
+                    for (const c of children) {
+                        if (!affected.has(c)) {
+                            affected.add(c);
+                            queue.push(c);
+                        }
+                    }
+                }
+            }
+            return affected.size;
+        },
+        syncStatusText() {
+            if (!this.$root.socket || !this.$root.socket.connected) return "Reconnecting";
+            if (this.syncSecondsAgo > 60) return "Polling Fallback";
+            return "Live";
+        },
+        syncIndicatorClass() {
+            if (!this.$root.socket || !this.$root.socket.connected) return "dot-red";
+            if (this.syncSecondsAgo > 60) return "dot-amber";
+            return "dot-green";
+        },
+        lastSyncTimeAgo() {
+            if (this.syncSecondsAgo < 5) return "Just now";
+            if (this.syncSecondsAgo < 60) return `${this.syncSecondsAgo}s ago`;
+            return `${Math.floor(this.syncSecondsAgo / 60)}m ago`;
+        },
+        onlineProbeCount() {
+            return (this.probes || []).filter((p) => p.status === "online").length;
+        },
+        offlineProbeCount() {
+            return (this.probes || []).filter((p) => p.status === "offline").length;
         },
         filteredNodes() {
             return this.nodes.filter((n) => {
@@ -1942,11 +2241,49 @@ export default {
     },
     mounted() {
         this.loadData();
+        this.syncTimer = setInterval(() => {
+            this.syncSecondsAgo = Math.max(0, Math.round((Date.now() - this.lastSyncTime) / 1000));
+        }, 1000);
+
+        this.fallbackPollTimer = setInterval(() => {
+            if (!this.$root.socket || !this.$root.socket.connected || this.syncSecondsAgo > 45) {
+                this.loadData();
+            }
+        }, 30000);
+
+        const socket = this.$root.getSocket();
+        if (socket) {
+            this.onSocketConnect = () => {
+                this.loadData();
+            };
+            this.onHeartbeat = () => {
+                this.syncNodesWithLiveTelemetry();
+            };
+            this.onUpdateAlerts = () => {
+                this.loadAlertsAndIncidents();
+            };
+            socket.on("connect", this.onSocketConnect);
+            socket.on("heartbeat", this.onHeartbeat);
+            socket.on("updateActiveAlerts", this.onUpdateAlerts);
+            socket.on("updateProbeList", this.loadData);
+        }
+    },
+    beforeUnmount() {
+        if (this.syncTimer) clearInterval(this.syncTimer);
+        if (this.fallbackPollTimer) clearInterval(this.fallbackPollTimer);
+        const socket = this.$root.getSocket();
+        if (socket) {
+            if (this.onSocketConnect) socket.off("connect", this.onSocketConnect);
+            if (this.onHeartbeat) socket.off("heartbeat", this.onHeartbeat);
+            if (this.onUpdateAlerts) socket.off("updateActiveAlerts", this.onUpdateAlerts);
+            socket.off("updateProbeList", this.loadData);
+        }
     },
     methods: {
         loadData() {
             const socket = this.$root.getSocket();
             if (!socket) return;
+            this.isRefreshing = true;
 
             // Load devices
             socket.emit("getDeviceList", (res) => {
@@ -1954,6 +2291,7 @@ export default {
                     this.devices = res.devices || [];
                 }
                 this.buildNetworkNodes();
+                this.syncNodesWithLiveTelemetry();
             });
 
             // Load probes
@@ -2000,8 +2338,28 @@ export default {
                 }
             });
 
+            // Load active alerts & incidents
+            this.loadAlertsAndIncidents();
+
+            this.lastSyncTime = Date.now();
+            this.syncSecondsAgo = 0;
+            this.isRefreshing = false;
             this.buildNetworkNodes();
             this.runOpticalCalculation();
+        },
+        loadAlertsAndIncidents() {
+            const socket = this.$root.getSocket();
+            if (!socket) return;
+            socket.emit("getActiveAlerts", (res) => {
+                if (res && res.ok) {
+                    this.activeAlertsList = res.alerts || [];
+                }
+            });
+            socket.emit("getIncidents", { status: "OPEN" }, (res) => {
+                if (res && res.ok) {
+                    this.activeIncidentsList = res.incidents || [];
+                }
+            });
         },
         loadAllDependencies() {
             this.$root.getSocket().emit("getAllDependencies", (res) => {
@@ -2016,38 +2374,74 @@ export default {
             let initialList = [];
 
             if (this.devices && this.devices.length > 0) {
-                initialList = this.devices.map((d) => ({
-                    id: d.id,
-                    name: d.name,
-                    ip: d.ip_address || d.hostname || "10.0.0.1",
-                    type: (d.device_type || "ROUTER").toUpperCase(),
-                    status: (d.status || "UP").toUpperCase(),
-                    site_id: d.site_id,
-                    ping: "1.2ms",
-                    monitor_id: null,
-                    x: 100,
-                    y: 100,
-                }));
+                initialList = this.devices.map((d) => {
+                    const primaryMonId = d.monitor_id || (d.monitors && d.monitors[0] ? d.monitors[0].id : null);
+                    const mon = primaryMonId ? (this.$root.monitorList || {})[primaryMonId] : null;
+                    const beat = primaryMonId ? (this.$root.lastHeartbeatList || {})[primaryMonId] : null;
+
+                    let st = (d.status || "UP").toUpperCase();
+                    if (st === "ONLINE") st = "UP";
+                    if (st === "OFFLINE") st = "DOWN";
+
+                    let pingDisplay = d.ping || "1.2ms";
+                    if (beat) {
+                        if (beat.status === 0) st = "DOWN";
+                        else if (beat.status === 1) st = "UP";
+                        else if (beat.status === 2) st = "PENDING";
+                        else if (beat.status === 3) st = "MAINTENANCE";
+                        if (beat.ping != null) {
+                            pingDisplay = `${Math.round(beat.ping)}ms`;
+                        }
+                    }
+
+                    let nodeType = (d.device_type || "ROUTER").toUpperCase();
+                    if (mon && (!d.device_type || d.device_type === "Other" || d.device_type === "Server")) {
+                        nodeType = this.inferNodeType(mon);
+                    }
+
+                    return {
+                        id: d.id,
+                        name: d.name,
+                        ip: d.ip_address || d.hostname || (mon ? mon.hostname || mon.url : "10.0.0.1"),
+                        type: nodeType,
+                        status: st,
+                        site_id: d.site_id,
+                        site_name: d.site_name || null,
+                        ping: pingDisplay,
+                        monitor_id: primaryMonId,
+                        monitors: d.monitors || [],
+                        last_checked: d.last_checked || (beat ? beat.time : null),
+                        x: 100,
+                        y: 100,
+                    };
+                });
             }
 
             // Also include monitors from monitorList if not already represented
             const monList = Object.values(this.$root.monitorList || {});
             for (const m of monList) {
-                const alreadyIncluded = initialList.some((n) => n.name === m.name || n.monitor_id === m.id);
+                const alreadyIncluded = initialList.some((n) => n.name === m.name || n.monitor_id === m.id || n.id === m.id);
                 if (!alreadyIncluded) {
                     const beat = (this.$root.lastHeartbeatList || {})[m.id];
                     let st = "UP";
-                    if (beat && beat.status === 0) st = "DOWN";
-                    else if (beat && beat.status === 2) st = "PENDING";
+                    if (m.active === 0) st = "PAUSED";
+                    else if (beat) {
+                        if (beat.status === 0) st = "DOWN";
+                        else if (beat.status === 1) st = "UP";
+                        else if (beat.status === 2) st = "PENDING";
+                        else if (beat.status === 3) st = "MAINTENANCE";
+                    }
 
                     initialList.push({
                         id: m.id,
                         name: m.name,
-                        ip: m.url || m.hostname || "127.0.0.1",
+                        ip: m.hostname || m.url || "127.0.0.1",
                         type: this.inferNodeType(m),
                         status: st,
-                        ping: beat && beat.ping ? `${Math.round(beat.ping)}ms` : "1.8ms",
+                        ping: beat && beat.ping != null ? `${Math.round(beat.ping)}ms` : "1.8ms",
                         monitor_id: m.id,
+                        monitors: [{ id: m.id, name: m.name, type: m.type, hostname: m.hostname, port: m.port, url: m.url, active: m.active }],
+                        last_checked: beat ? beat.time : null,
                         x: 100,
                         y: 100,
                     });
@@ -2107,19 +2501,46 @@ export default {
             });
         },
         syncNodesWithLiveTelemetry() {
+            let changed = false;
             for (const node of this.nodes) {
-                if (node.monitor_id) {
-                    const beat = (this.$root.lastHeartbeatList || {})[node.monitor_id];
+                const monId = node.monitor_id || (node.monitors && node.monitors[0] ? node.monitors[0].id : null);
+                if (monId) {
+                    const beat = (this.$root.lastHeartbeatList || {})[monId];
                     if (beat) {
-                        if (beat.status === 0) node.status = "DOWN";
-                        else if (beat.status === 1) node.status = "UP";
-                        else if (beat.status === 2) node.status = "PENDING";
-                        if (beat.ping) {
-                            node.ping = `${Math.round(beat.ping)}ms`;
+                        let newStatus = node.status;
+                        if (beat.status === 0) newStatus = "DOWN";
+                        else if (beat.status === 1) newStatus = "UP";
+                        else if (beat.status === 2) newStatus = "PENDING";
+                        else if (beat.status === 3) newStatus = "MAINTENANCE";
+
+                        if (node.status !== newStatus) {
+                            node.status = newStatus;
+                            changed = true;
+                        }
+                        if (beat.ping != null) {
+                            const newPing = `${Math.round(beat.ping)}ms`;
+                            if (node.ping !== newPing) {
+                                node.ping = newPing;
+                                changed = true;
+                            }
+                        }
+                        if (beat.time) {
+                            node.last_checked = beat.time;
                         }
                     }
                 }
             }
+            if (changed) {
+                this.nodes = [...this.nodes];
+            }
+        },
+        getNodeBeaconClass(status) {
+            const s = (status || "").toUpperCase();
+            if (s === "UP" || s === "ONLINE") return "up";
+            if (s === "DOWN" || s === "OFFLINE") return "down";
+            if (s === "PENDING" || s === "DEGRADED" || s === "WARNING") return "pending";
+            if (s === "MAINTENANCE" || s === "PAUSED") return "maintenance";
+            return "unknown";
         },
         inferNodeType(monitor) {
             const name = (monitor.name || "").toLowerCase();
@@ -2886,6 +3307,41 @@ export default {
 
 .dot-red {
     background-color: #EF4444;
+}
+
+.dot-amber {
+    background-color: #F59E0B;
+}
+
+.dot-blue {
+    background-color: #3B82F6;
+}
+
+.dot-gray {
+    background-color: #6B7280;
+}
+
+.beacon-up,
+.beacon-online {
+    fill: #10B981;
+}
+
+.beacon-down,
+.beacon-offline {
+    fill: #EF4444;
+}
+
+.beacon-pending,
+.beacon-warning {
+    fill: #F59E0B;
+}
+
+.beacon-maintenance {
+    fill: #3B82F6;
+}
+
+.beacon-unknown {
+    fill: #6B7280;
 }
 
 .noc-create-btn {
