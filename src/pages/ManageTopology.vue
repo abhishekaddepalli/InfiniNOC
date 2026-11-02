@@ -1162,6 +1162,7 @@
                             <div class="col-6">
                                 <label class="form-label text-foreground small fw-bold text-uppercase">Ratio</label>
                                 <select v-model="newSplitter.splitter_type" class="form-select noc-input">
+                                    <option value="1:2">1:2 (3.5 dB)</option>
                                     <option value="1:4">1:4 (6.5 dB)</option>
                                     <option value="1:8">1:8 (10.5 dB)</option>
                                     <option value="1:16">1:16 (13.5 dB)</option>
@@ -1793,10 +1794,34 @@ export default {
             return this.activeOrgObj ? this.activeOrgObj.name : "Default Organization";
         },
         selectableDevices() {
-            return this.devices.filter((d) => {
-                const id = parseInt(d.id, 10);
-                return !isNaN(id) && id > 0;
-            });
+            const list = [];
+            if (this.devices && this.devices.length > 0) {
+                for (const d of this.devices) {
+                    const id = parseInt(d.id, 10);
+                    if (!isNaN(id) && id > 0) {
+                        list.push({
+                            id: d.id,
+                            name: d.name,
+                            ip: d.ip_address || d.hostname || "127.0.0.1",
+                            type: d.device_type || "ROUTER"
+                        });
+                    }
+                }
+            }
+            // Also include monitors from monitorList if not already in list
+            const monList = Object.values(this.$root.monitorList || {});
+            for (const m of monList) {
+                const id = parseInt(m.id, 10);
+                if (!isNaN(id) && id > 0 && !list.some((item) => item.name === m.name)) {
+                    list.push({
+                        id: m.id,
+                        name: m.name,
+                        ip: m.hostname || m.url || "127.0.0.1",
+                        type: this.inferNodeType(m)
+                    });
+                }
+            }
+            return list;
         },
         isValidDependency() {
             const p = parseInt(this.newDep.parentDeviceId, 10);
@@ -1898,6 +1923,7 @@ export default {
         "$root.monitorList": {
             deep: true,
             handler() {
+                this.buildNetworkNodes();
                 this.syncNodesWithLiveTelemetry();
             },
         },
@@ -1907,51 +1933,75 @@ export default {
                 this.syncNodesWithLiveTelemetry();
             },
         },
+        devices: {
+            deep: true,
+            handler() {
+                this.buildNetworkNodes();
+            },
+        },
     },
     mounted() {
         this.loadData();
     },
     methods: {
         loadData() {
+            const socket = this.$root.getSocket();
+            if (!socket) return;
+
             // Load devices
-            this.$root.getSocket().emit("getDeviceList", (res) => {
+            socket.emit("getDeviceList", (res) => {
                 if (res && res.ok) {
                     this.devices = res.devices || [];
                 }
-                // Load probes
-                this.$root.getSocket().emit("getProbeList", (pRes) => {
-                    if (pRes && pRes.ok) {
-                        this.probes = pRes.probes || [];
-                    }
-                    // Load splitters
-                    this.$root.getSocket().emit("getFtthSplitters", (sRes) => {
-                        if (sRes && sRes.ok) {
-                            this.splittersList = sRes.splitters || [];
-                        }
-                        // Load cables
-                        this.$root.getSocket().emit("getFtthCables", (cRes) => {
-                            if (cRes && cRes.ok) {
-                                this.cablesList = cRes.cables || [];
-                            }
-                            // Load closures
-                            this.$root.getSocket().emit("getFtthClosures", (clRes) => {
-                                if (clRes && clRes.ok) {
-                                    this.closuresList = clRes.closures || [];
-                                }
-                                // Load active fiber faults
-                                this.$root.getSocket().emit("getActiveFiberFaults", (fRes) => {
-                                    if (fRes && fRes.ok) {
-                                        this.activeFaults = fRes.faults || [];
-                                    }
-                                    this.buildNetworkNodes();
-                                    this.loadAllDependencies();
-                                    this.runOpticalCalculation();
-                                });
-                            });
-                        });
-                    });
-                });
+                this.buildNetworkNodes();
             });
+
+            // Load probes
+            socket.emit("getProbeList", (pRes) => {
+                if (pRes && pRes.ok) {
+                    this.probes = pRes.probes || [];
+                }
+                this.buildNetworkNodes();
+            });
+
+            // Load splitters
+            socket.emit("getFtthSplitters", (sRes) => {
+                if (sRes && sRes.ok) {
+                    this.splittersList = sRes.splitters || [];
+                }
+                this.buildNetworkNodes();
+            });
+
+            // Load cables
+            socket.emit("getFtthCables", (cRes) => {
+                if (cRes && cRes.ok) {
+                    this.cablesList = cRes.cables || [];
+                }
+            });
+
+            // Load closures
+            socket.emit("getFtthClosures", (clRes) => {
+                if (clRes && clRes.ok) {
+                    this.closuresList = clRes.closures || [];
+                }
+            });
+
+            // Load dependencies / links
+            socket.emit("getAllDependencies", (res) => {
+                if (res && res.ok) {
+                    this.dependencyList = res.links || [];
+                }
+            });
+
+            // Load active fiber faults
+            socket.emit("getActiveFiberFaults", (fRes) => {
+                if (fRes && fRes.ok) {
+                    this.activeFaults = fRes.faults || [];
+                }
+            });
+
+            this.buildNetworkNodes();
+            this.runOpticalCalculation();
         },
         loadAllDependencies() {
             this.$root.getSocket().emit("getAllDependencies", (res) => {
@@ -1965,11 +2015,11 @@ export default {
             const savedPositions = this.loadSavedPositions(orgId);
             let initialList = [];
 
-            if (this.devices.length > 0) {
+            if (this.devices && this.devices.length > 0) {
                 initialList = this.devices.map((d) => ({
                     id: d.id,
                     name: d.name,
-                    ip: d.ip_address || "10.0.0.1",
+                    ip: d.ip_address || d.hostname || "10.0.0.1",
                     type: (d.device_type || "ROUTER").toUpperCase(),
                     status: (d.status || "UP").toUpperCase(),
                     site_id: d.site_id,
@@ -1978,27 +2028,30 @@ export default {
                     x: 100,
                     y: 100,
                 }));
-            } else {
-                // Fallback to monitors
-                const monList = Object.values(this.$root.monitorList || {});
-                initialList = monList.map((m) => {
+            }
+
+            // Also include monitors from monitorList if not already represented
+            const monList = Object.values(this.$root.monitorList || {});
+            for (const m of monList) {
+                const alreadyIncluded = initialList.some((n) => n.name === m.name || n.monitor_id === m.id);
+                if (!alreadyIncluded) {
                     const beat = (this.$root.lastHeartbeatList || {})[m.id];
                     let st = "UP";
                     if (beat && beat.status === 0) st = "DOWN";
                     else if (beat && beat.status === 2) st = "PENDING";
 
-                    return {
-                        id: `mon-${m.id}`,
+                    initialList.push({
+                        id: m.id,
                         name: m.name,
-                        ip: m.url || m.hostname || "1.1.1.1",
+                        ip: m.url || m.hostname || "127.0.0.1",
                         type: this.inferNodeType(m),
                         status: st,
-                        ping: beat && beat.ping ? `${Math.round(beat.ping)}ms` : "2.1ms",
+                        ping: beat && beat.ping ? `${Math.round(beat.ping)}ms` : "1.8ms",
                         monitor_id: m.id,
                         x: 100,
                         y: 100,
-                    };
-                });
+                    });
+                }
             }
 
             // Append splitters

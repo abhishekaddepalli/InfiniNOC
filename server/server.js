@@ -43,7 +43,7 @@ if (!semver.satisfies(nodeVersion, requiredNodeVersions)) {
 }
 
 const args = require("args-parser")(process.argv);
-const { sleep, log, getRandomInt, genSecret, isDev } = require("../src/util");
+const { sleep, log, getRandomInt, genSecret, isDev, DOWN, UP, PENDING } = require("../src/util");
 const config = require("./config");
 const { RBAC } = require("./middleware/rbac");
 const SuperAdmin = require("./model/super-admin");
@@ -153,6 +153,7 @@ const {
     SHAKE256_LENGTH,
     allowDevAllOrigin,
     printServerUrls,
+    toSqlDatetime,
 } = require("./util-server");
 
 log.debug("server", "Importing Notification");
@@ -4745,7 +4746,7 @@ async function startMonitors() {
                     [orgId, monitor.id]
                 );
                 if (!existingAlert) {
-                    const isoNow = new Date().toISOString();
+                    const isoNow = toSqlDatetime();
                     const alertMsg = `Monitor #${monitor.id} (${monitor.name}) is DOWN: ${lastBeat.msg || "Target unreachable"}`;
                     await R.exec(
                         `INSERT INTO active_alert (

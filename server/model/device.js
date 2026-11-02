@@ -1,5 +1,6 @@
 const { R } = require("redbean-node");
 const { encryptSecret } = require("./credential-crypto");
+const { toSqlDatetime } = require("../util-server");
 
 class Device {
     /**
@@ -11,6 +12,53 @@ class Device {
      */
     static async getDeviceList(organizationId, siteId, deviceType) {
         const orgId = organizationId || 1;
+        const isoNow = toSqlDatetime();
+
+        // Auto-bridge monitors into device table if they are not yet registered
+        try {
+            const unlinkedMonitors = await R.getAll(
+                `SELECT m.id, m.name, m.hostname, m.port, m.type, m.user_id, m.organization_id
+                FROM monitor m
+                LEFT JOIN device_monitor dm ON m.id = dm.monitor_id
+                WHERE dm.id IS NULL AND (m.organization_id = ? OR (m.organization_id IS NULL AND ? = 1))`,
+                [orgId, orgId]
+            );
+
+            for (const m of unlinkedMonitors) {
+                let cleanDevType = "Server";
+                const lowerName = (m.name || "").toLowerCase();
+                const lowerType = (m.type || "").toLowerCase();
+                if (lowerName.includes("router") || lowerName.includes("core") || lowerName.includes("wan") || lowerName.includes("gateway")) cleanDevType = "Router";
+                else if (lowerName.includes("switch") || lowerName.includes("agg")) cleanDevType = "Switch";
+                else if (lowerName.includes("olt") || lowerName.includes("gpon")) cleanDevType = "OLT";
+                else if (lowerName.includes("onu") || lowerName.includes("ont")) cleanDevType = "Other";
+                else if (lowerType === "ping") cleanDevType = "Router";
+
+                const hostOrIp = m.hostname || "127.0.0.1";
+
+                await R.exec(
+                    `INSERT INTO device (
+                        organization_id, name, hostname, ip_address, device_type, status, tags, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 'online', '[]', ?, ?)`,
+                    [orgId, m.name, hostOrIp, hostOrIp, cleanDevType, isoNow, isoNow]
+                );
+
+                const newDevId = await R.getCell(
+                    "SELECT MAX(id) FROM device WHERE organization_id = ?",
+                    [orgId]
+                );
+
+                if (newDevId) {
+                    await R.exec(
+                        "INSERT INTO device_monitor (device_id, monitor_id, created_at) VALUES (?, ?, ?)",
+                        [newDevId, m.id, isoNow]
+                    );
+                }
+            }
+        } catch (e) {
+            // Non-critical auto-bridge error catch
+        }
+
         let sql = "SELECT device.*, site.name as site_name FROM device LEFT JOIN site ON device.site_id = site.id WHERE device.organization_id = ?";
         const params = [orgId];
 
@@ -146,11 +194,12 @@ class Device {
         }
 
         const tagsString = Array.isArray(data.tags) ? JSON.stringify(data.tags) : "[]";
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `INSERT INTO device (
                 organization_id, site_id, name, hostname, ip_address, ipv6_address, device_type, vendor, model, serial_number, description, status, tags, notes, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now'), DATETIME('now'))`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 orgId,
                 data.site_id || null,
@@ -166,6 +215,8 @@ class Device {
                 data.status || "online",
                 tagsString,
                 data.notes || null,
+                isoNow,
+                isoNow,
             ]
         );
 
@@ -197,6 +248,8 @@ class Device {
 
         const tagsString = Array.isArray(data.tags) ? JSON.stringify(data.tags) : undefined;
 
+        const isoNow = toSqlDatetime();
+
         await R.exec(
             `UPDATE device SET
                 site_id = COALESCE(?, site_id),
@@ -212,7 +265,7 @@ class Device {
                 status = COALESCE(?, status),
                 tags = COALESCE(?, tags),
                 notes = COALESCE(?, notes),
-                updated_at = DATETIME('now')
+                updated_at = ?
             WHERE id = ? AND organization_id = ?`,
             [
                 data.site_id !== undefined ? data.site_id : null,
@@ -228,6 +281,7 @@ class Device {
                 data.status || null,
                 tagsString !== undefined ? tagsString : null,
                 data.notes !== undefined ? data.notes : null,
+                isoNow,
                 deviceId,
                 orgId,
             ]
@@ -284,9 +338,10 @@ class Device {
 
         // Encrypt secret payload using AES-256-GCM
         const encrypted = encryptSecret(credentialData.secretPayload);
+        const isoNow = toSqlDatetime();
 
         await R.exec(
-            "INSERT INTO device_credential (device_id, name, type, encrypted_data, iv, auth_tag, created_at) VALUES (?, ?, ?, ?, ?, ?, DATETIME('now'))",
+            "INSERT INTO device_credential (device_id, name, type, encrypted_data, iv, auth_tag, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
                 deviceId,
                 credentialData.name.trim(),
@@ -294,6 +349,7 @@ class Device {
                 encrypted.encrypted_data,
                 encrypted.iv,
                 encrypted.auth_tag,
+                isoNow,
             ]
         );
 
@@ -340,6 +396,7 @@ class Device {
             throw new Error("Device not found or access denied.");
         }
 
+        const isoNow = toSqlDatetime();
         await R.exec("DELETE FROM device_monitor WHERE device_id = ?", [deviceId]);
 
         if (Array.isArray(monitorIds)) {
@@ -350,8 +407,8 @@ class Device {
                 );
                 if (validMonitor) {
                     await R.exec(
-                        "INSERT INTO device_monitor (device_id, monitor_id, created_at) VALUES (?, ?, DATETIME('now'))",
-                        [deviceId, mId]
+                        "INSERT INTO device_monitor (device_id, monitor_id, created_at) VALUES (?, ?, ?)",
+                        [deviceId, mId, isoNow]
                     );
                 }
             }
