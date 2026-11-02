@@ -129,6 +129,9 @@ const DependencyCorrelation = require("./model/dependency-correlation");
 const VendorCapabilityRegistry = require("./model/vendor-capability-registry");
 const OltMonitoring = require("./model/olt-monitoring");
 const OltAdapterRegistry = require("./model/olt-adapter-registry");
+const FiberNoc = require("./model/fiber-noc");
+const FiberFaultEngine = require("./model/fiber-fault-engine");
+const DeviceInterface = require("./model/device-interface");
 const NotificationRouter = require("./model/notification-router");
 const SlaReporting = require("./model/sla-reporting");
 const OrganizationBranding = require("./model/organization-branding");
@@ -3539,6 +3542,304 @@ let needSetup = false;
                 const result = await OltMonitoring.ingestOltTelemetry(data.deviceId, data.telemetry, activeOrgId);
                 if (typeof callback === "function") {
                     callback({ ok: true, telemetry: result });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        // ===================================
+        // InfiniNOC Fiber NOC & Intelligent Topology Endpoints
+        // ===================================
+        socket.on("getAllDependencies", async (callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const links = await DependencyCorrelation.getAllDependencies(activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, links });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("updateDeviceDependency", async (data, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                if (!data || !data.id) {
+                    throw new Error("Dependency ID is required.");
+                }
+                const updated = await DependencyCorrelation.updateDependency(data.id, data, activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, dependency: updated });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("exportTopology", async (callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const topology = await DependencyCorrelation.exportTopology(activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, topology });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("importTopology", async (payload, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const result = await DependencyCorrelation.importTopology(activeOrgId, payload);
+                if (typeof callback === "function") {
+                    callback({ ok: true, ...result });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getFiberNocOverview", async (callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const overview = await FiberNoc.getFiberNocOverview(activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, overview });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getPonPortList", async (oltDeviceId, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const ports = await FiberNoc.getPonPortList(activeOrgId, oltDeviceId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, ports });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("syncPonPortTelemetry", async (data, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                if (!data || !data.oltDeviceId) {
+                    throw new Error("OLT Device ID required.");
+                }
+                const count = await FiberNoc.syncPonPortTelemetry(activeOrgId, data.oltDeviceId, data.ports || []);
+                if (typeof callback === "function") {
+                    callback({ ok: true, syncedCount: count });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getOnuList", async (filters, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const onus = await FiberNoc.getOnuList(activeOrgId, filters || {});
+                if (typeof callback === "function") {
+                    callback({ ok: true, onus });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getOnuDetails", async (onuId, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const onu = await FiberNoc.getOnuDetails(activeOrgId, onuId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, onu });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getFiberSplitters", async (callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const splitters = await FiberNoc.getFiberSplitters(activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, splitters });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("saveFiberSplitter", async (data, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const splitter = await FiberNoc.saveFiberSplitter(activeOrgId, data);
+                if (typeof callback === "function") {
+                    callback({ ok: true, splitter });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("deleteFiberSplitter", async (splitterId, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                await FiberNoc.deleteFiberSplitter(activeOrgId, splitterId);
+                if (typeof callback === "function") {
+                    callback({ ok: true });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("recordOtdrMeasurement", async (data, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const otdr = await FiberNoc.recordOtdrMeasurement(activeOrgId, data);
+                if (typeof callback === "function") {
+                    callback({ ok: true, measurement: otdr });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getOtdrMeasurements", async (filter, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const filterObj = (typeof filter === "object" && filter !== null) ? filter : {};
+                const measurements = await FiberNoc.getOtdrMeasurements(activeOrgId, filterObj);
+                if (typeof callback === "function") {
+                    callback({ ok: true, measurements });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getActiveFiberFaults", async (callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const faults = await FiberFaultEngine.getActiveFiberFaults(activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, faults });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("runFiberFaultAnalysis", async (callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const faults = await FiberFaultEngine.analyzeAndCorrelateFaults(activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, faults });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getDeviceInterfaces", async (deviceId, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const interfaces = await DeviceInterface.getDeviceInterfaces(activeOrgId, deviceId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, interfaces });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("syncDeviceInterfaces", async (data, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                if (!data || !data.deviceId) {
+                    throw new Error("Device ID required.");
+                }
+                const count = await DeviceInterface.syncDeviceInterfaces(activeOrgId, data.deviceId, data.interfaces || []);
+                if (typeof callback === "function") {
+                    callback({ ok: true, syncedCount: count });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
+        socket.on("getInterfaceDetails", async (interfaceId, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const details = await DeviceInterface.getInterfaceDetails(activeOrgId, interfaceId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, details });
                 }
             } catch (e) {
                 if (typeof callback === "function") {

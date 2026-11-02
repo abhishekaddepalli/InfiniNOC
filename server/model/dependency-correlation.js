@@ -8,9 +8,10 @@ class DependencyCorrelation {
      * @param {number} childDeviceId Downstream Child Device ID
      * @param {string} dependencyType UPSTREAM, DOWNSTREAM, DEPENDS_ON
      * @param {number} organizationId Organization ID
+     * @param {object} extraData Extra link metadata
      * @returns {Promise<object>} Created dependency link
      */
-    static async addDependency(parentDeviceId, childDeviceId, dependencyType, organizationId) {
+    static async addDependency(parentDeviceId, childDeviceId, dependencyType, organizationId, extraData = {}) {
         const orgId = organizationId || 1;
         const pId = Number(parentDeviceId);
         const cId = Number(childDeviceId);
@@ -28,14 +29,41 @@ class DependencyCorrelation {
         }
 
         const type = dependencyType || "UPSTREAM";
+        const linkType = extraData.link_type || extraData.linkType || "FIBER";
+        const linkSpeed = extraData.link_speed || extraData.linkSpeed || "1 Gbps";
+        const srcIf = extraData.source_interface || extraData.sourceInterface || null;
+        const tgtIf = extraData.target_interface || extraData.targetInterface || null;
+        const status = extraData.status || "UP";
+        const utilPct = Number(extraData.traffic_utilization_pct || extraData.trafficUtilizationPct || 0);
+        const latency = Number(extraData.latency_ms || extraData.latencyMs || 0);
+        const loss = Number(extraData.packet_loss_pct || extraData.packetLossPct || 0);
+        const relSource = extraData.relationship_source || extraData.relationshipSource || "MANUAL";
         const isoNow = new Date().toISOString();
 
         await R.exec(
             `INSERT INTO device_dependency (
-                organization_id, parent_device_id, child_device_id, dependency_type, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(organization_id, parent_device_id, child_device_id) DO UPDATE SET dependency_type = excluded.dependency_type, updated_at = excluded.updated_at`,
-            [orgId, pId, cId, type, isoNow, isoNow]
+                organization_id, parent_device_id, child_device_id, dependency_type,
+                link_type, link_speed, source_interface, target_interface, status,
+                traffic_utilization_pct, latency_ms, packet_loss_pct, relationship_source,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(organization_id, parent_device_id, child_device_id) DO UPDATE SET
+                dependency_type = excluded.dependency_type,
+                link_type = excluded.link_type,
+                link_speed = excluded.link_speed,
+                source_interface = excluded.source_interface,
+                target_interface = excluded.target_interface,
+                status = excluded.status,
+                traffic_utilization_pct = excluded.traffic_utilization_pct,
+                latency_ms = excluded.latency_ms,
+                packet_loss_pct = excluded.packet_loss_pct,
+                updated_at = excluded.updated_at`,
+            [
+                orgId, pId, cId, type,
+                linkType, linkSpeed, srcIf, tgtIf, status,
+                utilPct, latency, loss, relSource,
+                isoNow, isoNow,
+            ]
         );
 
         const depId = await R.getCell(
@@ -44,6 +72,77 @@ class DependencyCorrelation {
         );
 
         return await R.getRow("SELECT * FROM device_dependency WHERE id = ?", [depId]);
+    }
+
+    /**
+     * Update an existing dependency link
+     * @param {number} dependencyId Dependency ID
+     * @param {object} updateData Data to update
+     * @param {number} organizationId Organization ID
+     * @returns {Promise<object>} Updated dependency
+     */
+    static async updateDependency(dependencyId, updateData, organizationId) {
+        const orgId = organizationId || 1;
+        const id = Number(dependencyId);
+
+        const existing = await R.getRow("SELECT * FROM device_dependency WHERE id = ? AND organization_id = ?", [id, orgId]);
+        if (!existing) {
+            throw new Error("Dependency link not found or access denied.");
+        }
+
+        const isoNow = new Date().toISOString();
+        const linkType = updateData.link_type || existing.link_type || "FIBER";
+        const linkSpeed = updateData.link_speed || existing.link_speed || "1 Gbps";
+        const srcIf = updateData.source_interface !== undefined ? updateData.source_interface : existing.source_interface;
+        const tgtIf = updateData.target_interface !== undefined ? updateData.target_interface : existing.target_interface;
+        const status = updateData.status || existing.status || "UP";
+        const depType = updateData.dependency_type || existing.dependency_type || "UPSTREAM";
+        const utilPct = updateData.traffic_utilization_pct !== undefined ? Number(updateData.traffic_utilization_pct) : existing.traffic_utilization_pct;
+        const latency = updateData.latency_ms !== undefined ? Number(updateData.latency_ms) : existing.latency_ms;
+        const loss = updateData.packet_loss_pct !== undefined ? Number(updateData.packet_loss_pct) : existing.packet_loss_pct;
+
+        await R.exec(
+            `UPDATE device_dependency SET
+                link_type = ?, link_speed = ?, source_interface = ?, target_interface = ?,
+                status = ?, dependency_type = ?, traffic_utilization_pct = ?,
+                latency_ms = ?, packet_loss_pct = ?, updated_at = ?
+             WHERE id = ? AND organization_id = ?`,
+            [
+                linkType, linkSpeed, srcIf, tgtIf,
+                status, depType, utilPct,
+                latency, loss, isoNow,
+                id, orgId,
+            ]
+        );
+
+        return await R.getRow("SELECT * FROM device_dependency WHERE id = ?", [id]);
+    }
+
+    /**
+     * Get all dependencies for an organization in a single query
+     * @param {number} organizationId Organization ID
+     * @returns {Promise<Array>} List of all dependencies with parent & child details
+     */
+    static async getAllDependencies(organizationId) {
+        const orgId = organizationId || 1;
+        return await R.getAll(
+            `SELECT
+                dep.*,
+                pdev.name AS parent_name,
+                pdev.ip_address AS parent_ip,
+                pdev.status AS parent_status,
+                pdev.device_type AS parent_type,
+                cdev.name AS child_name,
+                cdev.ip_address AS child_ip,
+                cdev.status AS child_status,
+                cdev.device_type AS child_type
+             FROM device_dependency dep
+             JOIN device pdev ON dep.parent_device_id = pdev.id
+             JOIN device cdev ON dep.child_device_id = cdev.id
+             WHERE dep.organization_id = ?
+             ORDER BY dep.id ASC`,
+            [orgId]
+        );
     }
 
     /**
@@ -314,6 +413,70 @@ class DependencyCorrelation {
         }
 
         return { resolvedRootIncident: false };
+    }
+
+    /**
+     * Export complete network topology configuration
+     * @param {number} organizationId Organization ID
+     * @returns {Promise<object>} Exported topology object
+     */
+    static async exportTopology(organizationId) {
+        const orgId = organizationId || 1;
+        const devices = await R.getAll("SELECT id, name, hostname, ip_address, device_type, status FROM device WHERE organization_id = ?", [orgId]);
+        const links = await DependencyCorrelation.getAllDependencies(orgId);
+        const splitters = await R.getAll("SELECT * FROM fiber_splitter WHERE organization_id = ?", [orgId]);
+
+        return {
+            version: "1.0",
+            organizationId: orgId,
+            exportedAt: new Date().toISOString(),
+            devices: devices || [],
+            links: links || [],
+            splitters: splitters || [],
+        };
+    }
+
+    /**
+     * Import network topology links and configuration
+     * @param {number} organizationId Organization ID
+     * @param {object} payload Topology payload
+     * @returns {Promise<object>} Import result
+     */
+    static async importTopology(organizationId, payload) {
+        const orgId = organizationId || 1;
+        if (!payload || !Array.isArray(payload.links)) {
+            throw new Error("Invalid topology payload. 'links' array is required.");
+        }
+
+        let importedLinks = 0;
+        for (const l of payload.links) {
+            try {
+                if (l.parent_device_id && l.child_device_id) {
+                    await DependencyCorrelation.addDependency(
+                        l.parent_device_id,
+                        l.child_device_id,
+                        l.dependency_type || "UPSTREAM",
+                        orgId,
+                        {
+                            link_type: l.link_type,
+                            link_speed: l.link_speed,
+                            source_interface: l.source_interface,
+                            target_interface: l.target_interface,
+                            status: l.status,
+                            relationship_source: "IMPORTED",
+                        }
+                    );
+                    importedLinks++;
+                }
+            } catch (e) {
+                // Ignore missing device errors during bulk import
+            }
+        }
+
+        return {
+            importedLinks,
+            totalProcessed: payload.links.length,
+        };
     }
 }
 

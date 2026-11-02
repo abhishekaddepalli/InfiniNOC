@@ -782,4 +782,61 @@ router.post("/api/probe/results", async (request, response) => {
     }
 });
 
+// ==========================================
+// InfiniNOC Fiber NOC & GPON REST API
+// ==========================================
+const FiberNoc = require("../model/fiber-noc");
+const FiberFaultEngine = require("../model/fiber-fault-engine");
+
+router.get("/api/fiber-noc/overview", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const orgId = Number(request.query.organizationId) || 1;
+        const overview = await FiberNoc.getFiberNocOverview(orgId);
+        response.json({ ok: true, overview });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+router.get("/api/fiber-noc/faults", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const orgId = Number(request.query.organizationId) || 1;
+        const faults = await FiberFaultEngine.getActiveFiberFaults(orgId);
+        response.json({ ok: true, faults });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+router.get("/api/fiber-noc/pon-ports", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const orgId = Number(request.query.organizationId) || 1;
+        const oltDeviceId = request.query.oltDeviceId ? Number(request.query.oltDeviceId) : null;
+        const ports = await FiberNoc.getPonPortList(orgId, oltDeviceId);
+        response.json({ ok: true, ports });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+router.get("/api/fiber-noc/onus", async (request, response) => {
+    allowAllOrigin(response);
+    try {
+        const orgId = Number(request.query.organizationId) || 1;
+        const filters = {
+            olt_device_id: request.query.oltDeviceId,
+            pon_port: request.query.ponPort,
+            status: request.query.status,
+            search: request.query.search,
+        };
+        const onus = await FiberNoc.getOnuList(orgId, filters);
+        response.json({ ok: true, onus });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
 module.exports = router;

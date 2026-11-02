@@ -5,15 +5,15 @@
             <div>
                 <h1 class="h4 fw-bold mb-1 text-foreground d-flex align-items-center gap-2">
                     <font-awesome-icon icon="project-diagram" class="text-primary" />
-                    <span>Network Topology & Infrastructure Map</span>
+                    <span>Fiber NOC & Intelligent Network Topology</span>
                 </h1>
                 <p class="text-muted small mb-0 font-monospace">
-                    Interactive network graph, device hierarchy, and link telemetry for <span class="text-warning fw-bold">{{ activeOrgName }}</span>
+                    The Dude-style network graph, GPON OLT/PON hierarchy, and fiber telemetry for <span class="text-warning fw-bold">{{ activeOrgName }}</span>
                 </p>
             </div>
 
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <!-- View Mode Toggle: Interactive Canvas vs Table Links -->
+                <!-- View Mode Tabs -->
                 <div class="btn-group btn-group-sm" role="group">
                     <button
                         type="button"
@@ -29,23 +29,90 @@
                         :class="viewMode === 'table' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
                         @click="viewMode = 'table'"
                     >
-                        <font-awesome-icon icon="list" class="me-1" /> Links Table ({{ dependencyList.length }})
+                        <font-awesome-icon icon="list" class="me-1" /> Links ({{ dependencyList.length }})
+                    </button>
+                    <button
+                        type="button"
+                        class="btn"
+                        :class="viewMode === 'splitters' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
+                        @click="viewMode = 'splitters'"
+                    >
+                        <font-awesome-icon icon="code-branch" class="me-1" /> Splitters ({{ splittersList.length }})
+                    </button>
+                    <button
+                        type="button"
+                        class="btn"
+                        :class="viewMode === 'faults' ? 'btn-primary fw-bold' : 'btn-outline-secondary'"
+                        @click="viewMode = 'faults'"
+                    >
+                        <font-awesome-icon icon="exclamation-triangle" class="me-1" />
+                        Faults <span v-if="activeFaults.length > 0" class="badge bg-danger ms-1">{{ activeFaults.length }}</span>
                     </button>
                 </div>
 
-                <button class="btn btn-sm btn-outline-warning fw-semibold d-flex align-items-center gap-1" @click="autoLayoutNodes">
+                <!-- Map Mode Selector -->
+                <select v-model="mapMode" class="form-select form-select-sm bg-surface border-secondary text-foreground" style="width: auto;">
+                    <option value="LOGICAL">🗺️ Logical Network Map</option>
+                    <option value="FIBER">⚡ Physical Fiber Map</option>
+                    <option value="OLT_PON">📡 OLT & PON View</option>
+                    <option value="SWITCH">🔀 Switch & Interface View</option>
+                    <option value="FAULTS">🚨 Faults & Incident View</option>
+                    <option value="PROBES">🛰️ Probe Coverage View</option>
+                </select>
+
+                <!-- Action Buttons -->
+                <button class="btn btn-sm btn-outline-warning fw-semibold d-flex align-items-center gap-1" title="Arrange in Hierarchical Tiers" @click="autoLayoutNodes">
                     <font-awesome-icon icon="magic" />
                     <span class="d-none d-sm-inline">Auto Layout</span>
                 </button>
 
-                <button class="btn btn-sm btn-outline-success fw-semibold d-flex align-items-center gap-1" @click="saveNodePositions">
+                <button class="btn btn-sm btn-outline-success fw-semibold d-flex align-items-center gap-1" title="Save Node Coordinates" @click="saveNodePositions">
                     <font-awesome-icon icon="save" />
-                    <span class="d-none d-sm-inline">Save Positions</span>
+                    <span class="d-none d-sm-inline">Save</span>
                 </button>
+
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <font-awesome-icon icon="cog" class="me-1" /> Tools
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end bg-card border-secondary shadow">
+                        <li>
+                            <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="exportTopologyFile">
+                                <font-awesome-icon icon="download" class="me-2 text-info" /> Export Topology JSON
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="showImportModal = true">
+                                <font-awesome-icon icon="upload" class="me-2 text-success" /> Import Topology JSON
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item text-foreground small" href="javascript:void(0)" @click="showSplitterModal = true">
+                                <font-awesome-icon icon="code-branch" class="me-2 text-warning" /> Add Fiber Splitter
+                            </a>
+                        </li>
+                    </ul>
+                </div>
 
                 <button class="btn btn-sm noc-create-btn fw-bold px-3 d-flex align-items-center gap-2 shadow-sm" @click="showAddModal = true">
                     <font-awesome-icon icon="plus-circle" />
                     <span>Add Link</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Live Fiber Fault HUD Alert Banner (if faults detected) -->
+        <div v-if="activeFaults.length > 0" class="alert alert-danger d-flex justify-content-between align-items-center p-2 px-3 mb-3 rounded-3 shadow-sm border border-danger">
+            <div class="d-flex align-items-center gap-2">
+                <font-awesome-icon icon="exclamation-triangle" class="fs-5 text-danger animate-pulse" />
+                <div>
+                    <strong class="text-uppercase font-monospace">[{{ activeFaults[0].confidence_level }}] {{ activeFaults[0].fault_category.replace(/_/g, ' ') }}</strong>
+                    <span class="ms-2 small text-secondary">{{ activeFaults[0].evidence }}</span>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-danger fw-bold" @click="viewMode = 'faults'">
+                    Inspect Active Faults ({{ activeFaults.length }})
                 </button>
             </div>
         </div>
@@ -64,13 +131,14 @@
                             v-model="searchQuery"
                             type="text"
                             class="form-control bg-surface border-secondary text-foreground form-control-sm"
-                            placeholder="Find device or IP..."
+                            placeholder="Find device, IP, or OLT..."
                         />
                     </div>
 
+                    <!-- Category Filter Buttons -->
                     <div class="btn-group btn-group-sm">
                         <button
-                            v-for="type in ['ALL', 'ROUTER', 'SWITCH', 'SERVER', 'PROBE', 'MONITOR']"
+                            v-for="type in ['ALL', 'ROUTER', 'SWITCH', 'OLT', 'SPLITTER', 'SERVER', 'PROBE', 'MONITOR']"
                             :key="type"
                             type="button"
                             class="btn btn-sm"
@@ -80,6 +148,12 @@
                             {{ type }}
                         </button>
                     </div>
+
+                    <!-- Site Selector -->
+                    <select v-if="sitesList.length > 0" v-model="selectedSiteId" class="form-select form-select-sm bg-surface border-secondary text-foreground" style="width: auto;">
+                        <option :value="null">All Sites</option>
+                        <option v-for="s in sitesList" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
                 </div>
 
                 <!-- Zoom & Screen Controls -->
@@ -121,8 +195,8 @@
                         transform: `translate(${panX}px, ${panY}px) scale(${zoomLevel})`,
                         transformOrigin: '0 0'
                     }"
-                    width="4000"
-                    height="3000"
+                    width="4500"
+                    height="3500"
                 >
                     <defs>
                         <!-- Grid Pattern Background -->
@@ -130,13 +204,21 @@
                             <circle cx="20" cy="20" r="1" class="grid-dot" />
                         </pattern>
 
-                        <!-- Marker: Healthy Directed Arrow -->
+                        <!-- Marker: Healthy Green Directed Arrow -->
                         <marker id="arrow-healthy" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                             <path d="M 0 1 L 10 5 L 0 9 z" fill="#10B981" />
                         </marker>
-                        <!-- Marker: Down Directed Arrow -->
+                        <!-- Marker: Down Red Directed Arrow -->
                         <marker id="arrow-down" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                             <path d="M 0 1 L 10 5 L 0 9 z" fill="#EF4444" />
+                        </marker>
+                        <!-- Marker: Amber Degraded Arrow -->
+                        <marker id="arrow-degraded" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#F59E0B" />
+                        </marker>
+                        <!-- Marker: Orange Suspected Cut Arrow -->
+                        <marker id="arrow-suspected" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#F97316" />
                         </marker>
                     </defs>
 
@@ -145,28 +227,33 @@
 
                     <!-- Connection Links Layer -->
                     <g class="links-layer">
-                        <g v-for="link in renderedLinks" :key="link.id" class="link-group">
+                        <g v-for="link in renderedLinks" :key="link.id" class="link-group" @click.stop="selectLink(link)">
                             <path
                                 :d="link.path"
                                 class="network-link-path"
                                 :class="{
                                     'link-healthy': link.status === 'UP',
                                     'link-down': link.status === 'DOWN',
-                                    'link-degraded': link.status === 'PENDING'
+                                    'link-degraded': link.status === 'DEGRADED',
+                                    'link-suspected': link.status === 'SUSPECTED',
+                                    'is-selected-link': selectedLink && selectedLink.id === link.id,
+                                    'link-fiber': link.link_type === 'FIBER',
+                                    'link-wireless': link.link_type === 'WIRELESS',
+                                    'link-logical': link.link_type === 'LOGICAL'
                                 }"
-                                :marker-end="link.status === 'DOWN' ? 'url(#arrow-down)' : 'url(#arrow-healthy)'"
+                                :marker-end="getLinkMarker(link.status)"
                             />
                             <!-- Link Label Badge at Midpoint -->
-                            <g :transform="`translate(${link.midX}, ${link.midY})`">
-                                <rect x="-35" y="-10" width="70" height="20" rx="4" class="link-label-bg" />
+                            <g :transform="`translate(${link.midX}, ${link.midY})`" class="link-midpoint-badge">
+                                <rect x="-42" y="-12" width="84" height="24" rx="6" class="link-label-bg" />
                                 <text x="0" y="4" text-anchor="middle" class="link-label-text">
-                                    {{ link.dependency_type || 'LINK' }}
+                                    {{ link.link_speed || link.dependency_type || '1 Gbps' }}
                                 </text>
                             </g>
                         </g>
                     </g>
 
-                    <!-- Device Nodes Layer -->
+                    <!-- Device & Splitter Nodes Layer -->
                     <g class="nodes-layer">
                         <g
                             v-for="node in filteredNodes"
@@ -174,16 +261,18 @@
                             class="device-node-group"
                             :class="{
                                 'is-selected': selectedNode && selectedNode.id === node.id,
+                                'is-highlighted-downstream': highlightedDownstreamIds.includes(node.id),
+                                'is-highlighted-upstream': highlightedUpstreamIds.includes(node.id),
                                 'is-down': node.status === 'DOWN',
                                 'is-healthy': node.status === 'UP',
-                                'is-warning': node.status === 'PENDING'
+                                'is-warning': node.status === 'PENDING' || node.status === 'DEGRADED'
                             }"
                             :transform="`translate(${node.x}, ${node.y})`"
                             @mousedown.stop="handleNodeMouseDown($event, node)"
                             @click.stop="selectNode(node)"
                         >
                             <!-- Animated Pulse Glow Ring for Outages -->
-                            <circle v-if="node.status === 'DOWN'" cx="90" cy="38" r="42" class="outage-pulse-circle" />
+                            <circle v-if="node.status === 'DOWN'" cx="90" cy="38" r="44" class="outage-pulse-circle" />
 
                             <!-- Main Node Card Box -->
                             <rect x="0" y="0" width="180" height="76" rx="10" class="node-box" />
@@ -192,7 +281,7 @@
                             <rect x="12" y="14" width="46" height="48" rx="8" class="node-icon-bg" />
 
                             <!-- Device Icon Placeholder text/symbol -->
-                            <text x="35" y="44" text-anchor="middle" class="node-icon-symbol">
+                            <text x="35" y="45" text-anchor="middle" class="node-icon-symbol">
                                 {{ getNodeIconSymbol(node.type) }}
                             </text>
 
@@ -206,7 +295,7 @@
                             <text x="68" y="48" class="node-ip-text">
                                 {{ node.ip || '127.0.0.1' }}
                             </text>
-                            <text x="68" y="62" class="node-type-badge">
+                            <text x="68" y="63" class="node-type-badge">
                                 {{ node.type }}
                             </text>
 
@@ -223,28 +312,76 @@
 
                 <!-- Floating Canvas Minimap / Status Overview (Dude style) -->
                 <div class="canvas-legend p-2 rounded-3 shadow-sm border border-secondary bg-surface position-absolute bottom-0 start-0 m-3">
-                    <div class="small fw-bold text-foreground mb-1 d-flex align-items-center gap-2">
+                    <div class="small fw-bold text-foreground mb-1 d-flex align-items-center gap-2 flex-wrap">
                         <span class="status-indicator-dot dot-green"></span>
                         <span>Online: {{ onlineNodeCount }}</span>
                         <span class="status-indicator-dot dot-red ms-2"></span>
                         <span>Down: {{ downNodeCount }}</span>
+                        <span v-if="splittersList.length > 0" class="badge bg-secondary ms-2 font-monospace">
+                            🔱 {{ splittersList.length }} Splitters
+                        </span>
                     </div>
                     <div class="text-muted small" style="font-size: 0.68rem;">
-                        Drag nodes to move · Scroll to zoom · Click to inspect
+                        Drag nodes to move · Scroll to zoom · Click node or link to inspect
                     </div>
                 </div>
 
-                <!-- Slide-in Device Inspector Drawer -->
-                <div v-if="selectedNode" class="node-inspector-drawer position-absolute top-0 end-0 h-100 p-3 bg-surface border-start border-secondary shadow-lg">
+                <!-- Slide-in Inspector Drawer (Device or Link) -->
+                <div v-if="selectedNode || selectedLink" class="node-inspector-drawer position-absolute top-0 end-0 h-100 p-3 bg-surface border-start border-secondary shadow-lg">
+                    <!-- Close button -->
                     <div class="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary pb-2">
                         <h6 class="fw-bold mb-0 text-foreground d-flex align-items-center gap-2">
-                            <font-awesome-icon icon="info-circle" class="text-primary" />
-                            <span>Device Inspector</span>
+                            <font-awesome-icon :icon="selectedLink ? 'link' : 'info-circle'" class="text-primary" />
+                            <span>{{ selectedLink ? 'Fiber Link Inspector' : 'Device Inspector' }}</span>
                         </h6>
-                        <button type="button" class="btn-close btn-close-white btn-sm" @click="selectedNode = null"></button>
+                        <button type="button" class="btn-close btn-close-white btn-sm" @click="closeInspector"></button>
                     </div>
 
-                    <div class="inspector-content d-flex flex-column gap-3 small">
+                    <!-- IF LINK SELECTED -->
+                    <div v-if="selectedLink" class="inspector-content d-flex flex-column gap-3 small">
+                        <div class="p-2 rounded bg-card border border-secondary">
+                            <div class="fw-bold fs-6 text-foreground text-truncate">
+                                {{ selectedLink.parent_name || 'Upstream' }} → {{ selectedLink.child_name || 'Downstream' }}
+                            </div>
+                            <div class="text-muted font-monospace">{{ selectedLink.link_speed || '1 Gbps' }} · {{ selectedLink.link_type || 'FIBER' }}</div>
+                            <div class="mt-2 d-flex align-items-center gap-2">
+                                <span class="badge" :class="selectedLink.status === 'UP' ? 'bg-success' : 'bg-danger'">
+                                    {{ selectedLink.status || 'UP' }}
+                                </span>
+                                <span class="badge bg-secondary font-monospace">{{ selectedLink.relationship_source || 'MANUAL' }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Link Interfaces & Telemetry -->
+                        <div class="p-2 rounded bg-card border border-secondary">
+                            <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Interface Endpoints</div>
+                            <div class="mb-2">
+                                <span class="text-muted d-block small">Source Interface:</span>
+                                <span class="text-info fw-bold font-monospace">{{ selectedLink.source_interface || 'Auto (SFP/Port)' }}</span>
+                            </div>
+                            <div class="mb-2">
+                                <span class="text-muted d-block small">Target Interface:</span>
+                                <span class="text-warning fw-bold font-monospace">{{ selectedLink.target_interface || 'Auto (Uplink)' }}</span>
+                            </div>
+                            <div>
+                                <span class="text-muted d-block small">Estimated Utilization:</span>
+                                <span class="text-success fw-bold font-monospace">{{ selectedLink.traffic_utilization_pct || 0 }}%</span>
+                            </div>
+                        </div>
+
+                        <!-- Link Actions -->
+                        <div class="d-flex flex-column gap-2 mt-auto">
+                            <button class="btn btn-sm btn-outline-warning" @click="openEditLinkModal(selectedLink)">
+                                <font-awesome-icon icon="edit" class="me-1" /> Edit Link Parameters
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @click="deleteLink(selectedLink.id)">
+                                <font-awesome-icon icon="trash" class="me-1" /> Delete Link
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- IF NODE SELECTED -->
+                    <div v-else-if="selectedNode" class="inspector-content d-flex flex-column gap-3 small">
                         <!-- Header identity -->
                         <div class="p-2 rounded bg-card border border-secondary">
                             <div class="fw-bold fs-6 text-foreground text-truncate">{{ selectedNode.name }}</div>
@@ -264,21 +401,50 @@
                             <div class="mb-2">
                                 <span class="text-muted d-block small">Upstream Parents:</span>
                                 <div v-if="getNodeParents(selectedNode.id).length === 0" class="text-muted fst-italic">None (Root Core)</div>
-                                <div v-for="p in getNodeParents(selectedNode.id)" :key="p.id" class="text-info fw-bold font-monospace">
+                                <div v-for="p in getNodeParents(selectedNode.id)" :key="p.id" class="text-info fw-bold font-monospace cursor-pointer" @click="selectNode(p)">
                                     ↑ {{ p.name }} ({{ p.type }})
                                 </div>
                             </div>
                             <div>
                                 <span class="text-muted d-block small">Downstream Children:</span>
                                 <div v-if="getNodeChildren(selectedNode.id).length === 0" class="text-muted fst-italic">None (Edge Device)</div>
-                                <div v-for="c in getNodeChildren(selectedNode.id)" :key="c.id" class="text-warning fw-bold font-monospace">
+                                <div v-for="c in getNodeChildren(selectedNode.id)" :key="c.id" class="text-warning fw-bold font-monospace cursor-pointer" @click="selectNode(c)">
                                     ↓ {{ c.name }} ({{ c.type }})
                                 </div>
                             </div>
                         </div>
 
+                        <!-- Dependency Tracing Buttons -->
+                        <div class="p-2 rounded bg-card border border-secondary">
+                            <div class="text-uppercase fw-bold text-muted mb-2" style="font-size: 0.7rem;">Fault Impact Tracing</div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-info flex-fill" @click="traceUpstream(selectedNode.id)">
+                                    Trace Upstream
+                                </button>
+                                <button class="btn btn-sm btn-outline-warning flex-fill" @click="traceDownstream(selectedNode.id)">
+                                    Trace Impact
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- Quick Actions -->
                         <div class="d-flex flex-column gap-2 mt-auto">
+                            <!-- OLT Jump Button -->
+                            <button
+                                v-if="selectedNode.type === 'OLT'"
+                                class="btn btn-sm btn-warning text-dark fw-bold"
+                                @click="$router.push(`/devices/olt/${selectedNode.id}`)"
+                            >
+                                <font-awesome-icon icon="server" class="me-1" /> View OLT GPON Telemetry
+                            </button>
+                            <!-- Switch Interfaces Jump Button -->
+                            <button
+                                v-if="selectedNode.type === 'SWITCH'"
+                                class="btn btn-sm btn-primary fw-bold"
+                                @click="$router.push(`/devices/${selectedNode.id}`)"
+                            >
+                                <font-awesome-icon icon="random" class="me-1" /> View Switch Interfaces
+                            </button>
                             <button
                                 v-if="selectedNode.monitor_id"
                                 class="btn btn-sm btn-primary fw-bold"
@@ -311,7 +477,7 @@
                 <div class="noc-section-box p-3">
                     <h5 class="fw-bold text-warning mb-3 d-flex align-items-center gap-2">
                         <font-awesome-icon icon="project-diagram" />
-                        <span>Configured Dependency Links</span>
+                        <span>Configured Dependency & Fiber Links</span>
                     </h5>
 
                     <div class="table-responsive">
@@ -319,8 +485,10 @@
                             <thead>
                                 <tr class="text-secondary text-uppercase small" style="font-size: 0.75rem;">
                                     <th>Upstream Parent</th>
-                                    <th>Link Relationship</th>
+                                    <th>Link Type & Speed</th>
+                                    <th>Interfaces</th>
                                     <th>Downstream Child</th>
+                                    <th>Status</th>
                                     <th class="text-end">Actions</th>
                                 </tr>
                             </thead>
@@ -328,29 +496,39 @@
                                 <tr v-for="link in dependencyList" :key="link.id">
                                     <td class="fw-bold text-foreground">
                                         <font-awesome-icon icon="network-wired" class="me-2 text-warning" />
-                                        {{ getDeviceName(link.parent_device_id) }}
+                                        {{ link.parent_name || getDeviceName(link.parent_device_id) }}
                                     </td>
                                     <td>
                                         <span class="badge bg-secondary font-monospace">
-                                            <font-awesome-icon icon="long-arrow-alt-right" class="me-1" />
-                                            {{ link.dependency_type }}
+                                            {{ link.link_type || 'FIBER' }} · {{ link.link_speed || '1 Gbps' }}
                                         </span>
+                                    </td>
+                                    <td class="font-monospace small text-muted">
+                                        {{ link.source_interface || 'Auto' }} → {{ link.target_interface || 'Auto' }}
                                     </td>
                                     <td class="fw-bold text-foreground">
                                         <font-awesome-icon icon="desktop" class="me-2 text-info" />
-                                        {{ getDeviceName(link.child_device_id) }}
+                                        {{ link.child_name || getDeviceName(link.child_device_id) }}
+                                    </td>
+                                    <td>
+                                        <span class="badge" :class="link.status === 'UP' ? 'bg-success' : 'bg-danger'">
+                                            {{ link.status || 'UP' }}
+                                        </span>
                                     </td>
                                     <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-warning me-1" title="Edit Link" @click="openEditLinkModal(link)">
+                                            <font-awesome-icon icon="edit" />
+                                        </button>
                                         <button class="btn btn-sm btn-outline-danger" title="Remove Link" @click="deleteLink(link.id)">
                                             <font-awesome-icon icon="trash" />
                                         </button>
                                     </td>
                                 </tr>
                                 <tr v-if="dependencyList.length === 0">
-                                    <td colspan="4" class="text-center py-5 text-muted">
+                                    <td colspan="6" class="text-center py-5 text-muted">
                                         <font-awesome-icon icon="sitemap" class="display-3 mb-3 text-secondary" />
                                         <h5>No Dependency Links Configured</h5>
-                                        <p class="small text-secondary">Establish parent-child relationships between Core Routers, Switches, OLTs, and Servers to enable automated alert storm suppression.</p>
+                                        <p class="small text-secondary">Establish parent-child relationships between Core Routers, Switches, OLTs, and Splitters to enable automated alert storm suppression.</p>
                                     </td>
                                 </tr>
                             </tbody>
@@ -371,10 +549,116 @@
                     <div class="p-2 rounded bg-surface border border-secondary text-foreground small font-monospace">
                         Core Router (Down) <br />
                         └─ Aggregation Switch (Suppressed) <br />
-                        &nbsp;&nbsp;&nbsp;└─ OLT 01 (Suppressed) <br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ ONU (Suppressed)
+                        &nbsp;&nbsp;&nbsp;└─ OLT MA5608T (Suppressed) <br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ 1:8 Splitter FDC-01 (Suppressed) <br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ ONUs in LOS (Suppressed)
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- FIBER SPLITTERS VIEW MODE -->
+        <div v-show="viewMode === 'splitters'" class="noc-section-box p-3 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-warning mb-0 d-flex align-items-center gap-2">
+                    <font-awesome-icon icon="code-branch" />
+                    <span>FTTH Optical Splitter Hierarchy</span>
+                </h5>
+                <button class="btn btn-sm btn-primary fw-bold" @click="showSplitterModal = true">
+                    <font-awesome-icon icon="plus" class="me-1" /> Add Splitter
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr class="text-secondary text-uppercase small" style="font-size: 0.75rem;">
+                            <th>Splitter Name</th>
+                            <th>Ratio</th>
+                            <th>Tier Level</th>
+                            <th>Parent Splitter</th>
+                            <th>Feeding OLT & PON</th>
+                            <th>Location / Enclosure</th>
+                            <th>Attenuation</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="s in splittersList" :key="s.id">
+                            <td class="fw-bold text-foreground">
+                                <font-awesome-icon icon="code-branch" class="me-2 text-warning" />
+                                {{ s.name }}
+                            </td>
+                            <td><span class="badge bg-secondary font-monospace">{{ s.splitter_type }}</span></td>
+                            <td>Tier {{ s.tier_level }}</td>
+                            <td class="text-info font-monospace">{{ s.parent_splitter_name || 'Root (Direct OLT)' }}</td>
+                            <td class="font-monospace text-muted">{{ s.olt_name ? (s.olt_name + ' / ' + (s.pon_port || 'PON')) : 'Unassigned' }}</td>
+                            <td>{{ s.location || 'Pole/Chamber' }}</td>
+                            <td class="font-monospace">{{ s.attenuation_db ? (s.attenuation_db + ' dB') : '3.5 dB' }}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger" @click="deleteSplitter(s.id)">
+                                    <font-awesome-icon icon="trash" />
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="splittersList.length === 0">
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                No fiber splitters configured. Click "Add Splitter" to build your FTTH distribution tree.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- FIBER FAULTS & INCIDENTS VIEW MODE -->
+        <div v-show="viewMode === 'faults'" class="noc-section-box p-3 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-danger mb-0 d-flex align-items-center gap-2">
+                    <font-awesome-icon icon="exclamation-triangle" />
+                    <span>Intelligent Fiber Faults & Cut Intelligence</span>
+                </h5>
+                <button class="btn btn-sm btn-outline-primary fw-bold" @click="triggerFaultAnalysis">
+                    <font-awesome-icon icon="sync" class="me-1" /> Re-analyze Telemetry
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr class="text-secondary text-uppercase small" style="font-size: 0.75rem;">
+                            <th>Confidence</th>
+                            <th>Fault Category</th>
+                            <th>Affected Equipment</th>
+                            <th>Evidence & Correlation</th>
+                            <th>Probable Location</th>
+                            <th>Affected ONUs</th>
+                            <th>Detection Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="f in activeFaults" :key="f.id">
+                            <td>
+                                <span class="badge" :class="f.confidence_level === 'CONFIRMED' ? 'bg-danger' : (f.confidence_level === 'PROBABLE' ? 'bg-warning text-dark' : 'bg-secondary')">
+                                    {{ f.confidence_level }}
+                                </span>
+                            </td>
+                            <td class="fw-bold text-danger">{{ f.fault_category.replace(/_/g, ' ') }}</td>
+                            <td class="font-monospace text-foreground">{{ f.olt_name ? (f.olt_name + (f.pon_port ? ' / ' + f.pon_port : '')) : 'Core Network' }}</td>
+                            <td class="small text-secondary" style="max-width: 320px;">{{ f.evidence }}</td>
+                            <td class="text-warning small font-monospace">{{ f.probable_location || 'Field Distribution' }}</td>
+                            <td><span class="badge bg-danger">{{ f.affected_onus_count }} ONUs</span></td>
+                            <td class="small text-muted">{{ f.detected_at }}</td>
+                        </tr>
+                        <tr v-if="activeFaults.length === 0">
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <font-awesome-icon icon="check-circle" class="display-4 mb-2 text-success" />
+                                <h5>All Fiber Paths Healthy</h5>
+                                <p class="small text-secondary">No physical fiber breaks, multi-ONU LOS clusters, or optical degradation detected.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -385,7 +669,7 @@
                     <div class="modal-header border-bottom border-secondary px-4 py-3">
                         <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2">
                             <font-awesome-icon icon="sitemap" />
-                            <span>Add Dependency Relationship</span>
+                            <span>Add Network Link / Dependency</span>
                         </h5>
                         <button type="button" class="btn-close btn-close-white" @click="showAddModal = false"></button>
                     </div>
@@ -398,13 +682,36 @@
                                 </option>
                             </select>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label text-foreground small fw-bold text-uppercase">Dependency Type</label>
-                            <select v-model="newDep.dependencyType" class="form-select noc-input">
-                                <option value="UPSTREAM">UPSTREAM (Parent feeds network to child)</option>
-                                <option value="DOWNSTREAM">DOWNSTREAM (Child connects to parent)</option>
-                                <option value="DEPENDS_ON">DEPENDS_ON (Strict operational dependency)</option>
-                            </select>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Link Type</label>
+                                <select v-model="newDep.linkType" class="form-select noc-input">
+                                    <option value="FIBER">Fiber Optic</option>
+                                    <option value="ETHERNET">Copper Ethernet</option>
+                                    <option value="WIRELESS">Wireless PtP</option>
+                                    <option value="LOGICAL">Logical / Tunnel</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Link Speed</label>
+                                <select v-model="newDep.linkSpeed" class="form-select noc-input">
+                                    <option value="1 Gbps">1 Gbps</option>
+                                    <option value="10 Gbps">10 Gbps SFP+</option>
+                                    <option value="25 Gbps">25 Gbps SFP28</option>
+                                    <option value="100 Gbps">100 Gbps QSFP28</option>
+                                    <option value="GPON 2.5G/1.25G">GPON 2.5G/1.25G</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Source Interface</label>
+                                <input v-model="newDep.sourceInterface" type="text" class="form-control noc-input" placeholder="e.g. xe-0/0/1" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Target Interface</label>
+                                <input v-model="newDep.targetInterface" type="text" class="form-control noc-input" placeholder="e.g. eth0 / Combo1" />
+                            </div>
                         </div>
                         <div>
                             <label class="form-label text-foreground small fw-bold text-uppercase">Downstream Child Device</label>
@@ -429,6 +736,145 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal: Edit Dependency Link -->
+        <div v-if="showEditLinkModal && editingLink" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="edit" />
+                            <span>Edit Link Parameters</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showEditLinkModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Link Type</label>
+                                <select v-model="editingLink.link_type" class="form-select noc-input">
+                                    <option value="FIBER">Fiber Optic</option>
+                                    <option value="ETHERNET">Copper Ethernet</option>
+                                    <option value="WIRELESS">Wireless PtP</option>
+                                    <option value="LOGICAL">Logical / Tunnel</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Link Speed</label>
+                                <select v-model="editingLink.link_speed" class="form-select noc-input">
+                                    <option value="1 Gbps">1 Gbps</option>
+                                    <option value="10 Gbps">10 Gbps SFP+</option>
+                                    <option value="25 Gbps">25 Gbps SFP28</option>
+                                    <option value="100 Gbps">100 Gbps QSFP28</option>
+                                    <option value="GPON 2.5G/1.25G">GPON 2.5G/1.25G</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Source Interface</label>
+                                <input v-model="editingLink.source_interface" type="text" class="form-control noc-input" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Target Interface</label>
+                                <input v-model="editingLink.target_interface" type="text" class="form-control noc-input" />
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Operational Status</label>
+                            <select v-model="editingLink.status" class="form-select noc-input">
+                                <option value="UP">UP (Healthy)</option>
+                                <option value="DOWN">DOWN (Failed)</option>
+                                <option value="DEGRADED">DEGRADED (High Latency / Loss)</option>
+                                <option value="SUSPECTED">SUSPECTED (Suspected Fault)</option>
+                                <option value="MAINTENANCE">MAINTENANCE</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-3" @click="showEditLinkModal = false">Cancel</button>
+                        <button type="button" class="btn btn-primary px-4 fw-bold" @click="saveEditedLink">
+                            Update Link
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Add Fiber Splitter -->
+        <div v-if="showSplitterModal" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <h5 class="modal-title fw-bold text-warning d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="code-branch" />
+                            <span>Add FTTH Fiber Splitter</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showSplitterModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Splitter Name</label>
+                            <input v-model="newSplitter.name" type="text" class="form-control noc-input" placeholder="e.g. FDC-Splitter-01" />
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Ratio</label>
+                                <select v-model="newSplitter.splitter_type" class="form-select noc-input">
+                                    <option value="1:4">1:4 (6.5 dB)</option>
+                                    <option value="1:8">1:8 (10.5 dB)</option>
+                                    <option value="1:16">1:16 (13.5 dB)</option>
+                                    <option value="1:32">1:32 (16.5 dB)</option>
+                                    <option value="1:64">1:64 (20.5 dB)</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-foreground small fw-bold text-uppercase">Tier Level</label>
+                                <select v-model="newSplitter.tier_level" class="form-select noc-input">
+                                    <option :value="1">Tier 1 (FDC Primary)</option>
+                                    <option :value="2">Tier 2 (FAT Distribution)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-foreground small fw-bold text-uppercase">Location / Enclosure</label>
+                            <input v-model="newSplitter.location" type="text" class="form-control noc-input" placeholder="e.g. Sector 4 Junction Box" />
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-3" @click="showSplitterModal = false">Cancel</button>
+                        <button type="button" class="btn noc-create-btn px-4 fw-bold" :disabled="!newSplitter.name" @click="saveSplitter">
+                            Save Splitter
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Import Topology JSON -->
+        <div v-if="showImportModal" class="modal d-block" tabindex="-1" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(4px);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content noc-modal-content">
+                    <div class="modal-header border-bottom border-secondary px-4 py-3">
+                        <h5 class="modal-title fw-bold text-success d-flex align-items-center gap-2">
+                            <font-awesome-icon icon="upload" />
+                            <span>Import Network Topology</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" @click="showImportModal = false"></button>
+                    </div>
+                    <div class="modal-body px-4 py-3">
+                        <p class="small text-secondary mb-2">Paste topology JSON export payload below:</p>
+                        <textarea v-model="importJsonText" class="form-control noc-input font-monospace small" rows="8" placeholder='{"version": "1.0", "links": [...]}'></textarea>
+                    </div>
+                    <div class="modal-footer border-top border-secondary px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary px-3" @click="showImportModal = false">Cancel</button>
+                        <button type="button" class="btn btn-success px-4 fw-bold" :disabled="!importJsonText" @click="submitImportTopology">
+                            Import Links
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -436,16 +882,31 @@
 export default {
     data() {
         return {
-            viewMode: "canvas", // 'canvas' | 'table'
+            viewMode: "canvas", // 'canvas' | 'table' | 'splitters' | 'faults'
+            mapMode: "LOGICAL", // 'LOGICAL' | 'FIBER' | 'OLT_PON' | 'SWITCH' | 'FAULTS' | 'PROBES'
             devices: [],
             probes: [],
+            splittersList: [],
+            activeFaults: [],
+            sitesList: [],
+            selectedSiteId: null,
             dependencyList: [],
             nodes: [],
             selectedNode: null,
+            selectedLink: null,
             searchQuery: "",
             filterType: "ALL",
             showAddModal: false,
+            showEditLinkModal: false,
+            showSplitterModal: false,
+            showImportModal: false,
+            editingLink: null,
+            importJsonText: "",
             isFullscreen: false,
+
+            // Tracing state
+            highlightedDownstreamIds: [],
+            highlightedUpstreamIds: [],
 
             // Canvas Pan & Zoom State
             zoomLevel: 1.0,
@@ -464,6 +925,17 @@ export default {
                 parentDeviceId: null,
                 childDeviceId: null,
                 dependencyType: "UPSTREAM",
+                linkType: "FIBER",
+                linkSpeed: "1 Gbps",
+                sourceInterface: "",
+                targetInterface: "",
+            },
+
+            newSplitter: {
+                name: "",
+                splitter_type: "1:8",
+                tier_level: 1,
+                location: "",
             },
         };
     },
@@ -491,6 +963,21 @@ export default {
                 if (this.filterType !== "ALL" && n.type.toUpperCase() !== this.filterType) {
                     return false;
                 }
+                if (this.selectedSiteId && n.site_id && n.site_id !== this.selectedSiteId) {
+                    return false;
+                }
+                if (this.mapMode === "FIBER" && !["OLT", "SPLITTER", "ONU", "ROUTER"].includes(n.type)) {
+                    return false;
+                }
+                if (this.mapMode === "OLT_PON" && !["OLT", "SPLITTER", "ONU"].includes(n.type)) {
+                    return false;
+                }
+                if (this.mapMode === "SWITCH" && !["SWITCH", "ROUTER"].includes(n.type)) {
+                    return false;
+                }
+                if (this.mapMode === "PROBES" && !["PROBE", "ROUTER", "SERVER"].includes(n.type)) {
+                    return false;
+                }
                 if (this.searchQuery && this.searchQuery.trim()) {
                     const q = this.searchQuery.toLowerCase().trim();
                     const name = (n.name || "").toLowerCase();
@@ -507,27 +994,39 @@ export default {
                 const child = this.nodes.find((n) => n.id === dep.child_device_id);
 
                 if (parent && child) {
-                    // Center coordinates of cards
                     const x1 = parent.x + 90;
                     const y1 = parent.y + 76;
                     const x2 = child.x + 90;
                     const y2 = child.y;
 
-                    // Quadratic Bezier Curve
                     const dx = x2 - x1;
                     const dy = y2 - y1;
                     const cx = x1 + dx * 0.5;
                     const cy = y1 + dy * 0.5;
                     const path = `M ${x1} ${y1} Q ${cx} ${cy - 20} ${x2} ${y2}`;
 
-                    const status = parent.status === "DOWN" || child.status === "DOWN" ? "DOWN" : "UP";
+                    let status = dep.status || "UP";
+                    if (parent.status === "DOWN" || child.status === "DOWN") {
+                        status = "DOWN";
+                    }
 
                     list.push({
                         id: dep.id || `${parent.id}-${child.id}`,
                         path,
                         midX: cx,
                         midY: cy - 10,
+                        parent_device_id: dep.parent_device_id,
+                        child_device_id: dep.child_device_id,
+                        parent_name: dep.parent_name || parent.name,
+                        child_name: dep.child_name || child.name,
                         dependency_type: dep.dependency_type || "UPSTREAM",
+                        link_type: dep.link_type || "FIBER",
+                        link_speed: dep.link_speed || "1 Gbps",
+                        source_interface: dep.source_interface,
+                        target_interface: dep.target_interface,
+                        traffic_utilization_pct: dep.traffic_utilization_pct || 0,
+                        latency_ms: dep.latency_ms || 0,
+                        relationship_source: dep.relationship_source || "MANUAL",
                         status,
                     });
                 }
@@ -557,41 +1056,43 @@ export default {
     },
     methods: {
         loadData() {
+            // Load devices
             this.$root.getSocket().emit("getDeviceList", (res) => {
                 if (res && res.ok) {
                     this.devices = res.devices || [];
                 }
+                // Load probes
                 this.$root.getSocket().emit("getProbeList", (pRes) => {
                     if (pRes && pRes.ok) {
                         this.probes = pRes.probes || [];
                     }
-                    this.buildNetworkNodes();
-                    this.loadAllDependencies();
+                    // Load splitters
+                    this.$root.getSocket().emit("getFiberSplitters", (sRes) => {
+                        if (sRes && sRes.ok) {
+                            this.splittersList = sRes.splitters || [];
+                        }
+                        // Load active fiber faults
+                        this.$root.getSocket().emit("getActiveFiberFaults", (fRes) => {
+                            if (fRes && fRes.ok) {
+                                this.activeFaults = fRes.faults || [];
+                            }
+                            this.buildNetworkNodes();
+                            this.loadAllDependencies();
+                        });
+                    });
                 });
             });
         },
         loadAllDependencies() {
-            this.dependencyList = [];
-            if (this.devices.length === 0) {
-                // If no physical devices, auto-connect core monitors into a demo topology if desired
-                return;
-            }
-            for (const d of this.devices) {
-                this.$root.getSocket().emit("getDeviceDependencies", d.id, (res) => {
-                    if (res && res.ok && res.children) {
-                        for (const childLink of res.children) {
-                            if (!this.dependencyList.some((x) => x.id === childLink.id)) {
-                                this.dependencyList.push(childLink);
-                            }
-                        }
-                    }
-                });
-            }
+            this.$root.getSocket().emit("getAllDependencies", (res) => {
+                if (res && res.ok) {
+                    this.dependencyList = res.links || [];
+                }
+            });
         },
         buildNetworkNodes() {
             const orgId = this.$root.activeOrganizationId || 1;
             const savedPositions = this.loadSavedPositions(orgId);
-
             let initialList = [];
 
             if (this.devices.length > 0) {
@@ -601,13 +1102,14 @@ export default {
                     ip: d.ip_address || "10.0.0.1",
                     type: (d.device_type || "ROUTER").toUpperCase(),
                     status: (d.status || "UP").toUpperCase(),
+                    site_id: d.site_id,
                     ping: "1.2ms",
                     monitor_id: null,
                     x: 100,
                     y: 100,
                 }));
             } else {
-                // Transform monitors into nodes if no devices exist
+                // Fallback to monitors
                 const monList = Object.values(this.$root.monitorList || {});
                 initialList = monList.map((m) => {
                     const beat = (this.$root.lastHeartbeatList || {})[m.id];
@@ -616,7 +1118,7 @@ export default {
                     else if (beat && beat.status === 2) st = "PENDING";
 
                     return {
-                        id: m.id,
+                        id: `mon-${m.id}`,
                         name: m.name,
                         ip: m.url || m.hostname || "1.1.1.1",
                         type: this.inferNodeType(m),
@@ -629,7 +1131,24 @@ export default {
                 });
             }
 
-            // Append distributed probes to topology
+            // Append splitters
+            if (this.splittersList && this.splittersList.length > 0) {
+                for (const s of this.splittersList) {
+                    initialList.push({
+                        id: `splitter-${s.id}`,
+                        name: s.name,
+                        ip: s.splitter_type || "1:8 Splitter",
+                        type: "SPLITTER",
+                        status: "UP",
+                        ping: `${s.attenuation_db || 3.5}dB`,
+                        splitter_id: s.id,
+                        x: 100,
+                        y: 100,
+                    });
+                }
+            }
+
+            // Append probes
             if (this.probes && this.probes.length > 0) {
                 for (const p of this.probes) {
                     let pStatus = "UP";
@@ -655,8 +1174,7 @@ export default {
                     node.x = savedPositions[node.id].x;
                     node.y = savedPositions[node.id].y;
                 } else {
-                    // Position in tiered grid
-                    const cols = 3;
+                    const cols = 4;
                     const col = index % cols;
                     const row = Math.floor(index / cols);
                     node.x = 120 + col * 280;
@@ -673,7 +1191,6 @@ export default {
                         if (beat.status === 0) node.status = "DOWN";
                         else if (beat.status === 1) node.status = "UP";
                         else if (beat.status === 2) node.status = "PENDING";
-
                         if (beat.ping) {
                             node.ping = `${Math.round(beat.ping)}ms`;
                         }
@@ -687,18 +1204,31 @@ export default {
             if (name.includes("router") || name.includes("core") || name.includes("mikrotik") || name.includes("gateway")) return "ROUTER";
             if (name.includes("switch") || name.includes("cisco") || name.includes("juniper")) return "SWITCH";
             if (name.includes("olt") || name.includes("gpon")) return "OLT";
+            if (name.includes("onu") || name.includes("ont")) return "ONU";
             if (name.includes("server") || name.includes("api") || name.includes("db") || type.includes("http")) return "SERVER";
             return "MONITOR";
         },
         getNodeIconSymbol(type) {
             switch (type) {
                 case "ROUTER": return "☵";
+                case "MIKROTIK": return "⚡";
                 case "SWITCH": return "🔀";
-                case "SERVER": return "🖳";
                 case "OLT": return "📡";
+                case "SPLITTER": return "🔱";
+                case "ONU": return "🏠";
+                case "SERVER": return "🖳";
                 case "FIREWALL": return "🛡";
                 case "PROBE": return "🛰";
+                case "CAMERA": return "📹";
                 default: return "●";
+            }
+        },
+        getLinkMarker(status) {
+            switch (status) {
+                case "DOWN": return "url(#arrow-down)";
+                case "DEGRADED": return "url(#arrow-degraded)";
+                case "SUSPECTED": return "url(#arrow-suspected)";
+                default: return "url(#arrow-healthy)";
             }
         },
         truncateText(txt, maxLen) {
@@ -727,7 +1257,7 @@ export default {
             }
         },
         autoLayoutNodes() {
-            const tiers = { ROUTER: [], SWITCH: [], OLT: [], PROBE: [], SERVER: [], MONITOR: [] };
+            const tiers = { ROUTER: [], MIKROTIK: [], SWITCH: [], OLT: [], SPLITTER: [], PROBE: [], SERVER: [], ONU: [], MONITOR: [] };
             for (const n of this.nodes) {
                 if (tiers[n.type]) {
                     tiers[n.type].push(n);
@@ -737,7 +1267,7 @@ export default {
             }
 
             let currentY = 100;
-            for (const tierKey of ["ROUTER", "SWITCH", "OLT", "PROBE", "SERVER", "MONITOR"]) {
+            for (const tierKey of ["ROUTER", "MIKROTIK", "SWITCH", "OLT", "SPLITTER", "PROBE", "SERVER", "ONU", "MONITOR"]) {
                 const group = tiers[tierKey];
                 if (group.length > 0) {
                     const startX = Math.max(100, 600 - (group.length * 240) / 2);
@@ -787,16 +1317,8 @@ export default {
             this.zoomLevel = Math.max(0.3, this.zoomLevel - 0.15);
         },
         fitToScreen() {
-            if (this.nodes.length === 0) return;
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-            for (const n of this.nodes) {
-                if (n.x < minX) minX = n.x;
-                if (n.x > maxX) maxX = n.x + 180;
-                if (n.y < minY) minY = n.y;
-                if (n.y > maxY) maxY = n.y + 76;
-            }
-            this.panX = 50 - minX;
-            this.panY = 50 - minY;
+            this.panX = 60;
+            this.panY = 60;
             this.zoomLevel = 0.85;
         },
         resetView() {
@@ -805,7 +1327,7 @@ export default {
             this.zoomLevel = 1.0;
         },
 
-        // Node Interaction
+        // Selection & Tracing
         handleNodeMouseDown(e, node) {
             if (e.button === 0) {
                 this.draggingNode = node;
@@ -815,6 +1337,17 @@ export default {
         },
         selectNode(node) {
             this.selectedNode = node;
+            this.selectedLink = null;
+        },
+        selectLink(link) {
+            this.selectedLink = link;
+            this.selectedNode = null;
+        },
+        closeInspector() {
+            this.selectedNode = null;
+            this.selectedLink = null;
+            this.highlightedDownstreamIds = [];
+            this.highlightedUpstreamIds = [];
         },
         centerNodeOnCanvas(node) {
             this.panX = 400 - node.x * this.zoomLevel;
@@ -827,6 +1360,38 @@ export default {
         getNodeChildren(nodeId) {
             const childIds = this.dependencyList.filter((d) => d.parent_device_id === nodeId).map((d) => d.child_device_id);
             return this.nodes.filter((n) => childIds.includes(n.id));
+        },
+        traceDownstream(nodeId) {
+            const result = [];
+            const queue = [nodeId];
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const children = this.dependencyList.filter((d) => d.parent_device_id === current).map((d) => d.child_device_id);
+                for (const c of children) {
+                    if (!result.includes(c)) {
+                        result.push(c);
+                        queue.push(c);
+                    }
+                }
+            }
+            this.highlightedDownstreamIds = result;
+            this.$root.toastInfo(`Traced ${result.length} downstream nodes impacted`);
+        },
+        traceUpstream(nodeId) {
+            const result = [];
+            const queue = [nodeId];
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const parents = this.dependencyList.filter((d) => d.child_device_id === current).map((d) => d.parent_device_id);
+                for (const p of parents) {
+                    if (!result.includes(p)) {
+                        result.push(p);
+                        queue.push(p);
+                    }
+                }
+            }
+            this.highlightedUpstreamIds = result;
+            this.$root.toastInfo(`Traced upstream path across ${result.length} core devices`);
         },
 
         // Dependency Link Actions
@@ -844,11 +1409,28 @@ export default {
                 }
             });
         },
+        openEditLinkModal(link) {
+            this.editingLink = { ...link };
+            this.showEditLinkModal = true;
+        },
+        saveEditedLink() {
+            if (!this.editingLink || !this.editingLink.id) return;
+            this.$root.getSocket().emit("updateDeviceDependency", this.editingLink, (res) => {
+                if (res && res.ok) {
+                    this.$root.toastSuccess("Link parameters updated");
+                    this.showEditLinkModal = false;
+                    this.loadData();
+                } else {
+                    this.$root.toastError(res ? res.msg : "Error updating link");
+                }
+            });
+        },
         deleteLink(linkId) {
             if (confirm("Delete this network dependency link?")) {
                 this.$root.getSocket().emit("deleteDeviceDependency", linkId, (res) => {
                     if (res && res.ok) {
                         this.$root.toastSuccess("Dependency link removed");
+                        this.selectedLink = null;
                         this.loadData();
                     } else {
                         this.$root.toastError(res ? res.msg : "Error removing link");
@@ -859,6 +1441,75 @@ export default {
         getDeviceName(devId) {
             const dev = this.allSelectableEntities.find((d) => d.id === Number(devId));
             return dev ? `${dev.name} (${dev.ip || dev.type})` : `Target #${devId}`;
+        },
+
+        // Splitter Actions
+        saveSplitter() {
+            this.$root.getSocket().emit("saveFiberSplitter", this.newSplitter, (res) => {
+                if (res && res.ok) {
+                    this.$root.toastSuccess("Fiber splitter registered");
+                    this.showSplitterModal = false;
+                    this.newSplitter = { name: "", splitter_type: "1:8", tier_level: 1, location: "" };
+                    this.loadData();
+                } else {
+                    this.$root.toastError(res ? res.msg : "Error saving splitter");
+                }
+            });
+        },
+        deleteSplitter(splitterId) {
+            if (confirm("Delete this fiber splitter?")) {
+                this.$root.getSocket().emit("deleteFiberSplitter", splitterId, (res) => {
+                    if (res && res.ok) {
+                        this.$root.toastSuccess("Fiber splitter removed");
+                        this.loadData();
+                    } else {
+                        this.$root.toastError(res ? res.msg : "Error removing splitter");
+                    }
+                });
+            }
+        },
+
+        // Topology Export & Import
+        exportTopologyFile() {
+            this.$root.getSocket().emit("exportTopology", (res) => {
+                if (res && res.ok) {
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(res.topology, null, 2));
+                    const downloadAnchor = document.createElement("a");
+                    downloadAnchor.setAttribute("href", dataStr);
+                    downloadAnchor.setAttribute("download", `infininoc_topology_org${this.$root.activeOrganizationId || 1}.json`);
+                    document.body.appendChild(downloadAnchor);
+                    downloadAnchor.click();
+                    downloadAnchor.remove();
+                    this.$root.toastSuccess("Topology configuration downloaded");
+                }
+            });
+        },
+        submitImportTopology() {
+            try {
+                const parsed = JSON.parse(this.importJsonText);
+                this.$root.getSocket().emit("importTopology", parsed, (res) => {
+                    if (res && res.ok) {
+                        this.$root.toastSuccess(`Imported ${res.importedLinks} topology links`);
+                        this.showImportModal = false;
+                        this.importJsonText = "";
+                        this.loadData();
+                    } else {
+                        this.$root.toastError(res ? res.msg : "Import failed");
+                    }
+                });
+            } catch (e) {
+                this.$root.toastError("Invalid JSON format");
+            }
+        },
+
+        // Fault Analysis
+        triggerFaultAnalysis() {
+            this.$root.getSocket().emit("runFiberFaultAnalysis", (res) => {
+                if (res && res.ok) {
+                    this.activeFaults = res.faults || [];
+                    this.$root.toastSuccess(`Fault analysis completed: ${this.activeFaults.length} active faults`);
+                }
+            });
         },
     },
 };
@@ -920,6 +1571,7 @@ export default {
     fill: none;
     stroke-width: 2.5px;
     transition: stroke 0.3s ease;
+    cursor: pointer;
 }
 
 .link-healthy {
@@ -933,6 +1585,24 @@ export default {
 
 .link-degraded {
     stroke: #F59E0B;
+}
+
+.link-suspected {
+    stroke: #F97316;
+    stroke-dasharray: 5 2;
+}
+
+.link-wireless {
+    stroke-dasharray: 3 3;
+}
+
+.link-logical {
+    stroke-dasharray: 6 4;
+}
+
+.is-selected-link {
+    stroke: #3B82F6 !important;
+    stroke-width: 4px !important;
 }
 
 .link-label-bg {
@@ -971,6 +1641,18 @@ export default {
     stroke: #3B82F6;
     stroke-width: 2.5px;
     filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.4));
+}
+
+.device-node-group.is-highlighted-downstream .node-box {
+    stroke: #F59E0B !important;
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 0 14px rgba(245, 158, 11, 0.6));
+}
+
+.device-node-group.is-highlighted-upstream .node-box {
+    stroke: #06B6D4 !important;
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 0 14px rgba(6, 182, 212, 0.6));
 }
 
 .device-node-group.is-down .node-box {
@@ -1057,7 +1739,7 @@ export default {
 
 /* Inspector Drawer */
 .node-inspector-drawer {
-    width: 320px;
+    width: 340px;
     z-index: 20;
     overflow-y: auto;
 }
@@ -1109,5 +1791,9 @@ export default {
     color: var(--foreground);
     border: 1px solid var(--border);
     border-radius: 12px;
+}
+
+.cursor-pointer {
+    cursor: pointer;
 }
 </style>
