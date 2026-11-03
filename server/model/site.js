@@ -1,17 +1,32 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 
 class Site {
     /**
-     * Get all sites scoped to organization_id
+     * Get all sites scoped to organization_id with optional search and status filtering
      * @param {number} organizationId Organization ID
+     * @param {object} filters Optional filters { search, status }
      * @returns {Promise<Array>} List of sites with health summary
      */
-    static async getSiteList(organizationId) {
+    static async getSiteList(organizationId, filters = {}) {
         const orgId = organizationId || 1;
-        const sites = await R.getAll(
-            "SELECT * FROM site WHERE organization_id = ? ORDER BY id DESC",
-            [orgId]
-        );
+        let sql = "SELECT * FROM site WHERE organization_id = ?";
+        const params = [orgId];
+
+        if (filters.status && filters.status !== "ALL") {
+            sql += " AND LOWER(status) = LOWER(?)";
+            params.push(filters.status);
+        }
+
+        if (filters.search && filters.search.trim()) {
+            const term = `%${filters.search.trim()}%`;
+            sql += " AND (name LIKE ? OR code LIKE ? OR description LIKE ? OR address LIKE ?)";
+            params.push(term, term, term, term);
+        }
+
+        sql += " ORDER BY id DESC";
+
+        const sites = await R.getAll(sql, params);
 
         for (const site of sites) {
             const health = await Site.calculateSiteHealth(site.id, orgId);
@@ -46,8 +61,20 @@ class Site {
 
         // Fetch assigned devices
         const devices = await R.getAll(
+            "SELECT * FROM device WHERE site_id = ? AND organization_id = ? ORDER BY id DESC",
+            [siteId, orgId]
+        );
+
+        // Also fetch from legacy site_device table if populated
+        const legacyDevices = await R.getAll(
             "SELECT * FROM site_device WHERE site_id = ? ORDER BY id DESC",
             [siteId]
+        );
+
+        // Fetch assigned probes
+        const probes = await R.getAll(
+            "SELECT id, name, status, ip_address, version, last_heartbeat FROM probe WHERE site_id = ? AND (organization_id = ? OR organization_id IS NULL)",
+            [siteId, orgId]
         );
 
         const health = await Site.calculateSiteHealth(siteId, orgId);
@@ -55,7 +82,8 @@ class Site {
         return {
             ...site,
             monitors: monitorRows,
-            devices: devices,
+            devices: devices.length > 0 ? devices : legacyDevices,
+            probes: probes || [],
             health: health,
         };
     }
@@ -83,22 +111,54 @@ class Site {
             throw new Error(`Site code "${cleanCode}" already exists in this organization.`);
         }
 
-        await R.exec(
-            `INSERT INTO site (
-                organization_id, name, code, description, address, latitude, longitude, timezone, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now'), DATETIME('now'))`,
-            [
-                orgId,
-                data.name.trim(),
-                cleanCode,
-                data.description || "",
-                data.address || "",
-                data.latitude || null,
-                data.longitude || null,
-                data.timezone || "UTC",
-                data.status || "Operational",
-            ]
-        );
+        const isoNow = toSqlDatetime();
+
+        // Check if city/state/country columns are available
+        try {
+            await R.exec(
+                `INSERT INTO site (
+                    organization_id, name, code, description, address, city, state, country,
+                    latitude, longitude, timezone, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    orgId,
+                    data.name.trim(),
+                    cleanCode,
+                    data.description || "",
+                    data.address || "",
+                    data.city || null,
+                    data.state || null,
+                    data.country || null,
+                    data.latitude !== undefined && data.latitude !== null && data.latitude !== "" ? Number(data.latitude) : null,
+                    data.longitude !== undefined && data.longitude !== null && data.longitude !== "" ? Number(data.longitude) : null,
+                    data.timezone || "UTC",
+                    data.status || "Operational",
+                    isoNow,
+                    isoNow,
+                ]
+            );
+        } catch (colErr) {
+            // Fallback for schemas before city/state/country migration
+            await R.exec(
+                `INSERT INTO site (
+                    organization_id, name, code, description, address,
+                    latitude, longitude, timezone, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    orgId,
+                    data.name.trim(),
+                    cleanCode,
+                    data.description || "",
+                    data.address || "",
+                    data.latitude !== undefined && data.latitude !== null && data.latitude !== "" ? Number(data.latitude) : null,
+                    data.longitude !== undefined && data.longitude !== null && data.longitude !== "" ? Number(data.longitude) : null,
+                    data.timezone || "UTC",
+                    data.status || "Operational",
+                    isoNow,
+                    isoNow,
+                ]
+            );
+        }
 
         const siteId = await R.getCell(
             "SELECT id FROM site WHERE organization_id = ? AND code = ?",
@@ -138,37 +198,76 @@ class Site {
             }
         }
 
-        await R.exec(
-            `UPDATE site SET
-                name = COALESCE(?, name),
-                code = COALESCE(?, code),
-                description = COALESCE(?, description),
-                address = COALESCE(?, address),
-                latitude = COALESCE(?, latitude),
-                longitude = COALESCE(?, longitude),
-                timezone = COALESCE(?, timezone),
-                status = COALESCE(?, status),
-                updated_at = DATETIME('now')
-            WHERE id = ? AND organization_id = ?`,
-            [
-                data.name ? data.name.trim() : null,
-                cleanCode || null,
-                data.description !== undefined ? data.description : null,
-                data.address !== undefined ? data.address : null,
-                data.latitude !== undefined ? data.latitude : null,
-                data.longitude !== undefined ? data.longitude : null,
-                data.timezone || null,
-                data.status || null,
-                siteId,
-                orgId,
-            ]
-        );
+        const isoNow = toSqlDatetime();
+
+        try {
+            await R.exec(
+                `UPDATE site SET
+                    name = COALESCE(?, name),
+                    code = COALESCE(?, code),
+                    description = COALESCE(?, description),
+                    address = COALESCE(?, address),
+                    city = COALESCE(?, city),
+                    state = COALESCE(?, state),
+                    country = COALESCE(?, country),
+                    latitude = COALESCE(?, latitude),
+                    longitude = COALESCE(?, longitude),
+                    timezone = COALESCE(?, timezone),
+                    status = COALESCE(?, status),
+                    updated_at = ?
+                WHERE id = ? AND organization_id = ?`,
+                [
+                    data.name ? data.name.trim() : null,
+                    cleanCode || null,
+                    data.description !== undefined ? data.description : null,
+                    data.address !== undefined ? data.address : null,
+                    data.city !== undefined ? data.city : null,
+                    data.state !== undefined ? data.state : null,
+                    data.country !== undefined ? data.country : null,
+                    data.latitude !== undefined && data.latitude !== null && data.latitude !== "" ? Number(data.latitude) : null,
+                    data.longitude !== undefined && data.longitude !== null && data.longitude !== "" ? Number(data.longitude) : null,
+                    data.timezone || null,
+                    data.status || null,
+                    isoNow,
+                    siteId,
+                    orgId,
+                ]
+            );
+        } catch (colErr) {
+            // Fallback for older schema without city/state/country
+            await R.exec(
+                `UPDATE site SET
+                    name = COALESCE(?, name),
+                    code = COALESCE(?, code),
+                    description = COALESCE(?, description),
+                    address = COALESCE(?, address),
+                    latitude = COALESCE(?, latitude),
+                    longitude = COALESCE(?, longitude),
+                    timezone = COALESCE(?, timezone),
+                    status = COALESCE(?, status),
+                    updated_at = ?
+                WHERE id = ? AND organization_id = ?`,
+                [
+                    data.name ? data.name.trim() : null,
+                    cleanCode || null,
+                    data.description !== undefined ? data.description : null,
+                    data.address !== undefined ? data.address : null,
+                    data.latitude !== undefined && data.latitude !== null && data.latitude !== "" ? Number(data.latitude) : null,
+                    data.longitude !== undefined && data.longitude !== null && data.longitude !== "" ? Number(data.longitude) : null,
+                    data.timezone || null,
+                    data.status || null,
+                    isoNow,
+                    siteId,
+                    orgId,
+                ]
+            );
+        }
 
         return await Site.getSite(siteId, orgId);
     }
 
     /**
-     * Delete site scoped to organization_id
+     * Delete site scoped to organization_id with dependency cleanup
      * @param {number} siteId Site ID
      * @param {number} organizationId Organization ID
      * @returns {Promise<boolean>} Success boolean
@@ -184,6 +283,9 @@ class Site {
             throw new Error("Site not found or access denied.");
         }
 
+        // Unlink devices and probes gracefully rather than breaking foreign relationships
+        await R.exec("UPDATE device SET site_id = NULL WHERE site_id = ? AND organization_id = ?", [siteId, orgId]);
+        await R.exec("UPDATE probe SET site_id = NULL WHERE site_id = ? AND (organization_id = ? OR organization_id IS NULL)", [siteId, orgId]);
         await R.exec("DELETE FROM site_monitor WHERE site_id = ?", [siteId]);
         await R.exec("DELETE FROM site_device WHERE site_id = ?", [siteId]);
         await R.exec("DELETE FROM site WHERE id = ? AND organization_id = ?", [siteId, orgId]);
@@ -210,6 +312,7 @@ class Site {
         }
 
         await R.exec("DELETE FROM site_monitor WHERE site_id = ?", [siteId]);
+        const isoNow = toSqlDatetime();
 
         if (Array.isArray(monitorIds)) {
             for (const mId of monitorIds) {
@@ -220,8 +323,8 @@ class Site {
                 );
                 if (validMonitor) {
                     await R.exec(
-                        "INSERT INTO site_monitor (site_id, monitor_id, created_at) VALUES (?, ?, DATETIME('now'))",
-                        [siteId, mId]
+                        "INSERT INTO site_monitor (site_id, monitor_id, created_at) VALUES (?, ?, ?)",
+                        [siteId, mId, isoNow]
                     );
                 }
             }
@@ -231,7 +334,77 @@ class Site {
     }
 
     /**
-     * Add a device to site
+     * Assign probes to site
+     * @param {number} siteId Site ID
+     * @param {Array<number>} probeIds Array of probe IDs
+     * @param {number} organizationId Organization ID
+     * @returns {Promise<object>} Updated site
+     */
+    static async assignProbes(siteId, probeIds, organizationId) {
+        const orgId = organizationId || 1;
+        const site = await R.getCell(
+            "SELECT id FROM site WHERE id = ? AND organization_id = ?",
+            [siteId, orgId]
+        );
+
+        if (!site) {
+            throw new Error("Site not found or access denied.");
+        }
+
+        const isoNow = toSqlDatetime();
+
+        // Clear existing site associations for this site
+        await R.exec("UPDATE probe SET site_id = NULL WHERE site_id = ? AND (organization_id = ? OR organization_id IS NULL)", [siteId, orgId]);
+
+        if (Array.isArray(probeIds)) {
+            for (const pId of probeIds) {
+                await R.exec(
+                    "UPDATE probe SET site_id = ?, updated_at = ? WHERE id = ? AND (organization_id = ? OR organization_id IS NULL)",
+                    [siteId, isoNow, pId, orgId]
+                );
+            }
+        }
+
+        return await Site.getSite(siteId, orgId);
+    }
+
+    /**
+     * Assign devices to site
+     * @param {number} siteId Site ID
+     * @param {Array<number>} deviceIds Array of device IDs
+     * @param {number} organizationId Organization ID
+     * @returns {Promise<object>} Updated site
+     */
+    static async assignDevices(siteId, deviceIds, organizationId) {
+        const orgId = organizationId || 1;
+        const site = await R.getCell(
+            "SELECT id FROM site WHERE id = ? AND organization_id = ?",
+            [siteId, orgId]
+        );
+
+        if (!site) {
+            throw new Error("Site not found or access denied.");
+        }
+
+        const isoNow = toSqlDatetime();
+
+        // Clear existing device associations for this site
+        await R.exec("UPDATE device SET site_id = NULL WHERE site_id = ? AND organization_id = ?", [siteId, orgId]);
+
+        if (Array.isArray(deviceIds)) {
+            for (const dId of deviceIds) {
+                await R.exec(
+                    "UPDATE device SET site_id = ?, updated_at = ? WHERE id = ? AND organization_id = ?",
+                    [siteId, isoNow, dId, orgId]
+                );
+            }
+        }
+
+        return await Site.getSite(siteId, orgId);
+    }
+
+    /**
+     * Add a legacy device to site_device table
      * @param {number} siteId Site ID
      * @param {object} deviceData Device info
      * @param {number} organizationId Organization ID
@@ -252,14 +425,17 @@ class Site {
             throw new Error("Device name and device type are required.");
         }
 
+        const isoNow = toSqlDatetime();
+
         await R.exec(
-            "INSERT INTO site_device (site_id, device_name, device_type, ip_address, status, created_at) VALUES (?, ?, ?, ?, ?, DATETIME('now'))",
+            "INSERT INTO site_device (site_id, device_name, device_type, ip_address, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             [
                 siteId,
                 deviceData.device_name.trim(),
                 deviceData.device_type.trim(),
                 deviceData.ip_address || null,
                 deviceData.status || "online",
+                isoNow,
             ]
         );
 
@@ -267,7 +443,7 @@ class Site {
     }
 
     /**
-     * Remove device from site
+     * Remove device from site_device table
      * @param {number} siteId Site ID
      * @param {number} deviceId Device ID
      * @param {number} organizationId Organization ID
@@ -297,14 +473,19 @@ class Site {
     static async calculateSiteHealth(siteId, organizationId) {
         const orgId = organizationId || 1;
 
-        // Assigned devices count & statuses
+        // Assigned devices count & statuses (from device table scoped to site)
         const devices = await R.getAll(
+            "SELECT status FROM device WHERE site_id = ? AND organization_id = ?",
+            [siteId, orgId]
+        );
+        const legacyDevices = await R.getAll(
             "SELECT status FROM site_device WHERE site_id = ?",
             [siteId]
         );
-        const totalDevices = devices.length;
-        const onlineDevices = devices.filter((d) => d.status === "online").length;
-        const offlineDevices = devices.filter((d) => d.status === "offline").length;
+        const allDevices = devices.length > 0 ? devices : legacyDevices;
+        const totalDevices = allDevices.length;
+        const onlineDevices = allDevices.filter((d) => d.status === "online" || d.status === "UP").length;
+        const offlineDevices = allDevices.filter((d) => d.status === "offline" || d.status === "DOWN").length;
 
         // Assigned monitors telemetry
         const monitorBeats = await R.getAll(

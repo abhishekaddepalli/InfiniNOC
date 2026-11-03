@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 const metricsStore = require("./metrics-store");
 const profileRegistry = require("./snmp-profile-registry");
 
@@ -74,6 +75,7 @@ class SnmpMonitoring {
         const retries = Number(configData.retries) || 2;
         const pollInterval = Number(configData.poll_interval) || 30;
 
+        const isoNow = toSqlDatetime();
         if (existing) {
             await R.exec(
                 `UPDATE snmp_config SET
@@ -83,16 +85,16 @@ class SnmpMonitoring {
                     timeout = ?,
                     retries = ?,
                     poll_interval = ?,
-                    updated_at = DATETIME('now')
+                    updated_at = ?
                 WHERE id = ? AND organization_id = ?`,
-                [version, credId, port, timeout, retries, pollInterval, existing.id, orgId]
+                [version, credId, port, timeout, retries, pollInterval, isoNow, existing.id, orgId]
             );
         } else {
             await R.exec(
                 `INSERT INTO snmp_config (
                     organization_id, device_id, snmp_version, credential_id, port, timeout, retries, poll_interval, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now'), DATETIME('now'))`,
-                [orgId, deviceId, version, credId, port, timeout, retries, pollInterval]
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [orgId, deviceId, version, credId, port, timeout, retries, pollInterval, isoNow, isoNow]
             );
         }
 
@@ -123,9 +125,10 @@ class SnmpMonitoring {
 
         // Update device status in primary relational database if unreachable or online
         if (metricPayload && metricPayload.status) {
+            const isoNow = toSqlDatetime();
             await R.exec(
-                "UPDATE device SET status = ?, updated_at = DATETIME('now') WHERE id = ? AND organization_id = ?",
-                [metricPayload.status, deviceId, orgId]
+                "UPDATE device SET status = ?, updated_at = ? WHERE id = ? AND organization_id = ?",
+                [metricPayload.status, isoNow, deviceId, orgId]
             );
         }
 

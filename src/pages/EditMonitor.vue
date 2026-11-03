@@ -2243,6 +2243,33 @@
                                 {{ $t("Setup Notification") }}
                             </button>
 
+                            <!-- Execution Location / Distributed Probe -->
+                            <div class="mt-4 pt-3 border-top border-secondary">
+                                <h2 class="mb-2 d-flex align-items-center gap-2">
+                                    <font-awesome-icon icon="network-wired" class="text-cyan" style="color: #06B6D4;" />
+                                    <span>Execution Location</span>
+                                </h2>
+                                <p class="text-secondary small mb-2">
+                                    Select whether this check runs directly from the central monitoring server or is delegated to a remote distributed probe agent (for private LAN targets like 192.168.x.x, 10.x.x.x, branch offices, or multi-region latency vantage points).
+                                </p>
+
+                                <div class="mb-3">
+                                    <select v-model="monitor.probe_id" class="form-select">
+                                        <option :value="null">Central Server (Default Engine)</option>
+                                        <option v-for="probe in probeList" :key="probe.id" :value="probe.id">
+                                            Probe #{{ probe.id }} - {{ probe.name }} ({{ (probe.status || 'UNKNOWN').toUpperCase() }}{{ probe.region ? ' - ' + probe.region : '' }})
+                                        </option>
+                                    </select>
+                                    <div v-if="monitor.probe_id" class="form-text text-info small mt-1">
+                                        <font-awesome-icon icon="info-circle" class="me-1" />
+                                        Target check will be delegated exclusively to this remote probe. If the probe is offline, the target will safely transition to PENDING (UNKNOWN) rather than triggering false outage alerts.
+                                    </div>
+                                    <div v-else class="form-text text-muted small mt-1">
+                                        Check runs directly from the central monitoring server.
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- WebSocket Authentication -->
                             <template v-if="monitor.type === 'websocket-upgrade'">
                                 <h2 class="mt-5 mb-2">{{ $t("Authentication") }}</h2>
@@ -3304,6 +3331,7 @@ const monitorDefaults = {
     docker_container: "",
     docker_host: null,
     proxyId: null,
+    probe_id: null,
     basic_auth_user: "",
     basic_auth_pass: "",
     bearer_token: "",
@@ -3357,6 +3385,7 @@ export default {
         return {
             minInterval: MIN_INTERVAL_SECOND,
             processing: false,
+            probeList: [],
             monitor: {
                 notificationIDList: {},
                 // Do not add default value here, please check init() method
@@ -4042,6 +4071,14 @@ message HealthCheckResponse {
          * @returns {void}
          */
         init() {
+            if (this.$root.getSocket()) {
+                this.$root.getSocket().emit("getProbeList", (res) => {
+                    if (res && res.ok) {
+                        this.probeList = res.probes || [];
+                    }
+                });
+            }
+
             if (this.isAdd) {
                 this.monitor = {
                     ...monitorDefaults,
@@ -4075,6 +4112,9 @@ message HealthCheckResponse {
                         }
 
                         this.monitor = res.monitor;
+                        if (this.monitor.probe_id === undefined && this.monitor.probeId !== undefined) {
+                            this.monitor.probe_id = this.monitor.probeId;
+                        }
 
                         if (this.isClone) {
                             /*

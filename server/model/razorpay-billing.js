@@ -1,5 +1,6 @@
 const { R } = require("redbean-node");
 const crypto = require("crypto");
+const { toSqlDatetime } = require("../util-server");
 
 const PLAN_TIERS = {
     starter: {
@@ -91,12 +92,13 @@ class RazorpayBilling {
 
         const razorpayKeyId = process.env.RAZORPAY_KEY_ID || "rzp_test_InfiniNOC_DemoKey";
         const mockOrderId = `order_${crypto.randomBytes(8).toString("hex")}`;
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `INSERT INTO organization_billing (
                 organization_id, razorpay_order_id, plan, amount, currency, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'INR', 'created', DATETIME('now'), DATETIME('now'))`,
-            [ orgId, mockOrderId, planKey, tier.amountPaise ]
+            ) VALUES (?, ?, ?, ?, 'INR', 'created', ?, ?)`,
+            [ orgId, mockOrderId, planKey, tier.amountPaise, isoNow, isoNow ]
         );
 
         return {
@@ -137,27 +139,28 @@ class RazorpayBilling {
         const billingRow = await R.getRow("SELECT * FROM organization_billing WHERE razorpay_order_id = ?", [ razorpayOrderId ]);
         const targetPlan = billingRow ? billingRow.plan : "pro";
         const tier = PLAN_TIERS[targetPlan] || PLAN_TIERS.pro;
+        const isoNow = toSqlDatetime();
 
         // Upgrade organization plan and limits
         await R.exec(
             `UPDATE organization
-             SET plan = ?, max_monitors = ?, max_devices = ?, max_members = ?, updated_at = DATETIME('now')
+             SET plan = ?, max_monitors = ?, max_devices = ?, max_members = ?, updated_at = ?
              WHERE id = ?`,
-            [ targetPlan, tier.maxMonitors, tier.maxDevices, tier.maxMembers, orgId ]
+            [ targetPlan, tier.maxMonitors, tier.maxDevices, tier.maxMembers, isoNow, orgId ]
         );
 
         // Mark payment as paid
         await R.exec(
             `UPDATE organization_billing
-             SET razorpay_payment_id = ?, razorpay_signature = ?, status = 'paid', updated_at = DATETIME('now')
+             SET razorpay_payment_id = ?, razorpay_signature = ?, status = 'paid', updated_at = ?
              WHERE razorpay_order_id = ?`,
-            [ razorpayPaymentId, razorpaySignature || "sig_valid", razorpayOrderId ]
+            [ razorpayPaymentId, razorpaySignature || "sig_valid", isoNow, razorpayOrderId ]
         );
 
         // Audit Log
         await R.exec(
-            "INSERT INTO organization_audit_log (organization_id, user_id, event, details, created_at) VALUES (?, ?, 'plan_upgraded', ?, DATETIME('now'))",
-            [ orgId, userId || 1, JSON.stringify({ plan: targetPlan, orderId: razorpayOrderId, paymentId: razorpayPaymentId }) ]
+            "INSERT INTO organization_audit_log (organization_id, user_id, event, details, created_at) VALUES (?, ?, 'plan_upgraded', ?, ?)",
+            [ orgId, userId || 1, JSON.stringify({ plan: targetPlan, orderId: razorpayOrderId, paymentId: razorpayPaymentId }), isoNow ]
         );
 
         return {

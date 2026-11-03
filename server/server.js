@@ -830,6 +830,8 @@ let needSetup = false;
                 if (monitor.retryOnlyOnStatusCodeFailure !== undefined) {
                     bean.retry_only_on_status_code_failure = monitor.retryOnlyOnStatusCodeFailure;
                 }
+                const addProbeId = monitor.probe_id !== undefined ? monitor.probe_id : monitor.probeId;
+                bean.probe_id = addProbeId ? Number(addProbeId) : null;
                 bean.user_id = socket.userID;
                 bean.organization_id = socket.activeOrganizationId || 1;
 
@@ -950,6 +952,8 @@ let needSetup = false;
                 bean.docker_container = monitor.docker_container;
                 bean.docker_host = monitor.docker_host;
                 bean.proxyId = Number.isInteger(monitor.proxyId) ? monitor.proxyId : null;
+                const editProbeId = monitor.probe_id !== undefined ? monitor.probe_id : monitor.probeId;
+                bean.probe_id = editProbeId ? Number(editProbeId) : null;
                 bean.mqttUsername = monitor.mqttUsername;
                 bean.mqttPassword = monitor.mqttPassword;
                 bean.mqttTopic = monitor.mqttTopic;

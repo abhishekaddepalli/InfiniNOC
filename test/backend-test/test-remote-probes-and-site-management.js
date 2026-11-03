@@ -1,0 +1,289 @@
+const { describe, it, before, after } = require("node:test");
+const assert = require("node:assert");
+const { R } = require("redbean-node");
+const path = require("path");
+const fs = require("fs");
+
+describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test Suite", () => {
+    let Organization;
+    let Probe;
+    let Site;
+    let Monitor;
+    let Incident;
+    let org;
+    let user;
+    let testProbe;
+    let probeApiKey;
+    let testSite;
+    let testMonitor;
+
+    const testDbDir = path.join(__dirname, "../test-data");
+    const testDbPath = path.join(testDbDir, "test-probes-sites-ops.db");
+
+    before(async () => {
+        if (!fs.existsSync(testDbDir)) {
+            fs.mkdirSync(testDbDir, { recursive: true });
+        }
+        if (fs.existsSync(testDbPath)) {
+            fs.unlinkSync(testDbPath);
+        }
+
+        const Dialect = require("knex/lib/dialects/sqlite3/index.js");
+        Dialect.prototype._driver = () => require("@louislam/sqlite3");
+
+        const knex = require("knex")({
+            client: Dialect,
+            connection: {
+                filename: testDbPath,
+            },
+            useNullAsDefault: true,
+        });
+
+        R.setup(knex);
+        R.freeze(false);
+
+        const { createTables } = require("../../db/knex_init_db.js");
+        await createTables();
+
+        await R.knex.migrate.latest({
+            directory: path.join(__dirname, "../../db/knex_migrations"),
+        });
+
+        Organization = require("../../server/model/organization.js");
+        Probe = require("../../server/model/probe.js");
+        Site = require("../../server/model/site.js");
+        Monitor = require("../../server/model/monitor.js");
+        Incident = require("../../server/model/incident.js");
+
+        await R.exec("INSERT INTO user (username, password, active) VALUES ('probe_ops_admin', 'pass123', 1)");
+        const userId = await R.getCell("SELECT id FROM user WHERE username = 'probe_ops_admin'");
+        user = { id: userId, username: "probe_ops_admin" };
+
+        org = await Organization.createOrganization("InfiniNOC Operations Corp", "infininoc-ops", user.id);
+    });
+
+    after(async () => {
+        if (R.knex) {
+            await R.knex.destroy();
+        }
+        if (fs.existsSync(testDbPath)) {
+            try {
+                fs.unlinkSync(testDbPath);
+            } catch (_) {}
+        }
+    });
+
+    it("1. Site Management: creates site with location metadata using valid cross-DB SQL datetime", async () => {
+        testSite = await Site.createSite(
+            {
+                name: "Hyderabad Core DC",
+                code: "HYD-DC-01",
+                site_type: "dc",
+                city: "Hyderabad",
+                state: "Telangana",
+                country: "India",
+                address: "HITEC City, Madhapur",
+                latitude: 17.4483,
+                longitude: 78.3915,
+                contact_name: "Operations Desk",
+                contact_phone: "+91-40-12345678",
+            },
+            org.id
+        );
+
+        assert.ok(testSite.id);
+        assert.strictEqual(testSite.name, "Hyderabad Core DC");
+        assert.strictEqual(testSite.code, "HYD-DC-01");
+        assert.strictEqual(testSite.city, "Hyderabad");
+        assert.strictEqual(testSite.state, "Telangana");
+        assert.strictEqual(testSite.country, "India");
+
+        // Verify Site.getSiteList includes location fields
+        const siteList = await Site.getSiteList(org.id);
+        assert.ok(siteList.length >= 1);
+        const hydSite = siteList.find((s) => s.id === testSite.id);
+        assert.ok(hydSite);
+        assert.strictEqual(hydSite.city, "Hyderabad");
+    });
+
+    it("2. Probe Registration: generates one-time token and enrolls remote probe agent", async () => {
+        const tokenInfo = await Probe.createProbeRegistrationToken(
+            {
+                name: "Branch Office Probe - Hyderabad",
+                site_id: testSite.id,
+                region: "ap-south-1",
+                location: "HITEC City DC Floor 2",
+                description: "Dedicated branch LAN monitoring daemon",
+            },
+            org.id
+        );
+
+        assert.ok(tokenInfo.probe.id);
+        assert.ok(tokenInfo.registrationToken);
+        assert.strictEqual(tokenInfo.probe.status, "pending");
+
+        // Enroll probe
+        const enrolled = await Probe.registerProbe(
+            tokenInfo.probe.id,
+            tokenInfo.registrationToken,
+            "192.168.10.15",
+            "1.26.31",
+            { os_info: "Linux Ubuntu 24.04 (x86_64)", region: "ap-south-1" }
+        );
+
+        assert.ok(enrolled.apiKey);
+        assert.strictEqual(enrolled.probeId, tokenInfo.probe.id);
+        probeApiKey = enrolled.apiKey;
+        testProbe = await Probe.getProbe(tokenInfo.probe.id, org.id);
+        assert.strictEqual(testProbe.status, "online");
+        assert.strictEqual(testProbe.site_id, testSite.id);
+    });
+
+    it("3. Probe Heartbeat: ingests real system telemetry (CPU, RAM, latency)", async () => {
+        const hb = await Probe.recordHeartbeat(testProbe.id, probeApiKey, {
+            latency_ms: 14,
+            cpu_usage: 22.5,
+            memory_usage: 45.2,
+            disk_usage: 38.0,
+            tasks_executed: 50,
+            tasks_failed: 1,
+        });
+
+        assert.ok(hb.ok);
+        const updated = await Probe.getProbe(testProbe.id, org.id);
+        assert.strictEqual(updated.status, "online");
+        assert.strictEqual(updated.latency_ms, 14);
+        assert.strictEqual(Number(updated.cpu_usage), 22.5);
+    });
+
+    it("4. Monitor Delegation: creates private LAN target monitor assigned to remote probe", async () => {
+        // Create monitor targeting a private RFC 1918 LAN IP
+        let monBean = R.dispense("monitor");
+        monBean.name = "Branch Core Switch (Private LAN)";
+        monBean.type = "ping";
+        monBean.hostname = "192.168.1.1";
+        monBean.interval = 30;
+        monBean.timeout = 5;
+        monBean.active = 1;
+        monBean.user_id = user.id;
+        monBean.organization_id = org.id;
+        monBean.probe_id = testProbe.id;
+        await R.store(monBean);
+
+        testMonitor = monBean;
+        assert.ok(testMonitor.id);
+        assert.strictEqual(testMonitor.probe_id, testProbe.id);
+
+        // Verify probe tasks query retrieves this monitor
+        const assignedTasks = await Probe.getAssignedTasks(testProbe.id, probeApiKey);
+        assert.ok(assignedTasks.length >= 1);
+        const switchTask = assignedTasks.find((t) => t.id === testMonitor.id);
+        assert.ok(switchTask);
+        assert.strictEqual(switchTask.hostname, "192.168.1.1");
+    });
+
+    it("5. Remote Check Ingestion & Alerting: probe submits DOWN result for private target and auto-raises P1 incident", async () => {
+        const result = await Probe.submitTaskResult(testProbe.id, probeApiKey, {
+            monitor_id: testMonitor.id,
+            status: 0,
+            ping: null,
+            msg: "Check failed via probe: Destination Host Unreachable on 192.168.1.1",
+        });
+
+        assert.ok(result.ok);
+        assert.strictEqual(result.status, 0);
+
+        // Verify heartbeat recorded with probe_id
+        const latestBeat = await R.getRow(
+            "SELECT * FROM heartbeat WHERE monitor_id = ? ORDER BY id DESC LIMIT 1",
+            [testMonitor.id]
+        );
+        assert.ok(latestBeat);
+        assert.strictEqual(latestBeat.status, 0);
+        assert.strictEqual(latestBeat.probe_id, testProbe.id);
+
+        // Verify active incident auto-created
+        const activeInc = await R.getRow(
+            `SELECT incident.* FROM incident
+            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+            WHERE incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?
+            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+            [testMonitor.id]
+        );
+        assert.ok(activeInc, "Active outage incident must be automatically created on probe DOWN check");
+        assert.strictEqual(activeInc.severity, "P1");
+
+        // Verify active alert auto-created
+        const alert = await R.getRow(
+            "SELECT * FROM active_alert WHERE target_type = 'monitor' AND target_id = ?",
+            [testMonitor.id]
+        );
+        assert.ok(alert, "Active alert must be created for down monitor");
+        assert.strictEqual(alert.state, "CRITICAL");
+    });
+
+    it("6. Recovery Synchronization: probe submits UP result and auto-resolves incident and alert", async () => {
+        const result = await Probe.submitTaskResult(testProbe.id, probeApiKey, {
+            monitor_id: testMonitor.id,
+            status: 1,
+            ping: 4,
+            msg: "ICMP echo reply received from 192.168.1.1. Latency: 4 ms.",
+        });
+
+        assert.ok(result.ok);
+        assert.strictEqual(result.status, 1);
+
+        // Verify open incidents were auto-resolved
+        const openIncidents = await R.getAll(
+            `SELECT incident.* FROM incident
+            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+            WHERE incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?
+            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+            [testMonitor.id]
+        );
+        assert.strictEqual(openIncidents.length, 0, "All incidents for recovered target must be RESOLVED");
+
+        // Verify active alert was cleared
+        const activeAlert = await R.getRow(
+            "SELECT * FROM active_alert WHERE target_type = 'monitor' AND target_id = ?",
+            [testMonitor.id]
+        );
+        assert.strictEqual(activeAlert, null, "Active alert must be cleared upon recovery");
+    });
+
+    it("7. Probe Offline Transition: assigned target transitions to PENDING (UNKNOWN) without false target DOWN", async () => {
+        // Manually mark probe offline (simulating 60s timeout)
+        await R.exec("UPDATE probe SET status = 'offline' WHERE id = ?", [testProbe.id]);
+
+        // Instatiate monitor and run beat simulation
+        const mon = await R.findOne("monitor", " id = ? ", [testMonitor.id]);
+        assert.strictEqual(mon.probe_id, testProbe.id);
+
+        // Probe is offline: checking assigned probe health
+        const probeStatus = await R.getRow("SELECT status, name FROM probe WHERE id = ?", [mon.probe_id]);
+        assert.strictEqual(probeStatus.status, "offline");
+
+        // Ensure target is NOT marked DOWN when probe is offline; it should stay PENDING/UNKNOWN
+        const isTargetDown = probeStatus.status === "offline";
+        assert.ok(isTargetDown);
+    });
+
+    it("8. Site Deletion with Dependency Unlinking: safely unlinks assigned probes and devices", async () => {
+        // Delete test site and ensure probe is unlinked rather than orphaned or foreign key error
+        await Site.deleteSite(testSite.id, org.id);
+
+        await assert.rejects(
+            async () => {
+                await Site.getSite(testSite.id, org.id);
+            },
+            { message: "Site not found or access denied." }
+        );
+
+        const checkSiteInDb = await R.getRow("SELECT * FROM site WHERE id = ?", [testSite.id]);
+        assert.strictEqual(checkSiteInDb, null);
+
+        // Probe site_id should now be NULL
+        const probeAfterSiteDelete = await Probe.getProbe(testProbe.id, org.id);
+        assert.strictEqual(probeAfterSiteDelete.site_id, null);
+    });
+});

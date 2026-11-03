@@ -167,6 +167,8 @@ class Monitor extends BeanModel {
             docker_container: this.docker_container,
             docker_host: this.docker_host,
             proxyId: this.proxy_id,
+            probeId: this.probe_id || null,
+            probe_id: this.probe_id || null,
             notificationIDList: preloadData.notifications.get(this.id) || {},
             tags: preloadData.tags.get(this.id) || [],
             maintenance: preloadData.maintenanceStatus.get(this.id),
@@ -472,6 +474,21 @@ class Monitor extends BeanModel {
                 if (await Monitor.isUnderMaintenance(this.id)) {
                     bean.msg = "Monitor under maintenance";
                     bean.status = MAINTENANCE;
+                } else if (this.probe_id) {
+                    // Delegated to remote distributed probe agent
+                    const probe = await R.getRow("SELECT id, name, status, last_heartbeat FROM probe WHERE id = ?", [this.probe_id]);
+                    if (!probe || probe.status !== "online") {
+                        bean.status = PENDING;
+                        bean.msg = `Assigned Remote Probe #${this.probe_id} (${probe?.name || "Unknown"}) is OFFLINE - Target State Unknown`;
+                        bean.ping = null;
+                    } else {
+                        // Remote probe is online and actively executing checks
+                        // Central server skips direct check to prevent false DOWN errors on private LAN targets
+                        if (!this.isStop) {
+                            this.heartbeatInterval = setTimeout(safeBeat, beatInterval * 1000);
+                        }
+                        return;
+                    }
                 } else if (this.type === "http" || this.type === "keyword" || this.type === "json-query") {
                     // Do not do any queries/high loading things before the "bean.ping"
                     let startTime = dayjs().valueOf();

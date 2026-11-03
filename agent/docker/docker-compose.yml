@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  infininoc-probe:
+    image: node:20-alpine
+    container_name: infininoc-probe-agent
+    restart: always
+    network_mode: "host"
+    environment:
+      - SERVER=${PROBE_CLOUD_URL:-http://127.0.0.1:3001}
+      - PROBE_ID=${PROBE_ID:-1}
+      - TOKEN=${PROBE_REGISTRATION_TOKEN}
+    volumes:
+      - probe-data:/data
+    command: >
+      sh -c "apk add --no-cache iputils bind-tools curl &&
+             wget -qO /app/agent.js $${SERVER}/api/probe/download/agent.js &&
+             node /app/agent.js --server=$${SERVER} --probe-id=$${PROBE_ID} --token=$${TOKEN} --config=/data/config.json"
+
+volumes:
+  probe-data:

@@ -298,13 +298,23 @@
             <!-- SVG Vector Canvas Area -->
             <div
                 ref="canvasViewport"
-                class="canvas-viewport"
+                class="canvas-viewport position-relative"
                 @mousedown="handleCanvasMouseDown"
                 @mousemove="handleCanvasMouseMove"
                 @mouseup="handleCanvasMouseUp"
                 @mouseleave="handleCanvasMouseUp"
                 @wheel.prevent="handleCanvasWheel"
             >
+                <!-- Empty State When No Devices Configured -->
+                <div v-if="filteredNodes.length === 0" class="position-absolute top-50 start-50 translate-middle text-center p-4 rounded bg-card border border-secondary shadow-lg" style="max-width: 440px; z-index: 10;">
+                    <font-awesome-icon icon="network-wired" class="display-4 mb-3 text-secondary" />
+                    <h5 class="fw-bold text-foreground">No devices configured.</h5>
+                    <p class="text-secondary small mb-3">Add devices to inventory or create monitors to render real-time topology, dependency paths, and fiber cut analysis.</p>
+                    <router-link to="/manage-devices" class="btn btn-sm btn-outline-warning fw-semibold">
+                        <font-awesome-icon icon="plus-circle" class="me-1" />Add Device
+                    </router-link>
+                </div>
+
                 <svg
                     class="network-svg-layer"
                     :style="{
@@ -941,7 +951,7 @@
                         </tr>
                         <tr v-if="cablesList.length === 0">
                             <td colspan="9" class="text-center py-4 text-muted">
-                                No physical fiber cables configured. Click "Add Fiber Cable" to register feeder, distribution, and drop cables.
+                                No fiber cables configured. Click "Add Fiber Cable" to register feeder, distribution, and drop cables.
                             </td>
                         </tr>
                     </tbody>
@@ -2379,11 +2389,11 @@ export default {
                     const mon = primaryMonId ? (this.$root.monitorList || {})[primaryMonId] : null;
                     const beat = primaryMonId ? (this.$root.lastHeartbeatList || {})[primaryMonId] : null;
 
-                    let st = (d.status || "UP").toUpperCase();
+                    let st = (d.status || "UNKNOWN").toUpperCase();
                     if (st === "ONLINE") st = "UP";
                     if (st === "OFFLINE") st = "DOWN";
 
-                    let pingDisplay = d.ping || "1.2ms";
+                    let pingDisplay = d.ping ? `${d.ping}` : (beat && beat.ping != null ? `${Math.round(beat.ping)}ms` : "--");
                     if (beat) {
                         if (beat.status === 0) st = "DOWN";
                         else if (beat.status === 1) st = "UP";
@@ -2402,7 +2412,7 @@ export default {
                     return {
                         id: d.id,
                         name: d.name,
-                        ip: d.ip_address || d.hostname || (mon ? mon.hostname || mon.url : "10.0.0.1"),
+                        ip: d.ip_address || d.hostname || (mon ? mon.hostname || mon.url : "Unassigned"),
                         type: nodeType,
                         status: st,
                         site_id: d.site_id,
@@ -2423,7 +2433,7 @@ export default {
                 const alreadyIncluded = initialList.some((n) => n.name === m.name || n.monitor_id === m.id || n.id === m.id);
                 if (!alreadyIncluded) {
                     const beat = (this.$root.lastHeartbeatList || {})[m.id];
-                    let st = "UP";
+                    let st = "UNKNOWN";
                     if (m.active === 0) st = "PAUSED";
                     else if (beat) {
                         if (beat.status === 0) st = "DOWN";
@@ -2435,10 +2445,10 @@ export default {
                     initialList.push({
                         id: m.id,
                         name: m.name,
-                        ip: m.hostname || m.url || "127.0.0.1",
+                        ip: m.hostname || m.url || "Unassigned",
                         type: this.inferNodeType(m),
                         status: st,
-                        ping: beat && beat.ping != null ? `${Math.round(beat.ping)}ms` : "1.8ms",
+                        ping: beat && beat.ping != null ? `${Math.round(beat.ping)}ms` : "--",
                         monitor_id: m.id,
                         monitors: [{ id: m.id, name: m.name, type: m.type, hostname: m.hostname, port: m.port, url: m.url, active: m.active }],
                         last_checked: beat ? beat.time : null,
@@ -2454,10 +2464,10 @@ export default {
                     initialList.push({
                         id: `splitter-${s.id}`,
                         name: s.name,
-                        ip: s.splitter_type || "1:8 Splitter",
+                        ip: s.splitter_type || "Splitter",
                         type: "SPLITTER",
                         status: "UP",
-                        ping: `${s.attenuation_db || 3.5}dB`,
+                        ping: s.attenuation_db ? `${s.attenuation_db}dB` : "--",
                         splitter_id: s.id,
                         x: 100,
                         y: 100,
@@ -2468,8 +2478,9 @@ export default {
             // Append probes
             if (this.probes && this.probes.length > 0) {
                 for (const p of this.probes) {
-                    let pStatus = "UP";
-                    if (p.status === "offline" || p.status === "revoked") pStatus = "DOWN";
+                    let pStatus = "UNKNOWN";
+                    if (p.status === "online") pStatus = "UP";
+                    else if (p.status === "offline" || p.status === "revoked") pStatus = "DOWN";
                     else if (p.status === "degraded") pStatus = "PENDING";
                     initialList.push({
                         id: `probe-${p.id}`,
@@ -2477,7 +2488,7 @@ export default {
                         ip: p.ip_address || p.location || "Distributed Node",
                         type: "PROBE",
                         status: pStatus,
-                        ping: p.latency ? `${Math.round(p.latency)}ms` : "1.8ms",
+                        ping: p.latency ? `${Math.round(p.latency)}ms` : (p.latency_ms ? `${p.latency_ms}ms` : "--"),
                         probe_id: p.id,
                         x: 100,
                         y: 100,

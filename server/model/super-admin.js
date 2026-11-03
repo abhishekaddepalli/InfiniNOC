@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 const EntitlementService = require("./entitlement-service");
 const os = require("os");
 
@@ -192,10 +193,11 @@ class SuperAdmin {
         }
 
         // Initialize subscription record
+        const isoNow = toSqlDatetime();
         await R.exec(
             `INSERT INTO saas_subscription (organization_id, plan_id, status, billing_cycle, amount, gateway, created_at)
-             VALUES (?, 1, 'active', 'monthly', 0, 'manual', DATETIME('now'))`,
-            [ org.id ]
+             VALUES (?, 1, 'active', 'monthly', 0, 'manual', ?)`,
+            [ org.id, isoNow ]
         );
 
         await Organization.logAudit(org.id, superAdminUserId, "organization_created_by_super_admin", {
@@ -228,10 +230,11 @@ class SuperAdmin {
             throw new Error("Target organization not found.");
         }
 
+        const isoNow = toSqlDatetime();
         await R.exec(
             `INSERT INTO super_admin_impersonation_log (admin_user_id, organization_id, reason, ip_address, started_at)
-             VALUES (?, ?, ?, ?, DATETIME('now'))`,
-            [ superAdminUserId, orgId, reason, ip ]
+             VALUES (?, ?, ?, ?, ?)`,
+            [ superAdminUserId, orgId, reason, ip, isoNow ]
         );
 
         await Organization.logAudit(orgId, superAdminUserId, "superadmin_impersonation_started", { reason, ip });
@@ -267,11 +270,12 @@ class SuperAdmin {
             maxMembers = customLimits.maxMembers || 100;
         }
 
+        const isoNow = toSqlDatetime();
         await R.exec(
             `UPDATE organization
-             SET plan = ?, max_monitors = ?, max_devices = ?, max_members = ?, updated_at = DATETIME('now')
+             SET plan = ?, max_monitors = ?, max_devices = ?, max_members = ?, updated_at = ?
              WHERE id = ?`,
-            [ validPlan, maxMonitors, maxDevices, maxMembers, orgId ]
+            [ validPlan, maxMonitors, maxDevices, maxMembers, isoNow, orgId ]
         );
     }
 
@@ -301,10 +305,11 @@ class SuperAdmin {
                 [ name, description, priceMonthly || 0, priceYearly || 0, trialDays || 14, status, JSON.stringify(featuresJson || {}), JSON.stringify(limitsJson || {}), id ]
             );
         } else {
+            const isoNow = toSqlDatetime();
             await R.exec(
                 `INSERT INTO saas_plan (name, slug, description, price_monthly, price_yearly, trial_days, status, is_public, features_json, limits_json, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, DATETIME('now'))`,
-                [ name, slug, description, priceMonthly || 0, priceYearly || 0, trialDays || 14, status || 'active', JSON.stringify(featuresJson || {}), JSON.stringify(limitsJson || {}) ]
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+                [ name, slug, description, priceMonthly || 0, priceYearly || 0, trialDays || 14, status || 'active', JSON.stringify(featuresJson || {}), JSON.stringify(limitsJson || {}), isoNow ]
             );
         }
     }
@@ -377,10 +382,11 @@ class SuperAdmin {
                 [ discountType || "percentage", value || 10, maxUses || 100, existing.id ]
             );
         } else {
+            const isoNow = toSqlDatetime();
             await R.exec(
                 `INSERT INTO saas_coupon (code, discount_type, value, max_uses, current_uses, is_active, created_at)
-                 VALUES (?, ?, ?, ?, 0, 1, DATETIME('now'))`,
-                [ cleanCode, discountType || "percentage", value || 10, maxUses || 100 ]
+                 VALUES (?, ?, ?, ?, 0, 1, ?)`,
+                [ cleanCode, discountType || "percentage", value || 10, maxUses || 100, isoNow ]
             );
         }
     }
@@ -402,11 +408,12 @@ class SuperAdmin {
     static async savePaymentGateway(data) {
         await EntitlementService.initTables();
         const { gatewayName, isEnabled, isTestMode, keyId, secretKey } = data;
+        const isoNow = toSqlDatetime();
         await R.exec(
             `UPDATE payment_gateway_config
-             SET is_enabled = ?, is_test_mode = ?, key_id = ?, secret_key_encrypted = ?, updated_at = DATETIME('now')
+             SET is_enabled = ?, is_test_mode = ?, key_id = ?, secret_key_encrypted = ?, updated_at = ?
              WHERE gateway_name = ?`,
-            [ isEnabled ? 1 : 0, isTestMode ? 1 : 0, keyId || "", secretKey || "", gatewayName ]
+            [ isEnabled ? 1 : 0, isTestMode ? 1 : 0, keyId || "", secretKey || "", isoNow, gatewayName ]
         );
     }
 
@@ -434,13 +441,23 @@ class SuperAdmin {
      */
     static async setOrganizationFeatureOverride(orgId, featureKey, enabled, limitValue) {
         await EntitlementService.initTables();
-        await R.exec(
-            `INSERT INTO organization_feature_override (organization_id, feature_key, enabled, limit_value, created_at)
-             VALUES (?, ?, ?, ?, DATETIME('now'))
-             ON CONFLICT(organization_id, feature_key) DO UPDATE SET
-             enabled = excluded.enabled, limit_value = excluded.limit_value`,
-            [ orgId, featureKey, enabled ? 1 : 0, limitValue !== undefined ? limitValue : -1 ]
+        const isoNow = toSqlDatetime();
+        const existing = await R.getRow(
+            "SELECT id FROM organization_feature_override WHERE organization_id = ? AND feature_key = ?",
+            [ orgId, featureKey ]
         );
+        if (existing) {
+            await R.exec(
+                "UPDATE organization_feature_override SET enabled = ?, limit_value = ? WHERE id = ?",
+                [ enabled ? 1 : 0, limitValue !== undefined ? limitValue : -1, existing.id ]
+            );
+        } else {
+            await R.exec(
+                "INSERT INTO organization_feature_override (organization_id, feature_key, enabled, limit_value, created_at) VALUES (?, ?, ?, ?, ?)",
+                [ orgId, featureKey, enabled ? 1 : 0, limitValue !== undefined ? limitValue : -1, isoNow ]
+            );
+        }
+    }
     }
 
     /**

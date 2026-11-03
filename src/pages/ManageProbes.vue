@@ -160,7 +160,7 @@
                         <tr v-if="probes.length === 0">
                             <td colspan="11" class="text-center py-5 text-muted">
                                 <font-awesome-icon icon="satellite-dish" class="display-3 mb-3 text-secondary" />
-                                <h5>No remote probes deployed</h5>
+                                <h5>No distributed probes registered.</h5>
                                 <p class="small text-secondary">Click "Register New Probe" to generate deployment tokens for your ISP/customer networks.</p>
                             </td>
                         </tr>
@@ -247,21 +247,39 @@
                                 </li>
                             </ul>
 
-                            <div class="tab-content border border-secondary rounded p-2 bg-black">
+                            <div class="tab-content border border-secondary rounded p-3 bg-black">
                                 <div id="tab-linux" class="tab-pane fade show active">
-                                    <label class="text-secondary small fw-bold font-monospace">Linux Agent Start Command:</label>
-                                    <pre class="p-2 text-success rounded font-monospace small mb-1 overflow-x-auto">{{ getLinuxAgentCommand(generatedTokenInfo) }}</pre>
-                                    <button class="btn btn-xs btn-outline-warning fw-bold float-end" @click="copyText(getLinuxAgentCommand(generatedTokenInfo))">Copy Command</button>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="text-secondary small fw-bold font-monospace mb-0">Ubuntu / Debian / RHEL Automated Service Installer:</label>
+                                        <a :href="`/api/probe/download/install.sh?probeId=${generatedTokenInfo.probe.id}&token=${generatedTokenInfo.registrationToken}`" download="install.sh" class="btn btn-xs btn-outline-info py-0">
+                                            <font-awesome-icon icon="download" class="me-1" />Download install.sh
+                                        </a>
+                                    </div>
+                                    <pre class="p-2 text-success rounded font-monospace small mb-2 overflow-x-auto">{{ getLinuxAgentCommand(generatedTokenInfo) }}</pre>
+                                    <button class="btn btn-xs btn-outline-warning fw-bold" @click="copyText(getLinuxAgentCommand(generatedTokenInfo))">Copy Linux Command</button>
                                 </div>
                                 <div id="tab-windows" class="tab-pane fade">
-                                    <label class="text-secondary small fw-bold font-monospace">Windows PowerShell Start Command:</label>
-                                    <pre class="p-2 text-success rounded font-monospace small mb-1 overflow-x-auto">{{ getWindowsAgentCommand(generatedTokenInfo) }}</pre>
-                                    <button class="btn btn-xs btn-outline-warning fw-bold float-end" @click="copyText(getWindowsAgentCommand(generatedTokenInfo))">Copy PowerShell Command</button>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="text-secondary small fw-bold font-monospace mb-0">Windows Automated PowerShell Installer (Admin):</label>
+                                        <a :href="`/api/probe/download/install.ps1?probeId=${generatedTokenInfo.probe.id}&token=${generatedTokenInfo.registrationToken}`" download="install.ps1" class="btn btn-xs btn-outline-info py-0">
+                                            <font-awesome-icon icon="download" class="me-1" />Download install.ps1
+                                        </a>
+                                    </div>
+                                    <pre class="p-2 text-success rounded font-monospace small mb-2 overflow-x-auto">{{ getWindowsAgentCommand(generatedTokenInfo) }}</pre>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small">Auto-detects Node.js LTS, configures Scheduled Task background service, persists on reboot.</span>
+                                        <button class="btn btn-xs btn-outline-warning fw-bold" @click="copyText(getWindowsAgentCommand(generatedTokenInfo))">Copy PowerShell Command</button>
+                                    </div>
                                 </div>
                                 <div id="tab-docker" class="tab-pane fade">
-                                    <label class="text-secondary small fw-bold font-monospace">Docker Run Command:</label>
-                                    <pre class="p-2 text-success rounded font-monospace small mb-1 overflow-x-auto">{{ getDockerCommandSnippet(generatedTokenInfo) }}</pre>
-                                    <button class="btn btn-xs btn-outline-warning fw-bold float-end" @click="copyText(getDockerCommandSnippet(generatedTokenInfo))">Copy Docker Command</button>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="text-secondary small fw-bold font-monospace mb-0">Docker Run / Container Mesh Command:</label>
+                                        <a href="/api/probe/download/docker-compose.yml" download="docker-compose.yml" class="btn btn-xs btn-outline-info py-0">
+                                            <font-awesome-icon icon="download" class="me-1" />Download docker-compose.yml
+                                        </a>
+                                    </div>
+                                    <pre class="p-2 text-success rounded font-monospace small mb-2 overflow-x-auto">{{ getDockerCommandSnippet(generatedTokenInfo) }}</pre>
+                                    <button class="btn btn-xs btn-outline-warning fw-bold" @click="copyText(getDockerCommandSnippet(generatedTokenInfo))">Copy Docker Command</button>
                                 </div>
                             </div>
                         </div>
@@ -584,22 +602,23 @@ export default {
         },
         getLinuxAgentCommand(info) {
             const host = window.location.origin;
-            return `node agent/infininoc-probe-agent.js --server=${host} --probe-id=${info.probe.id} --token=${info.registrationToken}`;
+            return `curl -fsSL "${host}/api/probe/download/install.sh?probeId=${info.probe.id}&token=${info.registrationToken}" | sudo bash`;
         },
         getWindowsAgentCommand(info) {
             const host = window.location.origin;
-            return `node .\\agent\\infininoc-probe-agent.js --server=${host} --probe-id=${info.probe.id} --token=${info.registrationToken}`;
+            return `irm "${host}/api/probe/download/install.ps1?probeId=${info.probe.id}&token=${info.registrationToken}" | iex`;
         },
         getDockerCommandSnippet(info) {
             const host = window.location.origin;
             return `docker run -d \\
   --name infininoc-probe-${info.probe.id} \\
   --restart always \\
-  -e PROBE_CLOUD_URL="${host}" \\
+  --network host \\
+  -e SERVER="${host}" \\
   -e PROBE_ID="${info.probe.id}" \\
-  -e PROBE_REGISTRATION_TOKEN="${info.registrationToken}" \\
-  -v probe-data:/app/data \\
-  infininoc/probe:latest`;
+  -e TOKEN="${info.registrationToken}" \\
+  -v probe-data:/data \\
+  node:20-alpine sh -c "wget -qO /app.js ${host}/api/probe/download/agent.js && node /app.js --server=${host} --probe-id=${info.probe.id} --token=${info.registrationToken} --config=/data/config.json"`;
         },
         copyText(text) {
             navigator.clipboard.writeText(text);

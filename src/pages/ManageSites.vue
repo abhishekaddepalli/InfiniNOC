@@ -99,7 +99,7 @@
 
             <div v-if="filteredSites.length === 0" class="col-12 text-center py-5 text-muted">
                 <font-awesome-icon icon="globe" class="display-3 mb-3 text-secondary" />
-                <h5>No physical sites found</h5>
+                <h5>No physical sites configured.</h5>
                 <p class="small text-secondary">Click "Create Site" above to register a physical network location.</p>
             </div>
         </div>

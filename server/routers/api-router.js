@@ -1,5 +1,6 @@
 let express = require("express");
 const fs = require("fs");
+const path = require("path");
 const jwt = require("jsonwebtoken");
 const {
     allowDevAllOrigin,
@@ -779,6 +780,103 @@ router.post("/api/probe/results", async (request, response) => {
         response.json({ ok: true, ...result });
     } catch (error) {
         response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+/**
+ * Download Agent Executable JavaScript File
+ */
+router.get("/api/probe/download/agent.js", (request, response) => {
+    allowAllOrigin(response);
+    const agentPath = path.join(__dirname, "..", "..", "agent", "infininoc-probe-agent.js");
+    if (fs.existsSync(agentPath)) {
+        response.setHeader("Content-Type", "application/javascript");
+        response.setHeader("Content-Disposition", 'attachment; filename="infininoc-probe-agent.js"');
+        response.send(fs.readFileSync(agentPath, "utf8"));
+    } else {
+        response.status(404).send("// Agent file not found");
+    }
+});
+
+/**
+ * Download Windows PowerShell Installer with pre-configured parameters
+ */
+router.get("/api/probe/download/install.ps1", (request, response) => {
+    allowAllOrigin(response);
+    const ps1Path = path.join(__dirname, "..", "..", "agent", "windows", "install.ps1");
+    if (fs.existsSync(ps1Path)) {
+        let content = fs.readFileSync(ps1Path, "utf8");
+        const hostUrl = `${request.protocol}://${request.get("host")}`;
+        const probeId = request.query.probeId ? Number(request.query.probeId) : 0;
+        const token = request.query.token ? String(request.query.token).replace(/[^a-zA-Z0-9_-]/g, "") : "";
+
+        // If invoked with query parameters, prefill parameter defaults
+        if (probeId || token) {
+            content = content.replace(
+                '[string]$Server = "http://127.0.0.1:3001"',
+                `[string]$Server = "${hostUrl}"`
+            ).replace(
+                '[int]$ProbeId = 0',
+                `[int]$ProbeId = ${probeId}`
+            ).replace(
+                '[string]$Token = ""',
+                `[string]$Token = "${token}"`
+            );
+        }
+
+        response.setHeader("Content-Type", "text/plain; charset=utf-8");
+        response.setHeader("Content-Disposition", 'inline; filename="install.ps1"');
+        response.send(content);
+    } else {
+        response.status(404).send("# PowerShell installer not found");
+    }
+});
+
+/**
+ * Download Linux Bash Installer with pre-configured parameters
+ */
+router.get("/api/probe/download/install.sh", (request, response) => {
+    allowAllOrigin(response);
+    const shPath = path.join(__dirname, "..", "..", "agent", "linux", "install.sh");
+    if (fs.existsSync(shPath)) {
+        let content = fs.readFileSync(shPath, "utf8");
+        const hostUrl = `${request.protocol}://${request.get("host")}`;
+        const probeId = request.query.probeId ? Number(request.query.probeId) : 0;
+        const token = request.query.token ? String(request.query.token).replace(/[^a-zA-Z0-9_-]/g, "") : "";
+
+        if (probeId || token) {
+            content = content.replace(
+                'SERVER="http://127.0.0.1:3001"',
+                `SERVER="${hostUrl}"`
+            ).replace(
+                'PROBE_ID=""',
+                `PROBE_ID="${probeId}"`
+            ).replace(
+                'TOKEN=""',
+                `TOKEN="${token}"`
+            );
+        }
+
+        response.setHeader("Content-Type", "text/plain; charset=utf-8");
+        response.setHeader("Content-Disposition", 'inline; filename="install.sh"');
+        response.send(content);
+    } else {
+        response.status(404).send("# Linux installer not found");
+    }
+});
+
+/**
+ * Download Docker Compose Manifest
+ */
+router.get("/api/probe/download/docker-compose.yml", (request, response) => {
+    allowAllOrigin(response);
+    const composePath = path.join(__dirname, "..", "..", "agent", "docker", "docker-compose.yml");
+    if (fs.existsSync(composePath)) {
+        response.setHeader("Content-Type", "text/yaml; charset=utf-8");
+        response.setHeader("Content-Disposition", 'attachment; filename="docker-compose.yml"');
+        response.send(fs.readFileSync(composePath, "utf8"));
+    } else {
+        response.status(404).send("# Docker compose not found");
     }
 });
 

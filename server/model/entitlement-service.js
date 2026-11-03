@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 
 /**
  * SaaS Feature Entitlement & Usage Limit Service
@@ -215,10 +216,11 @@ class EntitlementService {
         for (const p of plans) {
             const existing = await R.getRow("SELECT id FROM saas_plan WHERE slug = ?", [ p.slug ]);
             if (!existing) {
+                const isoNow = toSqlDatetime();
                 await R.exec(
                     `INSERT INTO saas_plan (name, slug, description, price_monthly, price_yearly, currency, trial_days, status, is_public, features_json, limits_json, created_at)
-                     VALUES (?, ?, ?, ?, ?, 'INR', ?, 'active', 1, ?, ?, DATETIME('now'))`,
-                    [ p.name, p.slug, p.description, p.price_monthly, p.price_yearly, p.trial_days, p.features_json, p.limits_json ]
+                     VALUES (?, ?, ?, ?, ?, 'INR', ?, 'active', 1, ?, ?, ?)`,
+                    [ p.name, p.slug, p.description, p.price_monthly, p.price_yearly, p.trial_days, p.features_json, p.limits_json, isoNow ]
                 );
             }
         }
@@ -239,11 +241,12 @@ class EntitlementService {
             { name: "Stripe", enabled: 0, testMode: 1, currency: "INR" },
         ];
 
+        const isoNow = toSqlDatetime();
         for (const g of gateways) {
             await R.exec(
                 `INSERT INTO payment_gateway_config (gateway_name, is_enabled, is_test_mode, currency, updated_at)
-                 VALUES (?, ?, ?, ?, DATETIME('now'))`,
-                [ g.name, g.enabled, g.testMode, g.currency ]
+                 VALUES (?, ?, ?, ?, ?)`,
+                [ g.name, g.enabled, g.testMode, g.currency, isoNow ]
             );
         }
     }

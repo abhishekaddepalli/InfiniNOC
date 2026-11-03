@@ -111,7 +111,7 @@
 
             <div v-if="filteredDevices.length === 0" class="col-12 text-center py-5 text-muted">
                 <font-awesome-icon icon="server" class="display-3 mb-3 text-secondary" />
-                <h5>No hardware devices found</h5>
+                <h5>No devices configured.</h5>
                 <p class="small text-secondary">Click "Add Device" above to add Routers, MikroTik, Switches, Servers, or UPS nodes.</p>
             </div>
         </div>
