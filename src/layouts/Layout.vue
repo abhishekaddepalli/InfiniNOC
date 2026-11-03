@@ -561,6 +561,9 @@ export default {
             if (path.includes("topology")) {
                 return "Topology";
             }
+            if (path.includes("diagnostic") || path === "/tools" || path.startsWith("/tools/")) {
+                return "Diagnostic Tools";
+            }
             if (path.includes("incidents")) {
                 return "Incidents";
             }

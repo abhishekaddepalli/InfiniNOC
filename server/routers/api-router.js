@@ -942,4 +942,76 @@ router.get("/api/topology/snapshot", async (request, response) => {
     }
 });
 
+// --- DIAGNOSTIC TOOLS REST APIS ---
+
+// Get all diagnostic tools & categories
+router.get("/api/diagnostics/tools", async (request, response) => {
+    try {
+        allowDevAllOrigin(response);
+        const { ToolRegistry } = require("../tools/tool-registry");
+        response.json({
+            ok: true,
+            categories: ToolRegistry.getCategories(),
+            tools: ToolRegistry.getTools(),
+        });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+// Execute a diagnostic tool
+router.post("/api/diagnostics/execute", async (request, response) => {
+    try {
+        allowDevAllOrigin(response);
+        const { slug, params } = request.body || {};
+        if (!slug) {
+            return response.status(400).json({ ok: false, msg: "Tool slug is required." });
+        }
+        const { ToolService } = require("../tools/tool-service");
+        const orgId = request.organizationID || request.body.organizationId || 1;
+        const userId = request.userID || request.body.userId || null;
+
+        const result = await ToolService.execute(slug, params || {}, { organizationId: orgId, userId });
+        response.json({ ok: true, result });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+// Query diagnostic execution history
+router.get("/api/diagnostics/history", async (request, response) => {
+    try {
+        allowDevAllOrigin(response);
+        const { DiagnosticHistory } = require("../model/diagnostic-history");
+        const orgId = request.organizationID || request.query.organizationId || 1;
+        const records = await DiagnosticHistory.getHistory({
+            organizationId: orgId,
+            toolId: request.query.toolId,
+            category: request.query.category,
+            target: request.query.target,
+            status: request.query.status,
+            limit: request.query.limit || 50,
+        });
+        response.json({ ok: true, records });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
+// Clear diagnostic execution history
+router.delete("/api/diagnostics/history", async (request, response) => {
+    try {
+        allowDevAllOrigin(response);
+        const { DiagnosticHistory } = require("../model/diagnostic-history");
+        const orgId = request.organizationID || request.query.organizationId || 1;
+        const success = await DiagnosticHistory.clearHistory({
+            organizationId: orgId,
+            toolId: request.query.toolId,
+        });
+        response.json({ ok: success });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
 module.exports = router;

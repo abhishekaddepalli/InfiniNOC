@@ -4,8 +4,8 @@
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb small">
                 <li class="breadcrumb-item">
-                    <router-link to="/tools" class="text-decoration-none text-muted">
-                        <font-awesome-icon icon="wrench" class="me-1" /> Tools
+                    <router-link to="/diagnostic-tools" class="text-decoration-none text-muted">
+                        <font-awesome-icon icon="tools" class="me-1" /> Diagnostic Tools
                     </router-link>
                 </li>
                 <li class="breadcrumb-item text-uppercase text-muted fw-semibold">
@@ -21,7 +21,7 @@
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
             <div>
                 <h3 class="fw-bold text-foreground mb-1 d-flex align-items-center gap-2">
-                    <font-awesome-icon :icon="currentTool ? currentTool.icon : 'wrench'" class="text-primary" />
+                    <font-awesome-icon :icon="currentTool ? currentTool.icon : 'tools'" class="text-primary" />
                     <span>{{ currentTool ? currentTool.name : toolSlug }}</span>
                 </h3>
                 <div class="text-muted small">{{ currentTool ? currentTool.description : 'NOC Diagnostic Tool' }}</div>
@@ -34,136 +34,188 @@
                     <font-awesome-icon icon="star" :class="{ 'text-muted opacity-50': !isFav }" />
                     <span>{{ isFav ? 'Favorited' : 'Add to Favorites' }}</span>
                 </button>
-                <router-link to="/tools" class="btn btn-outline-secondary btn-sm fw-semibold">
-                    ← All Tools
+                <router-link to="/diagnostic-tools" class="btn btn-outline-secondary btn-sm fw-semibold">
+                    ← All Diagnostic Tools
                 </router-link>
             </div>
         </div>
 
         <!-- Render Diagnostic Tool Views -->
         <div class="mb-4">
-            <!-- 1. IP Intelligence Checker -->
-            <IpCheckerTool
-                v-if="toolSlug === 'ip-checker'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- 2. TCP Port Checker -->
-            <PortCheckerTool
-                v-else-if="toolSlug === 'port-checker'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- 3. Subnet Calculator -->
-            <SubnetCalculatorTool
-                v-else-if="toolSlug === 'subnet-calculator'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- 4. CIDR Calculator -->
-            <CidrCalculatorTool
-                v-else-if="toolSlug === 'cidr-calculator'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- 5. IP Range Calculator -->
-            <IpRangeCalculatorTool
-                v-else-if="toolSlug === 'ip-range-calculator'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- 6. MAC / OUI Lookup -->
-            <MacLookupTool
-                v-else-if="toolSlug === 'mac-lookup'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- 7. DNS Lookup -->
-            <DnsLookupTool
-                v-else-if="toolSlug === 'dns-lookup'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- 8. Reverse DNS -->
-            <ReverseDnsTool
-                v-else-if="toolSlug === 'reverse-dns'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- 9. Ping Test -->
+            <!-- 1. Connectivity -->
             <PingTool
-                v-else-if="toolSlug === 'ping'"
+                v-if="toolSlug === 'ping'"
                 :tool="currentTool"
                 @history-updated="onHistoryUpdated"
             />
-
-            <!-- 10. Traceroute Diagnostic -->
             <TracerouteTool
                 v-else-if="toolSlug === 'traceroute'"
                 :tool="currentTool"
                 @history-updated="onHistoryUpdated"
             />
-
-            <!-- 11. HTTP / HTTPS Checker -->
-            <HttpCheckerTool
-                v-else-if="toolSlug === 'http-checker'"
+            <MtrTool
+                v-else-if="toolSlug === 'mtr'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <MtuTool
+                v-else-if="toolSlug === 'mtu-test'"
                 :tool="currentTool"
                 @history-updated="onHistoryUpdated"
             />
 
-            <!-- 12. SSL Certificate Checker -->
+            <!-- 2. Routing -->
+            <RouteTableTool
+                v-else-if="toolSlug === 'route-table'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+
+            <!-- 3. DNS & Domain -->
+            <DnsLookupTool
+                v-else-if="toolSlug === 'dns-lookup'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <DnsPropagationTool
+                v-else-if="toolSlug === 'dns-propagation'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <ReverseDnsTool
+                v-else-if="toolSlug === 'reverse-dns'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <DnsHealthTool
+                v-else-if="toolSlug === 'dns-health'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+
+            <!-- 4. Port & Service -->
+            <PortCheckerTool
+                v-else-if="toolSlug === 'port-checker'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <CommonServicesTool
+                v-else-if="toolSlug === 'common-services'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <PortScannerTool
+                v-else-if="toolSlug === 'port-scanner'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+
+            <!-- 5. SSL & Security -->
             <SslCheckerTool
                 v-else-if="toolSlug === 'ssl-checker'"
                 :tool="currentTool"
                 @history-updated="onHistoryUpdated"
             />
+            <SslCiphersTool
+                v-else-if="toolSlug === 'ssl-ciphers'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <SslDecoderTool
+                v-else-if="toolSlug === 'ssl-decoder'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
 
-            <!-- 13. ASN / BGP Lookup -->
+            <!-- 6. HTTP & Web -->
+            <HttpCheckerTool
+                v-else-if="toolSlug === 'http-checker'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <RedirectCheckerTool
+                v-else-if="toolSlug === 'redirect-checker'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <SecurityHeadersTool
+                v-else-if="toolSlug === 'security-headers'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+
+            <!-- 7. IP Intelligence -->
+            <IpCheckerTool
+                v-else-if="toolSlug === 'ip-checker'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <RdapLookupTool
+                v-else-if="toolSlug === 'rdap-lookup'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <IpReputationTool
+                v-else-if="toolSlug === 'ip-reputation'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
             <AsnLookupTool
                 v-else-if="toolSlug === 'asn-lookup'"
                 :tool="currentTool"
                 @history-updated="onHistoryUpdated"
             />
 
-            <!-- 14. IP Reputation / Blacklist -->
-            <IpReputationTool
-                v-else-if="toolSlug === 'ip-reputation'"
+            <!-- 8. Network Infrastructure (SNMP) -->
+            <SnmpDiagnosticsTool
+                v-else-if="['snmp-device', 'snmp-interfaces', 'snmp-routes', 'snmp-arp'].includes(toolSlug)"
                 :tool="currentTool"
                 @history-updated="onHistoryUpdated"
             />
 
-            <!-- 15. Bandwidth & Transfer Calculator -->
+            <!-- 9. Calculators & Utilities -->
+            <SubnetCalculatorTool
+                v-else-if="toolSlug === 'subnet-calculator'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <CidrCalculatorTool
+                v-else-if="toolSlug === 'cidr-calculator'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <IpRangeCalculatorTool
+                v-else-if="toolSlug === 'ip-range-calculator'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <VlanCalculatorTool
+                v-else-if="toolSlug === 'vlan-calculator'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <OpticalBudgetTool
+                v-else-if="toolSlug === 'optical-budget'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <LinkUtilizationTool
+                v-else-if="toolSlug === 'link-utilization'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
+            <LatencyConverterTool
+                v-else-if="toolSlug === 'latency-converter'"
+                :tool="currentTool"
+                @history-updated="onHistoryUpdated"
+            />
             <BandwidthCalculatorTool
                 v-else-if="toolSlug === 'bandwidth-calculator'"
                 :tool="currentTool"
                 @history-updated="onHistoryUpdated"
             />
-
-            <!-- NEW 16. DNS Propagation Checker -->
-            <DnsPropagationTool
-                v-else-if="toolSlug === 'dns-propagation'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- NEW 17. TLS / SSL Cipher Suite Audit -->
-            <SslCiphersTool
-                v-else-if="toolSlug === 'ssl-ciphers'"
-                :tool="currentTool"
-                @history-updated="onHistoryUpdated"
-            />
-
-            <!-- NEW 18. HTTP Security Headers Hardening -->
-            <SecurityHeadersTool
-                v-else-if="toolSlug === 'security-headers'"
+            <MacLookupTool
+                v-else-if="toolSlug === 'mac-lookup'"
                 :tool="currentTool"
                 @history-updated="onHistoryUpdated"
             />
@@ -176,7 +228,7 @@
                     NOC Diagnostic Tool Suite is fully active.
                 </div>
                 <div>
-                    <router-link to="/tools" class="btn btn-primary btn-sm me-2 fw-semibold">Back to All Tools</router-link>
+                    <router-link to="/diagnostic-tools" class="btn btn-primary btn-sm me-2 fw-semibold">Back to All Tools</router-link>
                 </div>
             </div>
         </div>
@@ -195,18 +247,20 @@
                     No recent execution records for this tool.
                 </div>
                 <div v-else class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0 font-monospace">
                         <thead class="table-dark">
                             <tr>
                                 <th>Timestamp</th>
                                 <th>Target Input</th>
+                                <th>Duration</th>
                                 <th>Result Status</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="(h, idx) in toolHistory" :key="idx">
-                                <td class="small text-muted">{{ formatDate(h.timestamp) }}</td>
-                                <td class="font-monospace fw-bold text-primary">{{ h.input }}</td>
+                                <td class="small text-muted">{{ formatDate(h.timestamp || h.createdAt) }}</td>
+                                <td class="fw-bold text-primary">{{ h.input || h.target }}</td>
+                                <td class="small text-muted">{{ h.durationMs ? `${h.durationMs}ms` : '—' }}</td>
                                 <td>
                                     <span class="badge" :class="getStatusBadge(h.status)">{{ h.status }}</span>
                                 </td>
@@ -239,6 +293,22 @@ import DnsPropagationTool from "./tools/DnsPropagationTool.vue";
 import SslCiphersTool from "./tools/SslCiphersTool.vue";
 import SecurityHeadersTool from "./tools/SecurityHeadersTool.vue";
 
+// Newly implemented tools
+import MtrTool from "./tools/MtrTool.vue";
+import MtuTool from "./tools/MtuTool.vue";
+import RouteTableTool from "./tools/RouteTableTool.vue";
+import DnsHealthTool from "./tools/DnsHealthTool.vue";
+import CommonServicesTool from "./tools/CommonServicesTool.vue";
+import PortScannerTool from "./tools/PortScannerTool.vue";
+import RedirectCheckerTool from "./tools/RedirectCheckerTool.vue";
+import SslDecoderTool from "./tools/SslDecoderTool.vue";
+import RdapLookupTool from "./tools/RdapLookupTool.vue";
+import SnmpDiagnosticsTool from "./tools/SnmpDiagnosticsTool.vue";
+import VlanCalculatorTool from "./tools/VlanCalculatorTool.vue";
+import OpticalBudgetTool from "./tools/OpticalBudgetTool.vue";
+import LinkUtilizationTool from "./tools/LinkUtilizationTool.vue";
+import LatencyConverterTool from "./tools/LatencyConverterTool.vue";
+
 export default {
     components: {
         IpCheckerTool,
@@ -259,6 +329,20 @@ export default {
         DnsPropagationTool,
         SslCiphersTool,
         SecurityHeadersTool,
+        MtrTool,
+        MtuTool,
+        RouteTableTool,
+        DnsHealthTool,
+        CommonServicesTool,
+        PortScannerTool,
+        RedirectCheckerTool,
+        SslDecoderTool,
+        RdapLookupTool,
+        SnmpDiagnosticsTool,
+        VlanCalculatorTool,
+        OpticalBudgetTool,
+        LinkUtilizationTool,
+        LatencyConverterTool,
     },
     data() {
         return {
@@ -269,10 +353,10 @@ export default {
     },
     computed: {
         toolSlug() {
-            return this.$route.params.toolSlug || "ip-checker";
+            return this.$route.params.toolSlug || "ping";
         },
         toolHistory() {
-            return this.history.filter((h) => h.slug === this.toolSlug);
+            return this.history.filter((h) => (h.slug === this.toolSlug || h.toolId === this.toolSlug));
         },
     },
     watch: {
@@ -280,6 +364,7 @@ export default {
             immediate: true,
             handler() {
                 this.loadTool();
+                this.fetchHistory();
             },
         },
     },
@@ -294,14 +379,13 @@ export default {
                         category: "utility",
                         description: "NOC Diagnostic Tool",
                         executionType: "server",
-                        icon: "wrench",
+                        icon: "tools",
                     };
                 }
             });
-            this.checkFav();
-            this.fetchHistory();
+            this.checkFavorite();
         },
-        checkFav() {
+        checkFavorite() {
             this.$root.getSocket().emit("getUserToolFavorites", (res) => {
                 if (res && res.ok && res.favorites) {
                     this.isFav = res.favorites.includes(this.toolSlug);
@@ -312,7 +396,7 @@ export default {
             this.$root.getSocket().emit("toggleUserToolFavorite", { slug: this.toolSlug }, (res) => {
                 if (res && res.ok) {
                     this.isFav = res.isFavorite;
-                    this.$root.toastSuccess(res.isFavorite ? "Added to favorites" : "Removed from favorites");
+                    this.$root.toastSuccess(this.isFav ? "Added to Favorites" : "Removed from Favorites");
                 }
             });
         },
@@ -324,28 +408,26 @@ export default {
             });
         },
         onHistoryUpdated(newHistory) {
-            if (newHistory) {
+            if (Array.isArray(newHistory)) {
                 this.history = newHistory;
+            } else {
+                this.fetchHistory();
             }
         },
         getStatusBadge(status) {
-            if (status === "OPEN" || status === "SUCCESS" || status === "NOERROR" || status === "VALID" || status === "CLEAN" || status === "EXCELLENT" || status === "COMPLETED") {
+            const s = String(status || "").toUpperCase();
+            if (s === "SUCCESS" || s === "OPEN" || s === "EXCELLENT" || s === "VALID" || s === "PASSED" || s === "OPTIMAL") {
                 return "bg-success text-white";
             }
-            if (status === "CLOSED" || status === "FAILED" || status === "NXDOMAIN" || status === "HTTP_ERROR" || status === "BLACK_LISTED" || status === "EXPIRED") {
-                return "bg-danger text-white";
-            }
-            if (status === "TIMEOUT" || status === "NO_PTR" || status === "DEGRADED" || status === "EXPIRING_SOON") {
+            if (s === "DEGRADED" || s === "EXPIRING_SOON" || s === "MARGINAL" || s === "WARNING") {
                 return "bg-warning text-dark";
             }
-            return "bg-secondary text-white";
+            return "bg-danger text-white";
         },
         formatDate(isoStr) {
-            if (!isoStr) {
-                return "";
-            }
+            if (!isoStr) return "";
             const d = new Date(isoStr);
-            return d.toLocaleDateString() + " · " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            return d.toLocaleDateString() + " · " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         },
     },
 };

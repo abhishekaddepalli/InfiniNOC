@@ -14,7 +14,7 @@ class TcpPortExecutor {
      * @param {number} params.timeout Timeout in milliseconds (1000-10000)
      * @returns {Promise<object>} Real Port Test Result
      */
-    static async execute({ host, port, protocol = "TCP", timeout = 5000 }) {
+    static async execute({ host, port, protocol = "TCP", timeout = 5000, allowPrivate = false }) {
         const numPort = parseInt(port, 10);
         if (isNaN(numPort) || numPort < 1 || numPort > 65535) {
             return {
@@ -31,7 +31,7 @@ class TcpPortExecutor {
         const safeTimeout = Math.min(Math.max(parseInt(timeout, 10) || 5000, 1000), 10000);
 
         // Security / SSRF Validation
-        const validation = await SsrfValidator.validateTarget(host);
+        const validation = await SsrfValidator.validateTarget(host, { allowPrivate });
         if (!validation.safe) {
             return {
                 ok: false,

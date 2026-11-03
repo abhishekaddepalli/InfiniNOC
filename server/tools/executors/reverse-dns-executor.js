@@ -12,12 +12,13 @@ class ReverseDnsExecutor {
      * @throws {Error} If IP is invalid or blocked
      * @returns {Promise<object>} Reverse DNS query result
      */
-    static async execute(ip) {
-        if (!ip || typeof ip !== "string" || !ip.trim()) {
+    static async execute(params) {
+        const rawIp = typeof params === "string" ? params : (params && (params.ip || params.target || params.host));
+        if (!rawIp || typeof rawIp !== "string" || !rawIp.trim()) {
             throw new Error("Target IP address is required.");
         }
 
-        const cleanIp = ip.trim();
+        const cleanIp = rawIp.trim();
 
         if (!net.isIP(cleanIp)) {
             throw new Error(`Invalid IP address syntax '${cleanIp}'.`);
@@ -43,6 +44,7 @@ class ReverseDnsExecutor {
                     status: "SUCCESS",
                     ip: cleanIp,
                     ptrRecords,
+                    hostnames: ptrRecords,
                     totalRecords: ptrRecords.length,
                     primaryPtr: ptrRecords[0],
                     checkedAt: new Date().toISOString(),
@@ -54,6 +56,7 @@ class ReverseDnsExecutor {
                 status: "NO_PTR",
                 ip: cleanIp,
                 ptrRecords: [],
+                hostnames: [],
                 totalRecords: 0,
                 message: "No PTR record found for this IP address.",
                 checkedAt: new Date().toISOString(),
@@ -64,6 +67,7 @@ class ReverseDnsExecutor {
                 status: "NO_PTR",
                 ip: cleanIp,
                 ptrRecords: [],
+                hostnames: [],
                 totalRecords: 0,
                 message: `Reverse DNS query completed: No PTR record found (${error.code || error.message}).`,
                 checkedAt: new Date().toISOString(),

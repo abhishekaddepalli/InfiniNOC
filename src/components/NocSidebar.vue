@@ -40,6 +40,14 @@
                                     </div>
                                 </router-link>
                             </li>
+                            <li class="nav-item">
+                                <router-link to="/diagnostic-tools" class="nav-link d-flex align-items-center justify-content-between" :class="{ active: isCurrentRoute('/diagnostic-tools') || isCurrentRoute('/tools') }" @click="$emit('close')">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <font-awesome-icon icon="tools" class="nav-icon text-muted" />
+                                        <span>Diagnostic Tools</span>
+                                    </div>
+                                </router-link>
+                            </li>
                         </ul>
                     </div>
 

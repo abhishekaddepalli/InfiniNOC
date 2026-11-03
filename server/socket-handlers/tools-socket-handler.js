@@ -1,19 +1,17 @@
 const { checkLogin } = require("../util-server");
 const { ToolRegistry } = require("../tools/tool-registry");
 const { ToolService } = require("../tools/tool-service");
+const { DiagnosticHistory } = require("../model/diagnostic-history");
+const { R } = require("redbean-node");
 const { log } = require("../../src/util");
 
-// In-memory persistent state per user for favorites and history
-const userFavoritesMap = new Map();
-const userHistoryMap = new Map();
-
 /**
- * Socket handlers for InfiniNOC Network Tools Center
+ * Socket handlers for InfiniNOC Diagnostic Network Tools Center
  * @param {Socket} socket Socket.io instance
  * @returns {void}
  */
 module.exports.toolsSocketHandler = (socket) => {
-    // Fetch Tool Registry & Categories
+    // 1. Fetch Tool Registry & Categories
     socket.on("getToolRegistry", async (callback) => {
         try {
             checkLogin(socket);
@@ -29,7 +27,7 @@ module.exports.toolsSocketHandler = (socket) => {
         }
     });
 
-    // Execute Diagnostic Tool Request
+    // 2. Execute Diagnostic Tool Request
     socket.on("executeTool", async (data, callback) => {
         try {
             checkLogin(socket);
@@ -40,27 +38,16 @@ module.exports.toolsSocketHandler = (socket) => {
             const slug = data.slug;
             const params = data.params || {};
             const userId = socket.userID || 1;
+            const organizationId = socket.organizationID || 1;
 
-            const result = await ToolService.execute(slug, params);
+            const result = await ToolService.execute(slug, params, { userId, organizationId });
 
-            // Record execution in history
-            const tool = ToolRegistry.getToolBySlug(slug);
-            const toolName = tool ? tool.name : slug;
-            const inputSummary = params.target || params.host || params.ip || JSON.stringify(params);
-
-            let history = userHistoryMap.get(userId) || [];
-            history.unshift({
-                slug,
-                name: toolName,
-                input: String(inputSummary).substring(0, 250),
-                timestamp: new Date().toISOString(),
-                status: result.ok ? (result.status || "SUCCESS") : (result.status || "FAILED"),
+            // Fetch latest history
+            const history = await DiagnosticHistory.getHistory({
+                organizationId,
+                userId,
+                limit: 20,
             });
-
-            if (history.length > 20) {
-                history = history.slice(0, 20);
-            }
-            userHistoryMap.set(userId, history);
 
             if (typeof callback === "function") {
                 callback({ ok: true, result, history });
@@ -73,12 +60,13 @@ module.exports.toolsSocketHandler = (socket) => {
         }
     });
 
-    // Get User Tool Favorites
+    // 3. Get User Tool Favorites
     socket.on("getUserToolFavorites", async (callback) => {
         try {
             checkLogin(socket);
             const userId = socket.userID || 1;
-            const favorites = userFavoritesMap.get(userId) || ["ip-checker", "port-checker", "subnet-calculator", "dns-lookup"];
+            const organizationId = socket.organizationID || 1;
+            const favorites = await DiagnosticHistory.getFavorites(userId, organizationId);
             if (typeof callback === "function") {
                 callback({ ok: true, favorites });
             }
@@ -89,7 +77,7 @@ module.exports.toolsSocketHandler = (socket) => {
         }
     });
 
-    // Toggle User Tool Favorite
+    // 4. Toggle User Tool Favorite
     socket.on("toggleUserToolFavorite", async (data, callback) => {
         try {
             checkLogin(socket);
@@ -97,19 +85,9 @@ module.exports.toolsSocketHandler = (socket) => {
                 throw new Error("Tool slug is required.");
             }
             const userId = socket.userID || 1;
-            let favorites = userFavoritesMap.get(userId) || ["ip-checker", "port-checker", "subnet-calculator", "dns-lookup"];
-            const index = favorites.indexOf(data.slug);
-            let isFavorite = false;
-
-            if (index >= 0) {
-                favorites.splice(index, 1);
-                isFavorite = false;
-            } else {
-                favorites.push(data.slug);
-                isFavorite = true;
-            }
-
-            userFavoritesMap.set(userId, favorites);
+            const organizationId = socket.organizationID || 1;
+            const favorites = await DiagnosticHistory.toggleFavorite(userId, data.slug, organizationId);
+            const isFavorite = favorites.includes(data.slug);
             if (typeof callback === "function") {
                 callback({ ok: true, favorites, isFavorite });
             }
@@ -120,15 +98,32 @@ module.exports.toolsSocketHandler = (socket) => {
         }
     });
 
-    // Get Recently Used Tools History
+    // 5. Get Recently Used Tools History
     socket.on("getRecentlyUsedTools", async (callback) => {
         try {
             checkLogin(socket);
             const userId = socket.userID || 1;
-            const history = userHistoryMap.get(userId) || [
-                { slug: "port-checker", name: "Port Checker", input: "1.1.1.1:53", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), status: "OPEN" },
-                { slug: "ip-checker", name: "IP Checker", input: "8.8.8.8", timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), status: "SUCCESS" },
-            ];
+            const organizationId = socket.organizationID || 1;
+            const records = await DiagnosticHistory.getHistory({
+                organizationId,
+                userId,
+                limit: 10,
+            });
+
+            const history = records.map((r) => {
+                const tool = ToolRegistry.getToolBySlug(r.toolId);
+                return {
+                    id: r.id,
+                    slug: r.toolId,
+                    name: tool ? tool.name : r.toolId,
+                    input: r.target,
+                    timestamp: r.createdAt,
+                    status: r.status,
+                    durationMs: r.durationMs,
+                    executionLocation: r.executionLocation,
+                };
+            });
+
             if (typeof callback === "function") {
                 callback({ ok: true, history });
             }
@@ -139,35 +134,72 @@ module.exports.toolsSocketHandler = (socket) => {
         }
     });
 
-    // Record Tool Execution in History
-    socket.on("recordToolUsage", async (data, callback) => {
+    // 6. Get Comprehensive Diagnostic Execution History with Filtering
+    socket.on("getDiagnosticHistory", async (filter, callback) => {
         try {
             checkLogin(socket);
-            if (!data || !data.slug || !data.input) {
-                throw new Error("Tool slug and input summary are required.");
-            }
-            const userId = socket.userID || 1;
-            const tool = ToolRegistry.getToolBySlug(data.slug);
-            const toolName = tool ? tool.name : data.slug;
-
-            let history = userHistoryMap.get(userId) || [];
-            history.unshift({
-                slug: data.slug,
-                name: toolName,
-                input: String(data.input).substring(0, 250),
-                timestamp: new Date().toISOString(),
-                status: data.status || "SUCCESS",
+            const organizationId = socket.organizationID || 1;
+            const records = await DiagnosticHistory.getHistory({
+                organizationId,
+                ...(filter || {}),
             });
-
-            // Keep last 20 entries
-            if (history.length > 20) {
-                history = history.slice(0, 20);
+            if (typeof callback === "function") {
+                callback({ ok: true, records });
             }
+        } catch (error) {
+            if (typeof callback === "function") {
+                callback({ ok: false, msg: error.message });
+            }
+        }
+    });
 
-            userHistoryMap.set(userId, history);
+    // 7. Clear Diagnostic Execution History
+    socket.on("clearDiagnosticHistory", async (filter, callback) => {
+        try {
+            checkLogin(socket);
+            const organizationId = socket.organizationID || 1;
+            const success = await DiagnosticHistory.clearHistory({
+                organizationId,
+                userId: socket.userID || 1,
+                ...(filter || {}),
+            });
+            if (typeof callback === "function") {
+                callback({ ok: success });
+            }
+        } catch (error) {
+            if (typeof callback === "function") {
+                callback({ ok: false, msg: error.message });
+            }
+        }
+    });
+
+    // 8. Get Available Diagnostic Execution Locations (Central + Online Probes)
+    socket.on("getDiagnosticExecutionLocations", async (callback) => {
+        try {
+            checkLogin(socket);
+            const organizationId = socket.organizationID || 1;
+            const locations = [
+                { id: "central", name: "Central Server (Local Host)", status: "ONLINE", location: "Central NOC Cluster" },
+            ];
+
+            try {
+                const probes = await R.getAll(
+                    "SELECT id, name, location, status FROM probe WHERE organization_id = ? AND status = 'online' ORDER BY name ASC",
+                    [organizationId]
+                );
+                for (const p of probes) {
+                    locations.push({
+                        id: `probe:${p.id}`,
+                        probeId: p.id,
+                        name: `Probe: ${p.name}`,
+                        status: p.status ? p.status.toUpperCase() : "ONLINE",
+                        location: p.location || "Remote Site",
+                    });
+                }
+            } catch (_) {}
 
             if (typeof callback === "function") {
-                callback({ ok: true, history });
+                callback({ ok: true, locations });
             }
         } catch (error) {
             if (typeof callback === "function") {

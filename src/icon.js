@@ -96,6 +96,18 @@ import {
     faRocket,
     faBars,
     faProjectDiagram,
+    faArrowsAltH,
+    faTasks,
+    faCrosshairs,
+    faFileCode,
+    faDirections,
+    faAddressCard,
+    faSitemap,
+    faEthernet,
+    faListAlt,
+    faWaveSquare,
+    faTags,
+    faStopwatch,
 } from "@fortawesome/free-solid-svg-icons";
 
 library.add(
@@ -191,7 +203,19 @@ library.add(
     faTrashAlt,
     faRocket,
     faBars,
-    faProjectDiagram
+    faProjectDiagram,
+    faArrowsAltH,
+    faTasks,
+    faCrosshairs,
+    faFileCode,
+    faDirections,
+    faAddressCard,
+    faSitemap,
+    faEthernet,
+    faListAlt,
+    faWaveSquare,
+    faTags,
+    faStopwatch
 );
 
 export { FontAwesomeIcon };

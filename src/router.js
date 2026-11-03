@@ -86,6 +86,22 @@ const routes = [
                         component: List,
                     },
                     {
+                        path: "/diagnostic-tools",
+                        component: ToolsLanding,
+                    },
+                    {
+                        path: "/diagnostic-tools/:toolSlug",
+                        component: ToolContainer,
+                    },
+                    {
+                        path: "/diagnostics",
+                        component: ToolsLanding,
+                    },
+                    {
+                        path: "/diagnostics/:toolSlug",
+                        component: ToolContainer,
+                    },
+                    {
                         path: "/tools",
                         component: ToolsLanding,
                     },

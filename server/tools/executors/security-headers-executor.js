@@ -90,6 +90,7 @@ class SecurityHeadersExecutor {
         ];
 
         return {
+            ok: true,
             url: targetUrl,
             status: res.status,
             statusText: res.statusText,
@@ -98,6 +99,7 @@ class SecurityHeadersExecutor {
             grade,
             gradeBadgeClass,
             headerAuditList,
+            headers: headerAuditList,
             rawHeaders: headers,
             durationMs: elapsed,
             checkedAt: new Date().toISOString(),
