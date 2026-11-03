@@ -198,22 +198,54 @@ function getMemoryUsage() {
     return Math.round(((total - free) / total) * 1000) / 10;
 }
 
+// Rotate log file if it exceeds 10 MB (keeps up to 1 archive: probe-agent.log.1)
+function rotateLogFileIfNeeded() {
+    try {
+        const logPath = path.join(path.dirname(configFilePath), "probe-agent.log");
+        if (fs.existsSync(logPath)) {
+            const stats = fs.statSync(logPath);
+            if (stats.size > 10 * 1024 * 1024) {
+                const archivePath = logPath + ".1";
+                if (fs.existsSync(archivePath)) {
+                    fs.unlinkSync(archivePath);
+                }
+                fs.renameSync(logPath, archivePath);
+            }
+        }
+    } catch (_) {}
+}
+
 let tasksExecuted = 0;
 let tasksFailed = 0;
 
 // Execute Network Monitoring Checks
 async function executeCheck(task) {
-    const type = (task.type || "").toLowerCase();
+    const type = (task.type || "ping").toLowerCase();
     const startTime = Date.now();
+    const target = task.hostname || task.url || "127.0.0.1";
+    const location = `${os.hostname()} (${os.type()} ${os.arch()})`;
+    const taskId = task.id;
+
+    const baseResult = {
+        monitor_id: task.id,
+        probe_id: config.probeId,
+        task_id: taskId,
+        target,
+        type: task.type || "ping",
+        location,
+        timestamp: new Date().toISOString(),
+    };
 
     try {
         if (type === "ping") {
             const host = task.hostname || "127.0.0.1";
             const pingMs = await runPingCheck(host, task.timeout || 3);
             return {
-                monitor_id: task.id,
+                ...baseResult,
                 status: 1,
                 ping: pingMs,
+                packet_loss: 0,
+                error: null,
                 msg: `ICMP echo reply received from ${host}. Latency: ${pingMs} ms. Packet loss: 0%.`,
             };
         } else if (type === "port") {
@@ -221,9 +253,11 @@ async function executeCheck(task) {
             const port = task.port || 80;
             const pingMs = await runTcpCheck(host, port, (task.timeout || 5) * 1000);
             return {
-                monitor_id: task.id,
+                ...baseResult,
                 status: 1,
                 ping: pingMs,
+                packet_loss: 0,
+                error: null,
                 msg: `TCP connection established to ${host}:${port} in ${pingMs} ms.`,
             };
         } else if (type === "http" || type === "keyword" || type === "json-query") {
@@ -231,9 +265,11 @@ async function executeCheck(task) {
             const res = await sendRequest(url, task.method || "GET", {}, null);
             if (res.statusCode >= 200 && res.statusCode < 400) {
                 return {
-                    monitor_id: task.id,
+                    ...baseResult,
                     status: 1,
                     ping: res.roundtripMs,
+                    packet_loss: 0,
+                    error: null,
                     msg: `HTTP status ${res.statusCode}. Response time: ${res.roundtripMs} ms.`,
                 };
             } else {
@@ -245,9 +281,11 @@ async function executeCheck(task) {
             const records = await dns.resolve(host, rType);
             const latency = Date.now() - startTime;
             return {
-                monitor_id: task.id,
+                ...baseResult,
                 status: 1,
                 ping: latency,
+                packet_loss: 0,
+                error: null,
                 msg: `DNS resolution [${rType}] succeeded in ${latency} ms: ${Array.isArray(records) ? records.join(", ") : records}`,
             };
         } else {
@@ -255,17 +293,21 @@ async function executeCheck(task) {
             const host = task.hostname || "127.0.0.1";
             const pingMs = await runPingCheck(host, 3);
             return {
-                monitor_id: task.id,
+                ...baseResult,
                 status: 1,
                 ping: pingMs,
+                packet_loss: 0,
+                error: null,
                 msg: `Check completed in ${pingMs} ms.`,
             };
         }
     } catch (err) {
         return {
-            monitor_id: task.id,
+            ...baseResult,
             status: 0,
             ping: null,
+            packet_loss: 100,
+            error: err.message,
             msg: `Check failed via probe: ${err.message}`,
         };
     }
@@ -390,6 +432,9 @@ async function sendHeartbeat() {
 async function processAssignedTasks() {
     if (!config.probeId || !config.apiKey) return;
 
+    // Check log rotation
+    rotateLogFileIfNeeded();
+
     try {
         const res = await sendRequest(`${config.server}/api/probe/tasks?probeId=${config.probeId}`, "GET", {
             "x-probe-id": String(config.probeId),
@@ -399,22 +444,34 @@ async function processAssignedTasks() {
         if (res.statusCode === 200 && res.data && Array.isArray(res.data.tasks)) {
             const tasks = res.data.tasks;
             if (tasks.length > 0) {
-                console.log(`[TASKS] Executing ${tasks.length} assigned monitoring check(s)...`);
+                console.log(`[TASKS] Polled ${tasks.length} assigned monitoring check(s) from central NOC.`);
                 for (const task of tasks) {
+                    const target = task.hostname || task.url || "127.0.0.1";
+                    const checkType = (task.type || "ping").toUpperCase();
+                    console.log(`[TASK #${task.id}] Executing ${checkType} check for "${task.name || target}" (${target})...`);
+
                     const result = await executeCheck(task);
                     if (result.status === 1) {
                         tasksExecuted++;
+                        console.log(`[TASK #${task.id}] Result: UP | Latency: ${result.ping} ms | Packet Loss: ${result.packet_loss}% | ${result.msg}`);
                     } else {
                         tasksFailed++;
+                        console.log(`[TASK #${task.id}] Result: DOWN | Error: ${result.error || result.msg} | Packet Loss: ${result.packet_loss}%`);
                     }
 
                     // Submit result back to central server
-                    await sendRequest(`${config.server}/api/probe/results`, "POST", {
+                    const submitRes = await sendRequest(`${config.server}/api/probe/results`, "POST", {
                         "x-probe-id": String(config.probeId),
                         "x-api-key": config.apiKey,
                     }, {
                         payload: result,
                     });
+
+                    if (submitRes.statusCode === 200 && submitRes.data && submitRes.data.ok) {
+                        console.log(`[TASK #${task.id}] Submitted result to NOC successfully. Persisted Heartbeat ID: ${submitRes.data.heartbeat_id || "OK"}.`);
+                    } else {
+                        console.warn(`[TASK #${task.id}] [WARN] NOC result submission response: HTTP ${submitRes.statusCode} - ${submitRes.data?.msg || "Unknown"}`);
+                    }
                 }
             }
         }

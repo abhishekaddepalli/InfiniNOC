@@ -474,12 +474,13 @@ class Monitor extends BeanModel {
                 if (await Monitor.isUnderMaintenance(this.id)) {
                     bean.msg = "Monitor under maintenance";
                     bean.status = MAINTENANCE;
-                } else if (this.probe_id) {
+                } else if (this.probe_id || (await R.getCell("SELECT probe_id FROM monitor_probe WHERE monitor_id = ? LIMIT 1", [this.id]))) {
+                    const assignedProbeId = this.probe_id || (await R.getCell("SELECT probe_id FROM monitor_probe WHERE monitor_id = ? LIMIT 1", [this.id]));
                     // Delegated to remote distributed probe agent
-                    const probe = await R.getRow("SELECT id, name, status, last_heartbeat FROM probe WHERE id = ?", [this.probe_id]);
+                    const probe = await R.getRow("SELECT id, name, status, last_heartbeat FROM probe WHERE id = ?", [assignedProbeId]);
                     if (!probe || probe.status !== "online") {
                         bean.status = PENDING;
-                        bean.msg = `Assigned Remote Probe #${this.probe_id} (${probe?.name || "Unknown"}) is OFFLINE - Target State Unknown`;
+                        bean.msg = `Assigned Remote Probe #${assignedProbeId} (${probe?.name || "Unknown"}) is OFFLINE - Target State Unknown`;
                         bean.ping = null;
                     } else {
                         // Remote probe is online and actively executing checks

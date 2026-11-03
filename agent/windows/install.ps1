@@ -385,10 +385,17 @@ foreach ($p in $existingProcs) {
     Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
 }
 
-# Script block wrapper executed in background
+# Script block wrapper executed in background with automatic log rotation
 $wrapperScript = @"
 Set-Location '$InstallDir'
-& '$NodePath' '$AgentFileTarget' --config='$configPath' *>> '$InstallDir\probe-agent.log'
+`$logFile = '$InstallDir\probe-agent.log'
+if (Test-Path `$logFile) {
+    `$fileItem = Get-Item `$logFile -ErrorAction SilentlyContinue
+    if (`$fileItem -and `$fileItem.Length -gt 10485760) {
+        Move-Item -Path `$logFile -Destination (`$logFile + '.1') -Force -ErrorAction SilentlyContinue
+    }
+}
+& '$NodePath' '$AgentFileTarget' --config='$configPath' *>> `$logFile
 "@
 
 $wrapperPath = Join-Path $InstallDir "run-probe.ps1"

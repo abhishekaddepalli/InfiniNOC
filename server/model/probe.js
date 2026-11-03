@@ -311,6 +311,17 @@ class Probe extends BeanModel {
             throw new Error(`Monitor #${payload.monitor_id} not found.`);
         }
 
+        // Validate probe and monitor ownership
+        const isDirectAssigned = Number(monitor.probe_id) === Number(probeId);
+        const isMultiAssigned = await R.getCell(
+            "SELECT id FROM monitor_probe WHERE monitor_id = ? AND probe_id = ?",
+            [monitor.id, probeId]
+        );
+
+        if (!isDirectAssigned && !isMultiAssigned) {
+            throw new Error(`Unauthorized: Monitor #${monitor.id} (${monitor.name}) is not assigned to Probe #${probeId}.`);
+        }
+
         const Monitor = require("./monitor");
         const { UptimeCalculator } = require("../uptime-calculator");
         const { UptimeKumaServer } = require("../uptime-kuma-server");
@@ -320,8 +331,21 @@ class Probe extends BeanModel {
         const pingMs = payload.ping !== undefined && payload.ping !== null ? Math.round(Number(payload.ping)) : null;
         const msg = payload.msg || (status === 1 ? `UP via Probe #${probeId}` : `DOWN via Probe #${probeId}`);
 
-        // Fetch previous heartbeat to detect state transition
+        // Fetch previous heartbeat to detect state transition and ordering
         const previousBeat = await R.findOne("heartbeat", " monitor_id = ? ORDER BY time DESC", [monitor.id]);
+
+        if (previousBeat && payload.timestamp) {
+            const payloadEpoch = new Date(payload.timestamp).getTime();
+            const prevEpoch = new Date(previousBeat.time).getTime();
+            // Reject stale results older than previous beat by > 15 seconds
+            if (!isNaN(payloadEpoch) && !isNaN(prevEpoch) && payloadEpoch < (prevEpoch - 15000)) {
+                return {
+                    ok: false,
+                    stale: true,
+                    msg: `Stale result rejected: timestamp ${payload.timestamp} is older than last recorded beat ${previousBeat.time}.`,
+                };
+            }
+        }
         const isFirstBeat = !previousBeat;
         const isImportant = Monitor.isImportantBeat(isFirstBeat, previousBeat?.status, status);
 
@@ -470,7 +494,16 @@ class Probe extends BeanModel {
             await R.exec("UPDATE probe SET tasks_failed = COALESCE(tasks_failed, 0) + 1 WHERE id = ?", [probeId]);
         }
 
-        return { ok: true, monitorId: monitor.id, status, timestamp: isoNow };
+        return {
+            ok: true,
+            heartbeat_id: bean.id,
+            monitor_id: monitor.id,
+            monitorId: monitor.id,
+            status,
+            ping: pingMs,
+            timestamp: isoNow,
+            msg,
+        };
     }
 
     /**
@@ -512,6 +545,42 @@ class Probe extends BeanModel {
                                 ) VALUES (?, 0, 'probe', ?, 'probe_offline', 'CRITICAL', 0, ?, ?, ?, ?, ?)`,
                                 [orgId, p.id, alertMsg, isoNow, isoNow, isoNow, isoNow]
                             );
+                        }
+
+                        // Distinguish UNKNOWN from DOWN: transition assigned monitors to PENDING (status 2) without false DOWN
+                        const assignedMons = await R.getAll(
+                            `SELECT DISTINCT m.id, m.user_id FROM monitor m
+                            LEFT JOIN monitor_probe mp ON m.id = mp.monitor_id
+                            WHERE (m.probe_id = ? OR mp.probe_id = ?) AND m.active = 1`,
+                            [p.id, p.id]
+                        );
+
+                        for (const mon of assignedMons) {
+                            const lastBeat = await R.findOne("heartbeat", "monitor_id = ? ORDER BY time DESC", [mon.id]);
+                            if (!lastBeat || lastBeat.status !== 2) {
+                                let pendingBean = R.dispense("heartbeat");
+                                pendingBean.monitor_id = mon.id;
+                                pendingBean.status = 2; // PENDING / UNKNOWN
+                                pendingBean.msg = `Assigned Remote Probe #${p.id} (${p.name}) is OFFLINE - Target State Unknown`;
+                                pendingBean.ping = null;
+                                pendingBean.time = isoNow;
+                                pendingBean.duration = 0;
+                                pendingBean.probe_id = p.id;
+                                pendingBean.important = false;
+                                await R.store(pendingBean);
+
+                                if (io) {
+                                    io.to(mon.user_id).emit("heartbeat", {
+                                        monitorID: mon.id,
+                                        status: 2,
+                                        time: isoNow,
+                                        msg: pendingBean.msg,
+                                        ping: null,
+                                        important: false,
+                                        duration: 0,
+                                    });
+                                }
+                            }
                         }
                     }
                 }

@@ -62,16 +62,6 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         org = await Organization.createOrganization("InfiniNOC Operations Corp", "infininoc-ops", user.id);
     });
 
-    after(async () => {
-        if (R.knex) {
-            await R.knex.destroy();
-        }
-        if (fs.existsSync(testDbPath)) {
-            try {
-                fs.unlinkSync(testDbPath);
-            } catch (_) {}
-        }
-    });
 
     it("1. Site Management: creates site with location metadata using valid cross-DB SQL datetime", async () => {
         testSite = await Site.createSite(
@@ -555,9 +545,141 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         assert.ok(content.includes("Get-MaskedToken"));
     });
 
+    it("17. End-to-End Task Polling, Execution Payload, Ownership Enforcement & Heartbeat Persistence", async () => {
+        // Create dedicated site and probe for E2E task execution testing
+        const taskSite = await Site.createSite({
+            name: "Task-Verification-Site",
+            code: "TASK-SITE-01",
+            city: "Mumbai",
+            country: "India",
+        }, org.id);
+
+        const taskProbeToken = await Probe.createProbeRegistrationToken({
+            name: "Task-Executor-Probe",
+            site_id: taskSite.id,
+        }, org.id);
+        const taskProbeReg = await Probe.registerProbe(taskProbeToken.probe.id, taskProbeToken.registrationToken, "127.0.0.1", "1.26.31");
+        const activeProbeId = taskProbeToken.probe.id;
+        const activeApiKey = taskProbeReg.apiKey;
+
+        // Create a new target monitor assigned to activeProbeId
+        const monBean = R.dispense("monitor");
+        monBean.name = "Branch-Gateway-Router";
+        monBean.type = "ping";
+        monBean.hostname = "10.10.10.1";
+        monBean.interval = 30;
+        monBean.timeout = 3;
+        monBean.active = 1;
+        monBean.probe_id = activeProbeId;
+        monBean.organization_id = org.id;
+        monBean.user_id = user.id;
+        await R.store(monBean);
+
+        // 1. Task Polling: Probe polls assigned tasks
+        const tasks = await Probe.getAssignedTasks(activeProbeId, activeApiKey);
+        assert.ok(Array.isArray(tasks));
+        const found = tasks.find((t) => t.id === monBean.id);
+        assert.ok(found, "Polled task list must include assigned target");
+        assert.strictEqual(found.hostname, "10.10.10.1");
+
+        // 2. Submission with all required execution details
+        const execTimestamp = new Date().toISOString();
+        const payload = {
+            monitor_id: monBean.id,
+            probe_id: activeProbeId,
+            task_id: monBean.id,
+            target: "10.10.10.1",
+            type: "ping",
+            location: "Windows-Test-Node (win32 x64)",
+            timestamp: execTimestamp,
+            status: 1,
+            ping: 12,
+            packet_loss: 0,
+            error: null,
+            msg: "ICMP echo reply received from 10.10.10.1. Latency: 12 ms. Packet loss: 0%.",
+        };
+
+        const submitRes = await Probe.submitTaskResult(activeProbeId, activeApiKey, payload);
+        assert.strictEqual(submitRes.ok, true);
+        assert.ok(submitRes.heartbeat_id > 0, "Submission must return persisted heartbeat ID");
+        assert.strictEqual(submitRes.status, 1);
+        assert.strictEqual(submitRes.ping, 12);
+
+        // 3. Database Persistence Verification
+        const persistedBeat = await R.load("heartbeat", submitRes.heartbeat_id);
+        assert.strictEqual(persistedBeat.monitor_id, monBean.id);
+        assert.strictEqual(persistedBeat.probe_id, activeProbeId);
+        assert.strictEqual(Number(persistedBeat.status), 1);
+        assert.strictEqual(Number(persistedBeat.ping), 12);
+        assert.strictEqual(Number(persistedBeat.down_count), 0);
+
+        // 4. Ownership Enforcement: Another probe cannot submit results for this monitor
+        const otherProbeToken = await Probe.createProbeRegistrationToken({
+            name: "Other-Branch-Probe",
+            site_id: taskSite.id,
+        }, org.id);
+        const otherReg = await Probe.registerProbe(otherProbeToken.probe.id, otherProbeToken.registrationToken, "127.0.0.1", "1.26.31");
+
+        await assert.rejects(
+            async () => {
+                await Probe.submitTaskResult(otherProbeToken.probe.id, otherReg.apiKey, payload);
+            },
+            /Unauthorized: Monitor #\d+ .* is not assigned to Probe #\d+/
+        );
+
+        // 5. Stale / Out-of-order Result Rejection
+        const stalePayload = {
+            ...payload,
+            timestamp: "2020-01-01T00:00:00.000Z",
+        };
+        const staleRes = await Probe.submitTaskResult(activeProbeId, activeApiKey, stalePayload);
+        assert.strictEqual(staleRes.ok, false);
+        assert.strictEqual(staleRes.stale, true);
+    });
+
+    it("18. Probe Offline State Transition: monitors transition to PENDING (UNKNOWN) rather than false DOWN", async () => {
+        // Mark probe last_heartbeat to 70 seconds ago
+        const pastHeartbeat = new Date(Date.now() - 70000).toISOString().replace("T", " ").substring(0, 19);
+        await R.exec("UPDATE probe SET status = 'online', last_heartbeat = ? WHERE id = ?", [pastHeartbeat, testProbe.id]);
+
+        // Run health check
+        const offlineCount = await Probe.checkAllProbesHealth();
+        assert.ok(offlineCount >= 1);
+
+        const probeRow = await R.getRow("SELECT status FROM probe WHERE id = ?", [testProbe.id]);
+        assert.strictEqual(probeRow.status, "offline");
+
+        // Verify active alert for probe offline was created
+        const alertRow = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+        assert.ok(alertRow, "Active alert must be created for probe offline");
+        assert.strictEqual(alertRow.metric, "probe_offline");
+
+        // Verify assigned monitors were transitioned to PENDING (status 2) without false DOWN (status 0)
+        const monBeats = await R.getAll(
+            "SELECT status, msg FROM heartbeat WHERE probe_id = ? ORDER BY id DESC LIMIT 5",
+            [testProbe.id]
+        );
+        assert.ok(monBeats.length > 0);
+        assert.strictEqual(monBeats[0].status, 2, "Latest heartbeat must be PENDING (2)");
+        assert.ok(monBeats[0].msg.includes("OFFLINE - Target State Unknown"));
+    });
+
     after(async () => {
+        try {
+            if (R.knex) {
+                await R.knex.destroy();
+            }
+        } catch (_) {}
         try {
             await R.close();
         } catch (e) {}
+        if (fs.existsSync(testDbPath)) {
+            try {
+                fs.unlinkSync(testDbPath);
+            } catch (_) {}
+        }
+        setTimeout(() => {
+            process.exit(0);
+        }, 500);
     });
 });
