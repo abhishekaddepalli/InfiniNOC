@@ -1,9 +1,10 @@
 const { R } = require("redbean-node");
+const { BeanModel } = require("redbean-node/dist/bean-model");
 const crypto = require("crypto");
 const dayjs = require("dayjs");
 const { toSqlDatetime } = require("../util-server");
 
-class Probe {
+class Probe extends BeanModel {
     /**
      * Hash string using SHA-256 for secure token comparison
      * @param {string} token Secret token

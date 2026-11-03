@@ -1,8 +1,9 @@
 const { R } = require("redbean-node");
+const { BeanModel } = require("redbean-node/dist/bean-model");
 const { encryptSecret } = require("./credential-crypto");
 const { toSqlDatetime } = require("../util-server");
 
-class Device {
+class Device extends BeanModel {
     /**
      * Get all devices scoped to organization_id with optional site or type filtering
      * @param {number} organizationId Organization ID

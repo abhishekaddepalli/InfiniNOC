@@ -132,9 +132,9 @@ class Database {
      * @param {object} args Arguments to initialize DB with
      * @returns {void}
      */
-    static initDataDir(args) {
+    static initDataDir(args = {}) {
         // Data Directory (must be end with "/")
-        Database.dataDir = process.env.DATA_DIR || args["data-dir"] || Database.getDevDataDir() || "./data/";
+        Database.dataDir = process.env.DATA_DIR || args?.["data-dir"] || Database.getDevDataDir() || "./data/";
 
         Database.sqlitePath = path.join(Database.dataDir, "kuma.db");
         if (!fs.existsSync(Database.dataDir)) {
@@ -430,7 +430,19 @@ class Database {
         R.freeze(true);
 
         if (autoloadModels) {
-            await R.autoloadModels("./server/model");
+            const originalConsoleLog = console.log;
+            console.log = (...cArgs) => {
+                if (typeof cArgs[1] === "string" && cArgs[1].includes("is not a valid BeanModel, skipped")) {
+                    log.debug("db", `${cArgs[0]} is a service/helper module, skipped BeanModel registration`);
+                    return;
+                }
+                originalConsoleLog.apply(console, cArgs);
+            };
+            try {
+                await R.autoloadModels("./server/model");
+            } finally {
+                console.log = originalConsoleLog;
+            }
         }
 
         if (dbConfig.type === "sqlite") {

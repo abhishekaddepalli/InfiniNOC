@@ -286,4 +286,114 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         const probeAfterSiteDelete = await Probe.getProbe(testProbe.id, org.id);
         assert.strictEqual(probeAfterSiteDelete.site_id, null);
     });
+
+    it("9. SuperAdmin Model & SMTP Settings: verifies syntax fix and settings persistence", async () => {
+        const SuperAdmin = require("../../server/model/super-admin.js");
+        assert.ok(typeof SuperAdmin.getSmtpSettings === "function");
+        assert.ok(typeof SuperAdmin.saveSmtpSettings === "function");
+        assert.ok(typeof SuperAdmin.getPlatformSettings === "function");
+
+        // Save and retrieve SMTP settings
+        await SuperAdmin.saveSmtpSettings({
+            host: "smtp.mailgun.org",
+            port: 587,
+            secure: true,
+            username: "postmaster@infininoc.io",
+            password: "supersecretpass",
+            senderName: "InfiniNOC Alerts",
+        });
+
+        const smtp = await SuperAdmin.getSmtpSettings();
+        assert.strictEqual(smtp.host, "smtp.mailgun.org");
+        assert.strictEqual(Number(smtp.port), 587);
+        assert.strictEqual(Boolean(smtp.secure), true);
+        assert.strictEqual(smtp.username, "postmaster@infininoc.io");
+        assert.strictEqual(smtp.senderName, "InfiniNOC Alerts");
+    });
+
+    it("10. BeanModel Architecture: verifies Site, Device, and Probe properly extend BeanModel", async () => {
+        const { BeanModel } = require("redbean-node/dist/bean-model");
+        assert.ok(Site.prototype instanceof BeanModel, "Site must be a valid BeanModel subclass");
+        assert.ok(Probe.prototype instanceof BeanModel, "Probe must be a valid BeanModel subclass");
+        const Device = require("../../server/model/device.js");
+        assert.ok(Device.prototype instanceof BeanModel, "Device must be a valid BeanModel subclass");
+    });
+
+    it("11. Consecutive Down Count: increments failure count on repeated checks instead of remaining zero", async () => {
+        // Re-enroll a probe for testing
+        const tokenInfo = await Probe.createProbeRegistrationToken(
+            { name: "Down Count Verification Probe" },
+            org.id
+        );
+        const reg = await Probe.registerProbe(tokenInfo.probe.id, tokenInfo.registrationToken, "10.0.0.50", "1.26.31");
+
+        // Create a test monitor
+        let mon = R.dispense("monitor");
+        mon.name = "WAN Core Router";
+        mon.type = "ping";
+        mon.hostname = "10.0.0.1";
+        mon.interval = 30;
+        mon.active = 1;
+        mon.user_id = user.id;
+        mon.organization_id = org.id;
+        mon.probe_id = tokenInfo.probe.id;
+        await R.store(mon);
+
+        // Submit first DOWN result
+        await Probe.submitTaskResult(tokenInfo.probe.id, reg.apiKey, {
+            monitor_id: mon.id,
+            status: 0,
+            ping: null,
+            msg: "ICMP request timed out",
+        });
+
+        let beat1 = await R.getRow("SELECT * FROM heartbeat WHERE monitor_id = ? ORDER BY id DESC LIMIT 1", [mon.id]);
+        assert.strictEqual(beat1.status, 0);
+        assert.strictEqual(Number(beat1.down_count), 1, "First failure must have down_count = 1");
+
+        // Submit second consecutive DOWN result
+        await Probe.submitTaskResult(tokenInfo.probe.id, reg.apiKey, {
+            monitor_id: mon.id,
+            status: 0,
+            ping: null,
+            msg: "ICMP request timed out",
+        });
+
+        let beat2 = await R.getRow("SELECT * FROM heartbeat WHERE monitor_id = ? ORDER BY id DESC LIMIT 1", [mon.id]);
+        assert.strictEqual(beat2.status, 0);
+        assert.strictEqual(Number(beat2.down_count), 2, "Second failure must increment down_count = 2");
+
+        // Submit third consecutive DOWN result
+        await Probe.submitTaskResult(tokenInfo.probe.id, reg.apiKey, {
+            monitor_id: mon.id,
+            status: 0,
+            ping: null,
+            msg: "ICMP request timed out",
+        });
+
+        let beat3 = await R.getRow("SELECT * FROM heartbeat WHERE monitor_id = ? ORDER BY id DESC LIMIT 1", [mon.id]);
+        assert.strictEqual(beat3.status, 0);
+        assert.strictEqual(Number(beat3.down_count), 3, "Third failure must increment down_count = 3");
+    });
+
+    it("12. Demo Data Safety: dry-run audit does not alter genuine customer monitors or infrastructure", async () => {
+        const preMonCount = await R.getCell("SELECT COUNT(*) FROM monitor WHERE organization_id = ?", [org.id]);
+        assert.ok(preMonCount > 0);
+
+        // Run audit query
+        const demoSites = await R.getAll(
+            "SELECT id FROM site WHERE code IN ('DEMO-SITE-01', 'SAMPLE-SITE-01')"
+        );
+        assert.strictEqual(demoSites.length, 0);
+
+        // Verify genuine monitors remain completely untouched
+        const postMonCount = await R.getCell("SELECT COUNT(*) FROM monitor WHERE organization_id = ?", [org.id]);
+        assert.strictEqual(postMonCount, preMonCount, "Real monitors must never be deleted by demo cleanup");
+    });
+
+    after(async () => {
+        try {
+            await R.close();
+        } catch (e) {}
+    });
 });

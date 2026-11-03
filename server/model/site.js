@@ -1,7 +1,8 @@
 const { R } = require("redbean-node");
+const { BeanModel } = require("redbean-node/dist/bean-model");
 const { toSqlDatetime } = require("../util-server");
 
-class Site {
+class Site extends BeanModel {
     /**
      * Get all sites scoped to organization_id with optional search and status filtering
      * @param {number} organizationId Organization ID

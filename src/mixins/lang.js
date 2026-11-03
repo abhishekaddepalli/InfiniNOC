@@ -1,6 +1,6 @@
 import { currentLocale } from "../i18n";
 import { setPageLocale, timeDurationFormatter } from "../util-frontend";
-const langModules = import.meta.glob("../lang/*.json");
+const langModules = import.meta.glob(["../lang/*.json", "!../lang/en.json"]);
 
 export default {
     data() {
@@ -28,8 +28,18 @@ export default {
          * @returns {Promise<void>}
          */
         async changeLang(lang) {
-            let message = (await langModules["../lang/" + lang + ".json"]()).default;
-            this.$i18n.setLocaleMessage(lang, message);
+            if (lang === "en") {
+                this.$i18n.locale = "en";
+                localStorage.locale = "en";
+                setPageLocale();
+                timeDurationFormatter.updateLocale("en");
+                return;
+            }
+            const loader = langModules["../lang/" + lang + ".json"];
+            if (loader) {
+                let message = (await loader()).default;
+                this.$i18n.setLocaleMessage(lang, message);
+            }
             this.$i18n.locale = lang;
             localStorage.locale = lang;
             setPageLocale();

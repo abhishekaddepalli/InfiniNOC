@@ -458,20 +458,19 @@ class SuperAdmin {
             );
         }
     }
-    }
 
     /**
      * Get platform SMTP & Email dispatch configuration
      * @returns {Promise<object>} SMTP configuration
      */
     static async getSmtpSettings() {
-        const Setting = require("./setting");
+        const { Settings } = require("../settings");
         return {
-            host: await Setting.get("smtp_host") || "smtp.infiniforge.com",
-            port: await Setting.get("smtp_port") || 587,
-            secure: await Setting.get("smtp_secure") || false,
-            username: await Setting.get("smtp_username") || "notifications@infiniforge.com",
-            senderName: await Setting.get("smtp_sender_name") || "InfiniNOC Alerts",
+            host: await Settings.get("smtp_host") || "smtp.infiniforge.com",
+            port: await Settings.get("smtp_port") || 587,
+            secure: await Settings.get("smtp_secure") || false,
+            username: await Settings.get("smtp_username") || "notifications@infiniforge.com",
+            senderName: await Settings.get("smtp_sender_name") || "InfiniNOC Alerts",
         };
     }
 
@@ -481,16 +480,16 @@ class SuperAdmin {
      * @returns {Promise<void>}
      */
     static async saveSmtpSettings(data) {
-        const Setting = require("./setting");
+        const { Settings } = require("../settings");
         const { host, port, secure, username, password, senderName } = data;
-        await Setting.set("smtp_host", host);
-        await Setting.set("smtp_port", port);
-        await Setting.set("smtp_secure", secure);
-        await Setting.set("smtp_username", username);
+        await Settings.set("smtp_host", host);
+        await Settings.set("smtp_port", port);
+        await Settings.set("smtp_secure", secure);
+        await Settings.set("smtp_username", username);
         if (password) {
-            await Setting.set("smtp_password", password);
+            await Settings.set("smtp_password", password);
         }
-        await Setting.set("smtp_sender_name", senderName);
+        await Settings.set("smtp_sender_name", senderName);
     }
 
     /**
@@ -498,12 +497,12 @@ class SuperAdmin {
      * @returns {Promise<object>} Platform settings
      */
     static async getPlatformSettings() {
-        const Setting = require("./setting");
+        const { Settings } = require("../settings");
         return {
-            maintenanceMode: Boolean(await Setting.get("saas_maintenance_mode")),
-            allowSelfSignup: (await Setting.get("saas_allow_signup")) !== "0",
-            defaultTrialDays: parseInt(await Setting.get("saas_trial_days") || "14"),
-            maintenanceMessage: await Setting.get("saas_maintenance_msg") || "Scheduled NOC maintenance in progress.",
+            maintenanceMode: Boolean(await Settings.get("saas_maintenance_mode")),
+            allowSelfSignup: (await Settings.get("saas_allow_signup")) !== "0",
+            defaultTrialDays: parseInt(await Settings.get("saas_trial_days") || "14"),
+            maintenanceMessage: await Settings.get("saas_maintenance_msg") || "Scheduled NOC maintenance in progress.",
         };
     }
 
@@ -513,12 +512,12 @@ class SuperAdmin {
      * @returns {Promise<void>}
      */
     static async savePlatformSettings(data) {
-        const Setting = require("./setting");
+        const { Settings } = require("../settings");
         const { maintenanceMode, allowSelfSignup, defaultTrialDays, maintenanceMessage } = data;
-        await Setting.set("saas_maintenance_mode", maintenanceMode ? "1" : "0");
-        await Setting.set("saas_allow_signup", allowSelfSignup ? "1" : "0");
-        await Setting.set("saas_trial_days", String(defaultTrialDays || 14));
-        await Setting.set("saas_maintenance_msg", maintenanceMessage || "");
+        await Settings.set("saas_maintenance_mode", maintenanceMode ? "1" : "0");
+        await Settings.set("saas_allow_signup", allowSelfSignup ? "1" : "0");
+        await Settings.set("saas_trial_days", String(defaultTrialDays || 14));
+        await Settings.set("saas_maintenance_msg", maintenanceMessage || "");
     }
 }
 

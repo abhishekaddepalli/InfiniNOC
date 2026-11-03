@@ -982,6 +982,20 @@ class Monitor extends BeanModel {
 
             bean.retries = retries;
 
+            // Accurately track consecutive down count across state transitions
+            if (bean.status === DOWN) {
+                const prevDown = previousBeat ? (previousBeat.down_count !== undefined ? Number(previousBeat.down_count) : (previousBeat.downCount ? Number(previousBeat.downCount) : 0)) : 0;
+                bean.down_count = prevDown + 1;
+                bean.downCount = bean.down_count;
+            } else if (bean.status === UP) {
+                bean.down_count = 0;
+                bean.downCount = 0;
+            } else {
+                const prevDown = previousBeat ? (previousBeat.down_count !== undefined ? Number(previousBeat.down_count) : (previousBeat.downCount ? Number(previousBeat.downCount) : 0)) : 0;
+                bean.down_count = prevDown;
+                bean.downCount = prevDown;
+            }
+
             log.debug("monitor", `[${this.name}] Check isImportant`);
             let isImportant = Monitor.isImportantBeat(isFirstBeat, previousBeat?.status, bean.status);
 
@@ -999,9 +1013,6 @@ class Monitor extends BeanModel {
                         `[${this.name}] will not sendNotification because it is (or was) under maintenance`
                     );
                 }
-
-                // Reset down count
-                bean.downCount = 0;
 
                 // Clear Status Page Cache
                 log.debug("monitor", `[${this.name}] apicache clear`);
@@ -1113,17 +1124,13 @@ class Monitor extends BeanModel {
                 bean.important = false;
 
                 if (bean.status === DOWN && this.resendInterval > 0) {
-                    ++bean.downCount;
-                    if (bean.downCount >= this.resendInterval) {
+                    if (bean.down_count > 0 && (bean.down_count % this.resendInterval === 0)) {
                         // Send notification again, because we are still DOWN
                         log.debug(
                             "monitor",
-                            `[${this.name}] sendNotification again: Down Count: ${bean.downCount} | Resend Interval: ${this.resendInterval}`
+                            `[${this.name}] sendNotification again: Down Count: ${bean.down_count} | Resend Interval: ${this.resendInterval}`
                         );
                         await Monitor.sendNotification(isFirstBeat, this, bean);
-
-                        // Reset down count
-                        bean.downCount = 0;
                     }
                 }
             }
@@ -1171,7 +1178,7 @@ class Monitor extends BeanModel {
             } else {
                 log.warn(
                     "monitor",
-                    `Monitor #${this.id} '${this.name}': Failing: ${bean.msg} | Interval: ${beatInterval} seconds | Type: ${this.type} | Down Count: ${bean.downCount} | Resend Interval: ${this.resendInterval}`
+                    `Monitor #${this.id} '${this.name}': Failing: ${bean.msg} | Interval: ${beatInterval} seconds | Type: ${this.type} | Down Count: ${bean.down_count} | Resend Interval: ${this.resendInterval}`
                 );
             }
 

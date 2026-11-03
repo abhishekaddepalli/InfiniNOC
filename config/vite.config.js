@@ -50,7 +50,22 @@ export default defineConfig({
         },
         rollupOptions: {
             output: {
-                manualChunks(id, { getModuleInfo, getModuleIds }) {},
+                manualChunks(id) {
+                    if (id.includes("node_modules")) {
+                        if (id.includes("chart.js") || id.includes("vue-chartjs") || id.includes("chartjs-adapter-dayjs-4")) {
+                            return "vendor-chart";
+                        }
+                        if (id.includes("@fortawesome")) {
+                            return "vendor-fontawesome";
+                        }
+                        if (id.includes("bootstrap") || id.includes("@popperjs")) {
+                            return "vendor-bootstrap";
+                        }
+                        if (id.includes("vue-i18n")) {
+                            return "vendor-i18n";
+                        }
+                    }
+                },
             },
         },
     },

@@ -32,6 +32,7 @@
         "start-server-dev": "cross-env NODE_ENV=development node server/server.js",
         "start-server-dev:watch": "cross-env NODE_ENV=development node --watch server/server.js",
         "db-migrate": "node extra/db-migrate.js",
+        "audit-demo-data": "node extra/cleanup-demo-data.js --dry-run",
         "clean-demo-data": "node extra/cleanup-demo-data.js",
         "build": "vite build --config ./config/vite.config.js",
         "test": "npm run test-backend && npm run test-e2e",
