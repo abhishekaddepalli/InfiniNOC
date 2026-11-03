@@ -1177,6 +1177,23 @@ let needSetup = false;
             }
         });
 
+        socket.on("getMonitorDiagnostics", async (monitorID, callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const diag = await Monitor.getDiagnostics(monitorID, activeOrgId);
+                callback({
+                    ok: true,
+                    diagnostics: diag,
+                });
+            } catch (e) {
+                callback({
+                    ok: false,
+                    msg: e.message,
+                });
+            }
+        });
+
         socket.on("deleteMonitor", async (monitorID, deleteChildren, callback) => {
             try {
                 // Backward compatibility: if deleteChildren is omitted, the second parameter is the callback
@@ -4774,52 +4791,11 @@ async function startMonitors() {
         server.monitorList[monitor.id] = monitor;
     }
 
-    // InfiniNOC Boot Outage Synchronization
-    for (let monitor of list) {
-        try {
-            const lastBeat = await Monitor.getPreviousHeartbeat(monitor.id);
-            const orgId = monitor.organization_id || 1;
-            if (lastBeat && lastBeat.status === DOWN) {
-                // Ensure incident exists
-                const existingInc = await R.getRow(
-                    `SELECT incident.id FROM incident 
-                    JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
-                    WHERE incident.organization_id = ? AND incident.status NOT IN ('RESOLVED', 'CLOSED') 
-                    AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
-                    [orgId, monitor.id]
-                );
-                if (!existingInc) {
-                    await Incident.createIncident(
-                        {
-                            title: `[OUTAGE] Monitor #${monitor.id} (${monitor.name}) is DOWN`,
-                            description: `Automated NOC Outage Incident raised for target ${monitor.name}. Status: DOWN. Details: ${lastBeat.msg || "Heartbeat failed"}`,
-                            severity: "P1",
-                            links: [{ entity_type: "monitor", entity_id: monitor.id }],
-                        },
-                        orgId,
-                        monitor.user_id
-                    );
-                }
-
-                // Ensure active alert exists
-                const existingAlert = await R.getRow(
-                    "SELECT id FROM active_alert WHERE organization_id = ? AND target_type = 'monitor' AND target_id = ?",
-                    [orgId, monitor.id]
-                );
-                if (!existingAlert) {
-                    const isoNow = toSqlDatetime();
-                    const alertMsg = `Monitor #${monitor.id} (${monitor.name}) is DOWN: ${lastBeat.msg || "Target unreachable"}`;
-                    await R.exec(
-                        `INSERT INTO active_alert (
-                            organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
-                        ) VALUES (?, 0, 'monitor', ?, 'monitor_down', 'CRITICAL', 0, ?, ?, ?, ?, ?)`,
-                        [orgId, monitor.id, alertMsg, isoNow, isoNow, isoNow, isoNow]
-                    );
-                }
-            }
-        } catch (e) {
-            log.error("server", "Boot outage sync failed for monitor #" + monitor.id + ": " + e.message);
-        }
+    // InfiniNOC Boot Outage Synchronization & Alert Reconciliation
+    try {
+        await Monitor.reconcileAllMonitorAlerts(null, io);
+    } catch (e) {
+        log.error("server", "Boot outage reconciliation failed: " + e.message);
     }
 
     for (let monitor of list) {

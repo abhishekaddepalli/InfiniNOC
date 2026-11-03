@@ -1152,4 +1152,20 @@ router.delete("/api/diagnostics/history", async (request, response) => {
     }
 });
 
+// Monitor execution diagnostics endpoint (Section 9)
+router.get("/api/monitor/:id/diagnostics", async (request, response) => {
+    try {
+        allowDevAllOrigin(response);
+        const monitorId = parseInt(request.params.id, 10);
+        if (isNaN(monitorId)) {
+            return response.status(400).json({ ok: false, msg: "Invalid monitor ID." });
+        }
+        const orgId = request.organizationID || (request.query.organizationId ? parseInt(request.query.organizationId, 10) : 1);
+        const diag = await Monitor.getDiagnostics(monitorId, orgId);
+        response.json({ ok: true, diagnostics: diag });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
+});
+
 module.exports = router;

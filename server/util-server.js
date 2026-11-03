@@ -34,7 +34,7 @@ dayjs.extend(require("dayjs/plugin/utc"));
 const { Kafka, SASLOptions } = require("kafkajs");
 const crypto = require("crypto");
 
-const isWindows = process.platform === /^win/.test(process.platform);
+const isWindows = process.platform === "win32";
 /**
  * Init or reset JWT secret
  * @returns {Promise<Bean>} JWT secret
@@ -102,6 +102,41 @@ exports.getOidcTokenClientCredentials = async (
 };
 
 /**
+ * Helper to test TCP port connectivity for fallback verification
+ * @param {string} host Hostname or IP
+ * @param {number} port Port number
+ * @param {number} timeoutMs Timeout in milliseconds
+ * @returns {Promise<number>} Latency in ms
+ */
+function testTcpPortFallback(host, port, timeoutMs = 2000) {
+    const net = require("net");
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+        const socket = new net.Socket();
+        socket.setTimeout(timeoutMs);
+
+        socket.connect(port, host, () => {
+            const elapsed = Date.now() - startTime;
+            socket.destroy();
+            resolve(elapsed);
+        });
+
+        socket.on("error", (err) => {
+            socket.destroy();
+            reject(err);
+        });
+
+        socket.on("timeout", () => {
+            socket.destroy();
+            reject(new Error("TCP connection timeout"));
+        });
+    });
+}
+
+exports.tcpPing = testTcpPortFallback;
+exports.testTcpPortFallback = testTcpPortFallback;
+
+/**
  * Ping the specified machine
  * @param {string} destAddr Hostname / IP address of machine to ping
  * @param {number} count Number of packets to send before stopping
@@ -110,7 +145,7 @@ exports.getOidcTokenClientCredentials = async (
  * @param {number} size Size (in bytes) of echo request to send
  * @param {number} deadline Maximum time in seconds before ping stops, regardless of packets sent
  * @param {number} timeout Maximum time in seconds to wait for each response
- * @returns {Promise<number>} Time for ping in ms rounded to nearest integer
+ * @returns {Promise<number|object>} Time for ping in ms or result object
  */
 exports.ping = async (
     destAddr,
@@ -146,7 +181,7 @@ exports.ping = async (
  * @param {number} size Size (in bytes) of echo request to send
  * @param {number} deadline Maximum time in seconds before ping stops, regardless of packets sent
  * @param {number} timeout Maximum time in seconds to wait for each response
- * @returns {Promise<number>} Time for ping in ms rounded to nearest integer
+ * @returns {Promise<number|object>} Time for ping in ms or result object
  */
 exports.pingAsync = function (
     destAddr,
@@ -158,37 +193,113 @@ exports.pingAsync = function (
     deadline = PING_GLOBAL_TIMEOUT_DEFAULT,
     timeout = PING_PER_REQUEST_TIMEOUT_DEFAULT
 ) {
+    let cleanHost = destAddr;
     try {
-        const url = new URL(`http://${destAddr}`);
-        destAddr = url.hostname;
-        if (destAddr.startsWith("[") && destAddr.endsWith("]")) {
-            destAddr = destAddr.slice(1, -1);
+        if (destAddr && (destAddr.startsWith("http://") || destAddr.startsWith("https://") || destAddr.includes("/"))) {
+            const url = new URL(destAddr.includes("://") ? destAddr : `http://${destAddr}`);
+            cleanHost = url.hostname;
+        }
+        if (cleanHost.startsWith("[") && cleanHost.endsWith("]")) {
+            cleanHost = cleanHost.slice(1, -1);
         }
     } catch (e) {
-        // ignore
+        // use original destAddr
     }
+
+    if (!cleanHost || typeof cleanHost !== "string" || cleanHost.trim() === "") {
+        const configErr = new Error("Invalid target: Hostname or IP address is required for ping check.");
+        configErr.isConfigError = true;
+        return Promise.reject(configErr);
+    }
+
+    // Normalize deadline to seconds (1 - 30 seconds), prevent corrupt millisecond values
+    const safeDeadline = Math.min(Math.max(1, Number(deadline) || 3), 30);
+    const safeTimeout = Math.min(Math.max(1, Number(timeout) || 2), 10);
 
     return new Promise((resolve, reject) => {
         ping.promise
-            .probe(destAddr, {
+            .probe(cleanHost, {
                 v6: ipv6,
                 min_reply: count,
                 sourceAddr: sourceAddr,
                 numeric: numeric,
                 packetSize: size,
-                deadline: deadline,
-                timeout: timeout,
+                deadline: safeDeadline,
+                timeout: safeTimeout,
             })
-            .then((res) => {
-                // If ping failed, it will set field to unknown
+            .then(async (res) => {
                 if (res.alive) {
-                    resolve(res.time);
-                } else {
-                    if (isWindows) {
-                        reject(new Error(exports.convertToUTF8(res.output)));
-                    } else {
-                        reject(new Error(res.output));
+                    const pingTime = Math.round(Number(res.time) || 0);
+                    const packetLoss = res.packetLoss !== undefined && res.packetLoss !== "unknown" ? parseFloat(res.packetLoss) : 0;
+
+                    if (packetLoss > 0 && packetLoss < 100) {
+                        resolve({
+                            time: pingTime,
+                            packetLoss,
+                            degraded: true,
+                            msg: `ICMP echo reply with packet loss from ${cleanHost}. Latency: ${pingTime} ms. Packet loss: ${packetLoss}%.`,
+                        });
+                        return;
                     }
+
+                    if (pingTime > 1000) {
+                        resolve({
+                            time: pingTime,
+                            packetLoss: 0,
+                            degraded: true,
+                            msg: `High latency warning from ${cleanHost}. Latency: ${pingTime} ms. Packet loss: 0%.`,
+                        });
+                        return;
+                    }
+
+                    resolve(pingTime);
+                } else {
+                    const rawOutput = isWindows ? exports.convertToUTF8(res.output || "") : String(res.output || "");
+                    const outputStr = rawOutput.trim();
+
+                    // Check for permission denied on Linux (e.g. unprivileged raw ICMP socket)
+                    const isPermDenied = outputStr.includes("Operation not permitted") ||
+                        outputStr.includes("cap_set_proc") ||
+                        outputStr.includes("Check the path or permissions") ||
+                        outputStr.includes("permission denied");
+
+                    if (isPermDenied) {
+                        // On Linux, attempt fallback TCP handshake to common open ports (53 DNS, 80 HTTP, 443 HTTPS)
+                        if (!isWindows) {
+                            const fallbackPorts = [53, 80, 443];
+                            for (const port of fallbackPorts) {
+                                try {
+                                    const tcpLatency = await testTcpPortFallback(cleanHost, port, 1500);
+                                    if (tcpLatency >= 0) {
+                                        resolve(Math.round(tcpLatency));
+                                        return;
+                                    }
+                                } catch (_) {}
+                            }
+                        }
+
+                        const permErr = new Error(`ICMP execution error: Raw socket permission denied on central server (${outputStr || "Operation not permitted"}). Target state unknown.`);
+                        permErr.isExecutionFailure = true;
+                        reject(permErr);
+                        return;
+                    }
+
+                    // Check for DNS resolution failure
+                    const isDnsError = outputStr.includes("could not find host") ||
+                        outputStr.includes("Name or service not known") ||
+                        outputStr.includes("Temporary failure in name resolution");
+
+                    if (isDnsError) {
+                        const dnsErr = new Error(`DNS resolution failed for target '${cleanHost}': Name or service not known.`);
+                        dnsErr.isDnsFailure = true;
+                        reject(dnsErr);
+                        return;
+                    }
+
+                    // Confirmed target unreachable / timeout
+                    const targetErr = new Error(`ICMP echo request timed out for '${cleanHost}'. 100% packet loss.`);
+                    targetErr.isTargetFailure = true;
+                    reject(targetErr);
                 }
             })
             .catch((err) => {

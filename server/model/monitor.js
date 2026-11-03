@@ -169,6 +169,8 @@ class Monitor extends BeanModel {
             proxyId: this.proxy_id,
             probeId: this.probe_id || null,
             probe_id: this.probe_id || null,
+            execution_location: this.probe_id ? `Remote Probe #${this.probe_id}` : "Central Monitoring Server",
+            execution_source: this.probe_id ? "probe" : "central",
             notificationIDList: preloadData.notifications.get(this.id) || {},
             tags: preloadData.tags.get(this.id) || [],
             maintenance: preloadData.maintenanceStatus.get(this.id),
@@ -464,10 +466,10 @@ class Monitor extends BeanModel {
                 bean.status = flipStatus(bean.status);
             }
 
-            // Runtime patch timeout if it is 0
+            // Runtime patch timeout if it is 0 (keep in seconds)
             // See https://github.com/louislam/uptime-kuma/pull/3961#issuecomment-1804149144
             if (!this.timeout || this.timeout <= 0) {
-                this.timeout = this.interval * 1000 * 0.8;
+                this.timeout = Math.max(1, Math.round((this.interval || 60) * 0.8));
             }
 
             try {
@@ -746,17 +748,29 @@ class Monitor extends BeanModel {
                         }
                     }
                 } else if (this.type === "ping") {
-                    bean.ping = await ping(
+                    const pingTimeout = Math.min(Math.max(1, Number(this.timeout) || 3), 30);
+                    const pingRes = await ping(
                         this.hostname,
-                        this.ping_count,
+                        this.ping_count || 1,
                         "",
-                        this.ping_numeric,
-                        this.packetSize,
-                        this.timeout,
-                        this.ping_per_request_timeout
+                        this.ping_numeric !== undefined ? this.ping_numeric : true,
+                        this.packetSize || 32,
+                        pingTimeout,
+                        this.ping_per_request_timeout || 2
                     );
-                    bean.msg = `ICMP echo response received from ${this.hostname || "target"}. Latency: ${bean.ping} ms. Packet loss: 0%.`;
-                    bean.status = UP;
+
+                    const pingMs = typeof pingRes === "object" ? pingRes.time : pingRes;
+                    const isDegraded = typeof pingRes === "object" && Boolean(pingRes.degraded);
+                    const packetLoss = typeof pingRes === "object" && pingRes.packetLoss !== undefined ? pingRes.packetLoss : 0;
+
+                    bean.ping = pingMs;
+                    if (isDegraded) {
+                        bean.status = PENDING; // WARNING / DEGRADED
+                        bean.msg = pingRes.msg || `Degraded ICMP connectivity to ${this.hostname || "target"}. Latency: ${pingMs} ms. Packet loss: ${packetLoss}%.`;
+                    } else {
+                        bean.status = UP;
+                        bean.msg = `ICMP echo response received from ${this.hostname || "target"}. Latency: ${pingMs} ms. Packet loss: 0%.`;
+                    }
                 } else if (this.type === "push") {
                     // Type: Push
                     log.debug(
@@ -932,16 +946,30 @@ class Monitor extends BeanModel {
 
                 retries = 0;
             } catch (error) {
+                const errMsg = error ? (error.message || String(error)) : "Unknown check failure";
+                const isExecFailure = error?.isExecutionFailure ||
+                    errMsg.includes("permission denied") ||
+                    errMsg.includes("Operation not permitted") ||
+                    errMsg.includes("execution error");
+                const isDnsFailure = error?.isDnsFailure ||
+                    errMsg.includes("DNS resolution failed") ||
+                    errMsg.includes("could not find host") ||
+                    errMsg.includes("Name or service not known");
+
                 if (error?.name === "CanceledError") {
                     bean.msg = `Request timed out after ${this.timeout}s`;
+                } else if (isExecFailure) {
+                    bean.msg = errMsg;
+                } else if (isDnsFailure) {
+                    bean.msg = errMsg;
                 } else if (this.type === "ping") {
-                    bean.msg = `ICMP request timed out for ${this.hostname || "target"}. No reply received.`;
+                    bean.msg = errMsg.includes("ICMP") ? errMsg : `ICMP request timed out for ${this.hostname || "target"}. No reply received.`;
                 } else if (this.type === "port") {
-                    bean.msg = `TCP connection failed to ${this.hostname}:${this.port}. ${error.message}`;
+                    bean.msg = `TCP connection failed to ${this.hostname}:${this.port}. ${errMsg}`;
                 } else if (this.type === "http" || this.type === "keyword" || this.type === "json-query") {
-                    bean.msg = `HTTP check failed: ${error.message}`;
+                    bean.msg = `HTTP check failed: ${errMsg}`;
                 } else {
-                    bean.msg = error.message;
+                    bean.msg = errMsg;
                 }
 
                 if (this.getSaveErrorResponse() && error?.response?.data !== undefined) {
@@ -952,30 +980,28 @@ class Monitor extends BeanModel {
                 // Just reset the retries
                 if (this.isUpsideDown() && bean.status === UP) {
                     retries = 0;
+                } else if (isExecFailure) {
+                    // Execution worker / local infrastructure failure: target state is UNKNOWN / PENDING, not target DOWN
+                    retries++;
+                    bean.status = PENDING;
                 } else if (this.type === "json-query" && this.retry_only_on_status_code_failure) {
-                    // For json-query monitors with retry_only_on_status_code_failure enabled,
-                    // only retry if the error is NOT from JSON query evaluation
-                    // JSON query errors have the message "JSON query does not pass..."
                     const isJsonQueryError =
-                        typeof error.message === "string" && error.message.includes("JSON query does not pass");
+                        typeof errMsg === "string" && errMsg.includes("JSON query does not pass");
 
                     if (isJsonQueryError) {
-                        // Don't retry on JSON query failures, mark as DOWN immediately
                         retries = 0;
                     } else if (this.maxretries > 0 && retries < this.maxretries) {
                         retries++;
                         bean.status = PENDING;
                     } else {
-                        // Continue counting retries during DOWN
                         retries++;
                     }
                 } else {
-                    // General retry logic for all other monitor types
+                    // General retry logic for confirmed target failures
                     if (this.maxretries > 0 && retries < this.maxretries) {
                         retries++;
                         bean.status = PENDING;
                     } else {
-                        // Continue counting retries during DOWN
                         retries++;
                     }
                 }
@@ -1020,107 +1046,6 @@ class Monitor extends BeanModel {
                 apicache.clear();
 
                 await UptimeKumaServer.getInstance().sendMaintenanceListByUserID(this.user_id);
-
-                // InfiniNOC Auto Incident & Active Alert Synchronization on Monitor Status Change
-                if (bean.status === DOWN) {
-                    try {
-                        const orgId = this.organization_id || 1;
-                        const isoNow = new Date().toISOString();
-                        const monTarget = this.hostname || this.url || `Target #${this.id}`;
-                        const monType = (this.type || "TARGET").toUpperCase();
-                        const failureReason = bean.msg || `Target ${this.name} (${monTarget}) is DOWN`;
-
-                        // 1. Ensure Active Incident exists for this outage
-                        const existingInc = await R.getRow(
-                            `SELECT incident.id FROM incident 
-                            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
-                            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
-                            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
-                            AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
-                            [orgId, this.id]
-                        );
-
-                        if (!existingInc) {
-                            await Incident.createIncident(
-                                {
-                                    title: `[OUTAGE] Monitor #${this.id} (${this.name}) is DOWN`,
-                                    description: `Automated NOC Outage Incident raised for ${this.name}. Target: ${monTarget}. Protocol: ${monType}. Failure Reason: ${failureReason}`,
-                                    failure_reason: failureReason,
-                                    severity: "P1",
-                                    links: [{ entity_type: "monitor", entity_id: this.id }],
-                                },
-                                orgId,
-                                this.user_id
-                            );
-                            io.emit("updateIncidentStats");
-                        }
-
-                        // 2. Ensure Active Alert exists for this outage
-                        const existingAlert = await R.getRow(
-                            "SELECT id FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
-                            [orgId, this.id]
-                        );
-
-                        if (!existingAlert) {
-                            const alertMsg = `Monitor #${this.id} (${this.name}) is DOWN: ${failureReason}`;
-                            await R.exec(
-                                `INSERT INTO active_alert (
-                                    organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
-                                ) VALUES (?, 0, 'monitor', ?, 'monitor_down', 'CRITICAL', 0, ?, ?, ?, ?, ?)`,
-                                [orgId, this.id, alertMsg, isoNow, isoNow, isoNow, isoNow]
-                            );
-                            io.emit("updateActiveAlerts");
-                        }
-                    } catch (e) {
-                        log.error("monitor", "Auto incident & alert creation failed: " + e.message);
-                    }
-                } else if (bean.status === UP && previousBeat?.status === DOWN) {
-                    try {
-                        const orgId = this.organization_id || 1;
-                        const isoNow = new Date().toISOString();
-
-                        // 1. Resolve Open Incidents for this monitor
-                        const openIncidents = await R.getAll(
-                            `SELECT incident.id FROM incident 
-                            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
-                            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
-                            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
-                            AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
-                            [orgId, this.id]
-                        );
-
-                        for (const inc of openIncidents) {
-                            await R.exec(
-                                "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
-                                [isoNow, isoNow, inc.id]
-                            );
-                            await R.exec(
-                                "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, ?, 'resolved', 'Auto resolved on monitor recovery (UP)', ?)",
-                                [orgId, inc.id, null, isoNow]
-                            );
-                        }
-                        if (openIncidents.length > 0) {
-                            io.emit("updateIncidentStats");
-                        }
-
-                        // 2. Resolve Active Alert for this monitor
-                        const existingAlert = await R.getRow(
-                            "SELECT * FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
-                            [orgId, this.id]
-                        );
-                        if (existingAlert) {
-                            const recoveryMsg = `[RECOVERED] Monitor #${this.id} (${this.name}) returned to service (UP)`;
-                            await R.exec(
-                                "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, ?, 'RECOVERED', ?, ?)",
-                                [orgId, existingAlert.id, existingAlert.rule_id || 0, recoveryMsg, isoNow]
-                            );
-                            await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
-                            io.emit("updateActiveAlerts");
-                        }
-                    } catch (e) {
-                        log.error("monitor", "Auto incident & alert resolution failed: " + e.message);
-                    }
-                }
             } else {
                 bean.important = false;
 
@@ -1133,6 +1058,105 @@ class Monitor extends BeanModel {
                         );
                         await Monitor.sendNotification(isFirstBeat, this, bean);
                     }
+                }
+            }
+
+            // InfiniNOC Guaranteed State Machine Reconciliation: Always sync Active Alerts and Incidents to ground truth
+            const orgId = this.organization_id || 1;
+            const isoNow = new Date().toISOString();
+            const monTarget = this.hostname || this.url || `Target #${this.id}`;
+            const monType = (this.type || "TARGET").toUpperCase();
+
+            if (bean.status === DOWN) {
+                try {
+                    const failureReason = bean.msg || `Target ${this.name} (${monTarget}) is DOWN`;
+
+                    // 1. Ensure Active Incident exists for this outage
+                    const existingInc = await R.getRow(
+                        `SELECT incident.id FROM incident 
+                        JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
+                        WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
+                        AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
+                        AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
+                        [orgId, this.id]
+                    );
+
+                    if (!existingInc) {
+                        await Incident.createIncident(
+                            {
+                                title: `[OUTAGE] Monitor #${this.id} (${this.name}) is DOWN`,
+                                description: `Automated NOC Outage Incident raised for ${this.name}. Target: ${monTarget}. Protocol: ${monType}. Failure Reason: ${failureReason}`,
+                                failure_reason: failureReason,
+                                severity: "P1",
+                                links: [{ entity_type: "monitor", entity_id: this.id }],
+                            },
+                            orgId,
+                            this.user_id
+                        );
+                        io.emit("updateIncidentStats");
+                    }
+
+                    // 2. Ensure Active Alert exists for this outage
+                    const existingAlert = await R.getRow(
+                        "SELECT id FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
+                        [orgId, this.id]
+                    );
+
+                    if (!existingAlert) {
+                        const alertMsg = `Monitor #${this.id} (${this.name}) is DOWN: ${failureReason}`;
+                        await R.exec(
+                            `INSERT INTO active_alert (
+                                organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
+                            ) VALUES (?, 0, 'monitor', ?, 'monitor_down', 'CRITICAL', 0, ?, ?, ?, ?, ?)`,
+                            [orgId, this.id, alertMsg, isoNow, isoNow, isoNow, isoNow]
+                        );
+                        io.emit("updateActiveAlerts");
+                    }
+                } catch (e) {
+                    log.error("monitor", "Auto incident & alert creation failed: " + e.message);
+                }
+            } else if (bean.status === UP) {
+                try {
+                    // 1. Auto-resolve ANY Open Incidents for this monitor
+                    const openIncidents = await R.getAll(
+                        `SELECT incident.id FROM incident 
+                        JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
+                        WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
+                        AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
+                        AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
+                        [orgId, this.id]
+                    );
+
+                    for (const inc of openIncidents) {
+                        await R.exec(
+                            "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
+                            [isoNow, isoNow, inc.id]
+                        );
+                        await R.exec(
+                            "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, ?, 'resolved', 'Auto resolved on monitor recovery (UP)', ?)",
+                            [orgId, inc.id, null, isoNow]
+                        );
+                    }
+                    if (openIncidents.length > 0) {
+                        io.emit("updateIncidentStats");
+                    }
+
+                    // 2. Auto-resolve Active Alert for this monitor
+                    const existingAlert = await R.getRow(
+                        "SELECT * FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
+                        [orgId, this.id]
+                    );
+                    if (existingAlert) {
+                        const recoveryMsg = `[RECOVERED] Monitor #${this.id} (${this.name}) returned to service (UP)`;
+                        await R.exec(
+                            "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, ?, 'RECOVERED', ?, ?)",
+                            [orgId, existingAlert.id, existingAlert.rule_id || 0, recoveryMsg, isoNow]
+                        );
+                        await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
+                        io.emit("updateActiveAlerts");
+                    }
+                } catch (e) {
+                    log.error("monitor", "Auto incident & alert resolution failed: " + e.message);
                 }
             }
 
@@ -2211,6 +2235,196 @@ class Monitor extends BeanModel {
             log.debug("monitor", `[${this.name}] call checkCertExpiryNotifications`);
             await checkCertExpiryNotifications(this, tlsInfo);
         }
+    }
+
+    /**
+     * Get execution diagnostics for a monitor (NOC diagnostic payload)
+     * @param {number} monitorId Monitor ID
+     * @param {number} organizationId Organization ID
+     * @returns {Promise<object>} Diagnostic details
+     */
+    static async getDiagnostics(monitorId, organizationId) {
+        const orgId = organizationId || 1;
+        const monitor = await R.findOne("monitor", " id = ? AND (organization_id = ? OR organization_id IS NULL) ", [monitorId, orgId]);
+        if (!monitor) {
+            throw new Error("Monitor not found or access denied.");
+        }
+
+        const recentBeats = await R.getAll(
+            "SELECT id, status, ping, time, msg, duration, down_count, probe_id FROM heartbeat WHERE monitor_id = ? ORDER BY id DESC LIMIT 20",
+            [monitorId]
+        );
+
+        const lastBeat = recentBeats.length > 0 ? recentBeats[0] : null;
+        const lastSuccess = recentBeats.find((b) => b.status === UP);
+        const lastFailure = recentBeats.find((b) => b.status === DOWN);
+
+        let probeInfo = null;
+        let executionLocation = "Central Monitoring Server";
+        let executionSource = "central";
+        let workerAvailable = true;
+
+        if (monitor.probe_id) {
+            const probe = await R.getRow("SELECT id, name, status, last_heartbeat FROM probe WHERE id = ?", [monitor.probe_id]);
+            if (probe) {
+                probeInfo = {
+                    id: probe.id,
+                    name: probe.name,
+                    status: probe.status,
+                    last_heartbeat: probe.last_heartbeat,
+                };
+                executionLocation = `Remote Probe #${probe.id} (${probe.name})`;
+                executionSource = "probe";
+                workerAvailable = probe.status === "online";
+            }
+        }
+
+        const nextScheduled = lastBeat ? new Date(new Date(lastBeat.time).getTime() + (monitor.interval || 60) * 1000).toISOString() : null;
+
+        let statusText = "UNKNOWN";
+        if (lastBeat) {
+            if (lastBeat.status === UP) statusText = "UP";
+            else if (lastBeat.status === DOWN) statusText = "DOWN";
+            else if (lastBeat.status === PENDING) statusText = "WARNING";
+            else if (lastBeat.status === MAINTENANCE) statusText = "MAINTENANCE";
+        }
+
+        return {
+            monitor_id: monitor.id,
+            name: monitor.name,
+            type: monitor.type,
+            target: monitor.hostname || monitor.url || `Target #${monitor.id}`,
+            execution_location: executionLocation,
+            execution_source: executionSource,
+            assigned_probe_id: monitor.probe_id || null,
+            probe_info: probeInfo,
+            worker_available: workerAvailable,
+            last_execution: lastBeat ? lastBeat.time : null,
+            last_successful_execution: lastSuccess ? lastSuccess.time : null,
+            last_failed_execution: lastFailure ? lastFailure.time : null,
+            last_status: statusText,
+            last_ping_ms: lastBeat ? lastBeat.ping : null,
+            failure_count: lastBeat ? (lastBeat.down_count || 0) : 0,
+            execution_duration_sec: lastBeat ? (lastBeat.duration || 0) : 0,
+            failure_reason: lastFailure ? lastFailure.msg : null,
+            last_message: lastBeat ? lastBeat.msg : null,
+            next_scheduled_execution: nextScheduled,
+            active: Boolean(monitor.active),
+        };
+    }
+
+    /**
+     * Reconcile active alerts and incidents across all monitors for consistent state
+     * @param {number|null} organizationId Optional organization filter
+     * @param {object|null} io Socket.io instance
+     * @returns {Promise<object>} Reconciliation counts
+     */
+    static async reconcileAllMonitorAlerts(organizationId = null, io = null) {
+        const orgCondition = organizationId ? "WHERE (organization_id = ? OR organization_id IS NULL) AND active = 1" : "WHERE active = 1";
+        const params = organizationId ? [organizationId] : [];
+        const activeMonitors = await R.getAll(`SELECT id, name, hostname, url, type, organization_id, user_id FROM monitor ${orgCondition}`, params);
+
+        let alertsCreated = 0;
+        let alertsResolved = 0;
+        let incidentsCreated = 0;
+        let incidentsResolved = 0;
+        const isoNow = new Date().toISOString();
+
+        for (const mon of activeMonitors) {
+            const orgId = mon.organization_id || 1;
+            const lastBeat = await Monitor.getPreviousHeartbeat(mon.id);
+            if (!lastBeat) continue;
+
+            if (lastBeat.status === DOWN) {
+                // Ground truth is DOWN: Ensure active alert exists
+                const existingAlert = await R.getRow(
+                    "SELECT id FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
+                    [orgId, mon.id]
+                );
+                if (!existingAlert) {
+                    const alertMsg = `Monitor #${mon.id} (${mon.name}) is DOWN: ${lastBeat.msg || "Target unreachable"}`;
+                    await R.exec(
+                        `INSERT INTO active_alert (
+                            organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
+                        ) VALUES (?, 0, 'monitor', ?, 'monitor_down', 'CRITICAL', 0, ?, ?, ?, ?, ?)`,
+                        [orgId, mon.id, alertMsg, isoNow, isoNow, isoNow, isoNow]
+                    );
+                    alertsCreated++;
+                }
+
+                // Ensure open incident exists
+                const existingInc = await R.getRow(
+                    `SELECT incident.id FROM incident 
+                    JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
+                    WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
+                    AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
+                    AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
+                    [orgId, mon.id]
+                );
+                if (!existingInc) {
+                    const Incident = require("./incident");
+                    await Incident.createIncident(
+                        {
+                            title: `[OUTAGE] Monitor #${mon.id} (${mon.name}) is DOWN`,
+                            description: `Automated NOC Outage Incident raised for ${mon.name}. Status: DOWN. Details: ${lastBeat.msg || "Heartbeat failed"}`,
+                            failure_reason: lastBeat.msg || "Heartbeat failed",
+                            severity: "P1",
+                            links: [{ entity_type: "monitor", entity_id: mon.id }],
+                        },
+                        orgId,
+                        mon.user_id
+                    );
+                    incidentsCreated++;
+                }
+            } else if (lastBeat.status === UP) {
+                // Ground truth is UP: Clear dangling alerts
+                const danglingAlert = await R.getRow(
+                    "SELECT id, rule_id FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
+                    [orgId, mon.id]
+                );
+                if (danglingAlert) {
+                    const recoveryMsg = `[RECOVERED] Monitor #${mon.id} (${mon.name}) returned to service (UP)`;
+                    await R.exec(
+                        "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, ?, 'RECOVERED', ?, ?)",
+                        [orgId, danglingAlert.id, danglingAlert.rule_id || 0, recoveryMsg, isoNow]
+                    );
+                    await R.exec("DELETE FROM active_alert WHERE id = ?", [danglingAlert.id]);
+                    alertsResolved++;
+                }
+
+                // Resolve any open incidents
+                const openIncs = await R.getAll(
+                    `SELECT incident.id FROM incident 
+                    JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
+                    WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
+                    AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
+                    AND incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?`,
+                    [orgId, mon.id]
+                );
+                for (const inc of openIncs) {
+                    await R.exec(
+                        "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
+                        [isoNow, isoNow, inc.id]
+                    );
+                    await R.exec(
+                        "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, ?, 'resolved', 'Auto resolved on monitor recovery reconciliation (UP)', ?)",
+                        [orgId, inc.id, null, isoNow]
+                    );
+                    incidentsResolved++;
+                }
+            }
+        }
+
+        if (io) {
+            if (alertsCreated > 0 || alertsResolved > 0) {
+                io.emit("updateActiveAlerts");
+            }
+            if (incidentsCreated > 0 || incidentsResolved > 0) {
+                io.emit("updateIncidentStats");
+            }
+        }
+
+        return { alertsCreated, alertsResolved, incidentsCreated, incidentsResolved };
     }
 }
 

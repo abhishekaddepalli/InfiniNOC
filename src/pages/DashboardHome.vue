@@ -180,7 +180,7 @@
                             </div>
                             <div>
                                 <div class="kpi-label">Active Alerts</div>
-                                <div class="kpi-value text-indigo" style="color: #6366F1 !important;">{{ activeAlertsCount }}</div>
+                                <div class="kpi-value text-indigo" style="color: #6366F1 !important;">{{ activeAlertsCount > 0 ? activeAlertsCount : (downCount > 0 ? downCount : 0) }}</div>
                                 <div class="kpi-subtext">Firing alerts</div>
                             </div>
                         </div>
@@ -195,12 +195,12 @@
                                 <div class="kpi-icon-box kpi-darkblue d-flex align-items-center justify-content-center rounded-3">
                                     <font-awesome-icon icon="layer-group" />
                                 </div>
-                                <span class="badge font-monospace" :class="activeIncidentCount > 0 ? 'bg-danger text-white' : 'bg-secondary-subtle text-secondary'" style="font-size: 0.65rem;">INCIDENTS</span>
+                                <span class="badge font-monospace" :class="(activeIncidentCount > 0 || downCount > 0) ? 'bg-danger text-white' : 'bg-secondary-subtle text-secondary'" style="font-size: 0.65rem;">INCIDENTS</span>
                             </div>
                             <div>
                                 <div class="kpi-label">Active Incidents</div>
-                                <div class="kpi-value" :class="activeIncidentCount > 0 ? 'text-danger' : 'text-foreground'">
-                                    {{ activeIncidentCount }}
+                                <div class="kpi-value" :class="(activeIncidentCount > 0 || downCount > 0) ? 'text-danger' : 'text-foreground'">
+                                    {{ Math.max(activeIncidentCount, downCount) }}
                                 </div>
                                 <div class="kpi-subtext">System outages</div>
                             </div>
@@ -431,16 +431,16 @@
                                         <font-awesome-icon icon="exclamation-triangle" class="text-danger" style="color: #EF4444 !important;" />
                                         <span>Active Incidents</span>
                                     </div>
-                                    <span class="badge rounded-pill" :class="activeIncidentCount > 0 ? 'bg-danger text-white' : 'bg-secondary text-muted'" style="font-size: 0.65rem;">
-                                        {{ activeIncidentCount }} Active
+                                    <span class="badge rounded-pill" :class="(activeIncidentCount > 0 || downCount > 0) ? 'bg-danger text-white' : 'bg-secondary text-muted'" style="font-size: 0.65rem;">
+                                        {{ Math.max(activeIncidentCount, downCount) }} Active
                                     </span>
                                 </div>
                                 <div class="d-flex align-items-center justify-content-between mt-2 pt-2 border-top border-secondary">
                                     <span class="fw-semibold text-foreground small text-truncate">
-                                        {{ activeIncidents.length > 0 ? activeIncidents[0].name : 'All systems nominal' }}
+                                        {{ (activeIncidentCount > 0 || downCount > 0) ? (activeIncidents.length > 0 ? activeIncidents[0].name : 'Active Outage Incident') : 'All systems nominal' }}
                                     </span>
-                                    <span class="badge rounded-pill" :class="activeIncidentCount > 0 ? 'bg-danger text-white' : 'bg-success-subtle text-success'" style="font-size: 0.65rem;">
-                                        {{ activeIncidentCount > 0 ? 'CRITICAL OUTAGE' : 'OPERATIONAL' }}
+                                    <span class="badge rounded-pill" :class="(activeIncidentCount > 0 || downCount > 0) ? 'bg-danger text-white' : 'bg-success-subtle text-success'" style="font-size: 0.65rem;">
+                                        {{ (activeIncidentCount > 0 || downCount > 0) ? 'CRITICAL OUTAGE' : 'OPERATIONAL' }}
                                     </span>
                                 </div>
                             </div>

@@ -257,7 +257,7 @@ class AlertEngine {
              LEFT JOIN alert_rule ON active_alert.rule_id = alert_rule.id 
              LEFT JOIN monitor ON (active_alert.target_type = 'monitor' AND active_alert.target_id = monitor.id)
              LEFT JOIN device ON (active_alert.target_type = 'device' AND active_alert.target_id = device.id)
-             WHERE active_alert.organization_id = ? 
+             WHERE (active_alert.organization_id = ? OR active_alert.organization_id IS NULL) 
              ORDER BY active_alert.id DESC`,
             [orgId]
         );
@@ -275,7 +275,7 @@ class AlertEngine {
                 COALESCE(alert_rule.name, 'Monitor Outage Alert') as rule_name
              FROM alert_history 
              LEFT JOIN alert_rule ON alert_history.rule_id = alert_rule.id 
-             WHERE alert_history.organization_id = ? 
+             WHERE (alert_history.organization_id = ? OR alert_history.organization_id IS NULL) 
              ORDER BY alert_history.id DESC 
              LIMIT 100`,
             [orgId]

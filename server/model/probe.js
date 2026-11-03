@@ -281,7 +281,7 @@ class Probe extends BeanModel {
             `SELECT DISTINCT
                 m.id, m.name, m.type, m.url, m.hostname, m.port, m.interval, m.timeout,
                 m.maxretries, m.method, m.dns_resolve_type, m.dns_resolve_server,
-                m.accepted_statuscodes_json
+                m.accepted_statuscodes_json, m.probe_id, m.active
             FROM monitor m
             LEFT JOIN monitor_probe mp ON m.id = mp.monitor_id
             WHERE (m.probe_id = ? OR mp.probe_id = ?)
