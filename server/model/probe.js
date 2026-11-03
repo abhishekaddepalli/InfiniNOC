@@ -67,15 +67,12 @@ class Probe extends BeanModel {
     }
 
     /**
-     * Probe registration endpoint: exchanges one-time token for persistent API key
+     * Validate a probe registration token without marking it as used
      * @param {number} probeId Probe ID
-     * @param {string} registrationToken Unhashed one-time token
-     * @param {string} ipAddress Remote IP address
-     * @param {string} version Probe software version
-     * @param {object} meta Optional system metadata (os_info, region)
-     * @returns {Promise<object>} Persistent API key and probe identity
+     * @param {string} registrationToken Plaintext registration token
+     * @returns {Promise<object>} Probe database row
      */
-    static async registerProbe(probeId, registrationToken, ipAddress, version, meta = {}) {
+    static async validateToken(probeId, registrationToken) {
         if (!probeId || !registrationToken) {
             throw new Error("Probe ID and registration token required.");
         }
@@ -109,6 +106,21 @@ class Probe extends BeanModel {
                 throw new Error("Registration token has expired.");
             }
         }
+
+        return probe;
+    }
+
+    /**
+     * Probe registration endpoint: exchanges one-time token for persistent API key
+     * @param {number} probeId Probe ID
+     * @param {string} registrationToken Unhashed one-time token
+     * @param {string} ipAddress Remote IP address
+     * @param {string} version Probe software version
+     * @param {object} meta Optional system metadata (os_info, region)
+     * @returns {Promise<object>} Persistent API key and probe identity
+     */
+    static async registerProbe(probeId, registrationToken, ipAddress, version, meta = {}) {
+        const probe = await Probe.validateToken(probeId, registrationToken);
 
         // Generate persistent API key and mark token as used
         const rawApiKey = "prb_key_" + crypto.randomBytes(32).toString("hex");

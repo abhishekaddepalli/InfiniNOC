@@ -786,22 +786,33 @@ router.post("/api/probe/results", async (request, response) => {
 /**
  * Download Agent Executable JavaScript File
  */
-router.get("/api/probe/download/agent.js", (request, response) => {
+router.get("/api/probe/download/agent.js", async (request, response) => {
     allowAllOrigin(response);
     const agentPath = path.join(__dirname, "..", "..", "agent", "infininoc-probe-agent.js");
-    if (fs.existsSync(agentPath)) {
-        response.setHeader("Content-Type", "application/javascript");
-        response.setHeader("Content-Disposition", 'attachment; filename="infininoc-probe-agent.js"');
-        response.send(fs.readFileSync(agentPath, "utf8"));
-    } else {
-        response.status(404).send("// Agent file not found");
+    if (!fs.existsSync(agentPath)) {
+        return response.status(404).send("// Agent file not found");
     }
+
+    const probeId = request.headers["x-probe-id"] || request.query?.probeId;
+    const token = request.headers["x-probe-token"] || request.query?.token;
+
+    if (probeId && token) {
+        try {
+            await Probe.validateToken(Number(probeId), String(token));
+        } catch (err) {
+            return response.status(403).json({ ok: false, msg: err.message });
+        }
+    }
+
+    response.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="infininoc-probe-agent.js"');
+    response.send(fs.readFileSync(agentPath, "utf8"));
 });
 
 /**
  * Download Windows PowerShell Installer with pre-configured parameters
  */
-router.get("/api/probe/download/install.ps1", (request, response) => {
+router.get("/api/probe/download/install.ps1", async (request, response) => {
     allowAllOrigin(response);
     const ps1Path = path.join(__dirname, "..", "..", "agent", "windows", "install.ps1");
     if (fs.existsSync(ps1Path)) {
@@ -810,16 +821,25 @@ router.get("/api/probe/download/install.ps1", (request, response) => {
         const probeId = request.query.probeId ? Number(request.query.probeId) : 0;
         const token = request.query.token ? String(request.query.token).replace(/[^a-zA-Z0-9_-]/g, "") : "";
 
-        // If invoked with query parameters, prefill parameter defaults
+        // If probeId and token are provided, validate the token before serving installer
+        if (probeId && token) {
+            try {
+                await Probe.validateToken(probeId, token);
+            } catch (err) {
+                return response.status(403).send(`# Error: ${err.message}`);
+            }
+        }
+
+        // If invoked with query parameters, prefill parameter defaults using regex
         if (probeId || token) {
             content = content.replace(
-                '[string]$Server = "http://127.0.0.1:3001"',
+                /\[string\]\$Server\s*=\s*"[^"]*"/,
                 `[string]$Server = "${hostUrl}"`
             ).replace(
-                '[int]$ProbeId = 0',
+                /\[int\]\$ProbeId\s*=\s*\d+/,
                 `[int]$ProbeId = ${probeId}`
             ).replace(
-                '[string]$Token = ""',
+                /\[string\]\$Token\s*=\s*"[^"]*"/,
                 `[string]$Token = "${token}"`
             );
         }
@@ -829,6 +849,26 @@ router.get("/api/probe/download/install.ps1", (request, response) => {
         response.send(content);
     } else {
         response.status(404).send("# PowerShell installer not found");
+    }
+});
+
+/**
+ * Download auxiliary Windows PowerShell probe scripts
+ */
+router.get("/api/probe/download/windows/:file", (request, response) => {
+    allowAllOrigin(response);
+    const allowedFiles = ["configure.ps1", "start.ps1", "stop.ps1", "uninstall.ps1", "health-check.ps1", "update.ps1"];
+    const file = request.params.file;
+    if (!allowedFiles.includes(file)) {
+        return response.status(404).send("# Script not found");
+    }
+    const filePath = path.join(__dirname, "..", "..", "agent", "windows", file);
+    if (fs.existsSync(filePath)) {
+        response.setHeader("Content-Type", "text/plain; charset=utf-8");
+        response.setHeader("Content-Disposition", `inline; filename="${file}"`);
+        response.send(fs.readFileSync(filePath, "utf8"));
+    } else {
+        response.status(404).send("# Script not found");
     }
 });
 

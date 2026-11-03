@@ -12,7 +12,11 @@ param (
 Write-Host "Uninstalling InfiniNOC Remote Distributed Probe..." -ForegroundColor Yellow
 
 # Step 1: Stop running service
-& (Join-Path $PSScriptRoot "stop.ps1") -ServiceName $ServiceName
+$scriptDir = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) { $PSScriptRoot } else { $InstallDir }
+$stopScript = Join-Path $scriptDir "stop.ps1"
+if (Test-Path -Path $stopScript -PathType Leaf) {
+    & $stopScript -ServiceName $ServiceName
+}
 
 # Step 2: Unregister Scheduled Task
 $hasScheduledTask = Get-Command "Unregister-ScheduledTask" -ErrorAction SilentlyContinue

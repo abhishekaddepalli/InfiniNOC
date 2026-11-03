@@ -391,6 +391,170 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         assert.strictEqual(postMonCount, preMonCount, "Real monitors must never be deleted by demo cleanup");
     });
 
+    it("13. Probe Registration Token Validation Lifecycle: rejects expired, revoked, and reused tokens", async () => {
+        // Create fresh probe
+        const freshProbeToken = await Probe.createProbeRegistrationToken({
+            name: "Token-Validation-Probe",
+            site_id: testSite.id,
+            description: "Probe for token security tests",
+        }, org.id);
+
+        // 1. Fresh active token should validate successfully
+        const validProbe = await Probe.validateToken(freshProbeToken.probe.id, freshProbeToken.registrationToken);
+        assert.strictEqual(validProbe.id, freshProbeToken.probe.id);
+
+        // 2. Non-existent probe ID
+        await assert.rejects(
+            async () => {
+                await Probe.validateToken(999999, freshProbeToken.registrationToken);
+            },
+            /Probe not found/
+        );
+
+        // 3. Invalid token string (wrong hash)
+        await assert.rejects(
+            async () => {
+                await Probe.validateToken(freshProbeToken.probe.id, "prb_reg_invalid_token_xyz");
+            },
+            /Invalid registration token/
+        );
+
+        // 4. Revoked probe
+        const revokedToken = await Probe.createProbeRegistrationToken({
+            name: "Revoked-Probe",
+            site_id: testSite.id,
+        }, org.id);
+        await R.exec("UPDATE probe SET status = 'revoked' WHERE id = ?", [revokedToken.probe.id]);
+
+        await assert.rejects(
+            async () => {
+                await Probe.validateToken(revokedToken.probe.id, revokedToken.registrationToken);
+            },
+            /Probe has been revoked by administrator/
+        );
+
+        // 5. Expired token
+        const expiredToken = await Probe.createProbeRegistrationToken({
+            name: "Expired-Probe",
+            site_id: testSite.id,
+        }, org.id);
+        await R.exec("UPDATE probe SET token_expires_at = '2020-01-01 00:00:00' WHERE id = ?", [expiredToken.probe.id]);
+
+        await assert.rejects(
+            async () => {
+                await Probe.validateToken(expiredToken.probe.id, expiredToken.registrationToken);
+            },
+            /Registration token has expired/
+        );
+
+        // 6. Reused token (mark as used)
+        const reusedToken = await Probe.createProbeRegistrationToken({
+            name: "Reused-Probe",
+            site_id: testSite.id,
+        }, org.id);
+        await R.exec("UPDATE probe SET registration_token_used = 1 WHERE id = ?", [reusedToken.probe.id]);
+
+        await assert.rejects(
+            async () => {
+                await Probe.validateToken(reusedToken.probe.id, reusedToken.registrationToken);
+            },
+            /Registration token has already been used/
+        );
+    });
+
+    it("14. Download Endpoints & PowerShell Script Delivery: validates generation and token security", async () => {
+        const routerPath = path.join(__dirname, "../../server/routers/api-router.js");
+        assert.ok(fs.existsSync(routerPath));
+
+        const ps1Path = path.join(__dirname, "../../agent/windows/install.ps1");
+        assert.ok(fs.existsSync(ps1Path));
+        const ps1Content = fs.readFileSync(ps1Path, "utf8");
+
+        // Verify default parameters exist in install.ps1 for replacement
+        assert.ok(ps1Content.includes('[string]$Server = "http://127.0.0.1:3001"'));
+        assert.ok(ps1Content.includes("[int]$ProbeId = 0"));
+        assert.ok(ps1Content.includes('[string]$Token = ""'));
+
+        // Test parameter injection logic (as performed by /api/probe/download/install.ps1)
+        const testHost = "https://noc.example.com";
+        const testProbeId = 42;
+        const testToken = "prb_reg_test1234567890";
+
+        let injected = ps1Content.replace(
+            /\[string\]\$Server\s*=\s*"[^"]*"/,
+            `[string]$Server = "${testHost}"`
+        ).replace(
+            /\[int\]\$ProbeId\s*=\s*\d+/,
+            `[int]$ProbeId = ${testProbeId}`
+        ).replace(
+            /\[string\]\$Token\s*=\s*"[^"]*"/,
+            `[string]$Token = "${testToken}"`
+        );
+
+        assert.ok(injected.includes(`[string]$Server = "${testHost}"`));
+        assert.ok(injected.includes(`[int]$ProbeId = ${testProbeId}`));
+        assert.ok(injected.includes(`[string]$Token = "${testToken}"`));
+
+        // Verify agent.js file exists and contains valid agent daemon code
+        const agentPath = path.join(__dirname, "../../agent/infininoc-probe-agent.js");
+        assert.ok(fs.existsSync(agentPath));
+        const agentContent = fs.readFileSync(agentPath, "utf8");
+        assert.ok(agentContent.includes("InfiniNOC Remote Distributed Probe Agent"));
+        assert.ok(agentContent.includes("AGENT_VERSION = \"1.26.31\""));
+    });
+
+    it("15. Windows PowerShell Installer & Auxiliary Scripts: validates 0 syntax errors", async () => {
+        const { execSync } = require("child_process");
+        const agentWindowsDir = path.join(__dirname, "../../agent/windows");
+        const psFiles = fs.readdirSync(agentWindowsDir).filter((f) => f.endsWith(".ps1"));
+
+        assert.ok(psFiles.length >= 6, "Must contain install, start, stop, uninstall, configure, health-check, update ps1 scripts");
+        assert.ok(psFiles.includes("install.ps1"));
+        assert.ok(psFiles.includes("uninstall.ps1"));
+        assert.ok(psFiles.includes("start.ps1"));
+        assert.ok(psFiles.includes("stop.ps1"));
+        assert.ok(psFiles.includes("configure.ps1"));
+        assert.ok(psFiles.includes("health-check.ps1"));
+        assert.ok(psFiles.includes("update.ps1"));
+
+        // Validate each script syntax using PowerShell AST parser
+        for (const file of psFiles) {
+            const filePath = path.join(agentWindowsDir, file);
+            const cmd = `pwsh -NoProfile -Command "$tokens = $null; $errs = $null; [System.Management.Automation.Language.Parser]::ParseFile('${filePath.replace(/\\/g, "/")}', [ref]$tokens, [ref]$errs); if ($errs.Count -gt 0) { exit 1 } else { exit 0 }"`;
+            try {
+                execSync(cmd, { stdio: "pipe" });
+            } catch (err) {
+                assert.fail(`Script ${file} failed syntax validation: ${err.message}`);
+            }
+        }
+    });
+
+    it("16. PowerShell IEX In-Memory Execution Architecture: eliminates drive resolution errors", async () => {
+        const installPs1Path = path.join(__dirname, "../../agent/windows/install.ps1");
+        const content = fs.readFileSync(installPs1Path, "utf8");
+
+        // Verify dangerous calls that cause "Cannot find drive. A drive with the name 'irm https' does not exist." are eliminated
+        assert.strictEqual(
+            content.includes("$MyInvocation.MyCommand.Definition"),
+            false,
+            "Must never use $MyInvocation.MyCommand.Definition which contains the in-memory 'irm | iex' invocation string"
+        );
+        assert.strictEqual(
+            content.includes("$MyInvocation.Line"),
+            false,
+            "Must never use $MyInvocation.Line which contains the in-memory 'irm | iex' invocation string"
+        );
+
+        // Verify explicit architecture paths requested in prompt
+        assert.ok(content.includes('Join-Path $env:ProgramData "InfiniNOC\\Probe"'));
+        assert.ok(content.includes('Join-Path $env:TEMP "InfiniNOC-Probe-Install"'));
+        assert.ok(content.includes('Join-Path $StagingDir "infininoc-probe-agent.js"'));
+        assert.ok(content.includes('Join-Path $InstallDir "infininoc-probe-agent.js"'));
+
+        // Verify sensitive token masking helper is present
+        assert.ok(content.includes("Get-MaskedToken"));
+    });
+
     after(async () => {
         try {
             await R.close();

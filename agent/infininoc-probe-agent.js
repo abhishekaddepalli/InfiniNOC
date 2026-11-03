@@ -51,6 +51,29 @@ function parseArgs() {
 }
 
 const args = parseArgs();
+
+if (args.help || args.h) {
+    console.log(`=======================================================`);
+    console.log(` InfiniNOC Remote Distributed Probe Agent v${AGENT_VERSION}`);
+    console.log(`=======================================================`);
+    console.log(`Usage: node infininoc-probe-agent.js [options]`);
+    console.log(`\nOptions:`);
+    console.log(`  --server=<url>       Central InfiniNOC Server URL`);
+    console.log(`  --probe-id=<id>      Probe identifier`);
+    console.log(`  --token=<token>      One-time registration token`);
+    console.log(`  --api-key=<key>      Persistent API Key`);
+    console.log(`  --config=<path>      Path to configuration file`);
+    console.log(`  --interval=<sec>     Heartbeat interval in seconds (default: 20)`);
+    console.log(`  --version, -v        Display agent version`);
+    console.log(`  --help, -h           Display this help screen`);
+    process.exit(0);
+}
+
+if (args.version || args.v) {
+    console.log(`InfiniNOC Remote Distributed Probe Agent v${AGENT_VERSION}`);
+    process.exit(0);
+}
+
 const configFilePath = args.config || path.join(process.cwd(), "infininoc-probe-config.json");
 
 let config = {
@@ -65,7 +88,11 @@ let config = {
 // Load saved config file if exists
 if (fs.existsSync(configFilePath)) {
     try {
-        const loaded = JSON.parse(fs.readFileSync(configFilePath, "utf8"));
+        let raw = fs.readFileSync(configFilePath, "utf8");
+        if (raw.charCodeAt(0) === 0xFEFF) {
+            raw = raw.slice(1);
+        }
+        const loaded = JSON.parse(raw);
         config = { ...config, ...loaded };
     } catch (e) {
         console.error(`[WARN] Failed to read config file ${configFilePath}: ${e.message}`);

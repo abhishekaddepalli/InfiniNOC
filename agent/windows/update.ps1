@@ -23,13 +23,20 @@ Write-Host "Downloading latest agent daemon from $server/api/probe/download/agen
 Invoke-WebRequest -Uri "$server/api/probe/download/agent.js" -OutFile $tempAgent -UseBasicParsing
 
 # Stop service
-& (Join-Path $PSScriptRoot "stop.ps1") -ServiceName $ServiceName
+$scriptDir = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) { $PSScriptRoot } else { $InstallDir }
+$stopScript = Join-Path $scriptDir "stop.ps1"
+if (Test-Path -Path $stopScript -PathType Leaf) {
+    & $stopScript -ServiceName $ServiceName
+}
 
 # Replace agent file
 Copy-Item -Path $tempAgent -Destination "$InstallDir\infininoc-probe-agent.js" -Force
 Remove-Item -Path $tempAgent -Force -ErrorAction SilentlyContinue
 
 # Restart service
-& (Join-Path $PSScriptRoot "start.ps1") -ServiceName $ServiceName -InstallDir $InstallDir
+$startScript = Join-Path $scriptDir "start.ps1"
+if (Test-Path -Path $startScript -PathType Leaf) {
+    & $startScript -ServiceName $ServiceName -InstallDir $InstallDir
+}
 
 Write-Host "Probe agent updated and restarted successfully." -ForegroundColor Green

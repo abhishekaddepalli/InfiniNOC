@@ -26,5 +26,7 @@ if ($ApiKey) { $config.apiKey = $ApiKey }
 if ($Token) { $config.token = $Token }
 if ($HeartbeatInterval) { $config.heartbeatInterval = $HeartbeatInterval }
 
-$config | ConvertTo-Json -Depth 4 | Set-Content -Path $configPath -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+$configJson = $config | ConvertTo-Json -Depth 4
+[System.IO.File]::WriteAllText($configPath, $configJson, $utf8NoBom)
 Write-Host "Configuration updated successfully at $configPath." -ForegroundColor Green
