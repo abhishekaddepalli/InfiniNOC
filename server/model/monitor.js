@@ -951,7 +951,10 @@ class Monitor extends BeanModel {
                 const isExecFailure = error?.isExecutionFailure ||
                     errMsg.includes("permission denied") ||
                     errMsg.includes("Operation not permitted") ||
-                    errMsg.includes("execution error");
+                    errMsg.includes("Check the path or permissions") ||
+                    errMsg.includes("error while executing the ping program") ||
+                    errMsg.includes("execution error") ||
+                    errMsg.includes("Central ping execution error");
                 const isDnsFailure = error?.isDnsFailure ||
                     errMsg.includes("DNS resolution failed") ||
                     errMsg.includes("could not find host") ||
@@ -983,7 +986,7 @@ class Monitor extends BeanModel {
                     retries = 0;
                 } else if (isExecFailure) {
                     // Execution worker / local infrastructure failure: target state is UNKNOWN / PENDING, not target DOWN
-                    retries++;
+                    retries = 0;
                     bean.status = PENDING;
                 } else if (this.type === "json-query" && this.retry_only_on_status_code_failure) {
                     const isJsonQueryError =

@@ -4614,7 +4614,7 @@ let needSetup = false;
         await initBackgroundJobs();
 
         log.info("server", "==================================================");
-        log.info("server", `InfiniNOC System Initialized: Database connected, ${Object.keys(monitorList).length} monitors loaded`);
+        log.info("server", `InfiniNOC System Initialized: Database connected, ${Object.keys(server.monitorList || {}).length} monitors loaded`);
         log.info("server", "Probe health evaluator active (interval: 30s)");
         log.info("server", "Alert engine and incident management active");
         log.info("server", "==================================================");

@@ -162,6 +162,11 @@ exports.ping = async (
         // If the host cannot be resolved, try again with ipv6
         log.debug("ping", "IPv6 error message: " + e.message);
 
+        // If central execution error, do not retry with ipv6 (it will fail the same way)
+        if (e.isExecutionFailure) {
+            throw e;
+        }
+
         // As node-ping does not report a specific error for this, try again if it is an empty message with ipv6 no matter what.
         if (!e.message) {
             return await exports.pingAsync(destAddr, true, count, sourceAddr, numeric, size, deadline, timeout);
@@ -303,10 +308,36 @@ exports.pingAsync = function (
                     reject(targetErr);
                 }
             })
-            .catch((err) => {
+            .catch(async (err) => {
+                // If ping binary failed to execute (permissions, path, unprivileged container),
+                // attempt TCP fallback before failing execution
+                try {
+                    const fallbackPorts = [53, 443, 80, 8080, 8443, 22, 8291];
+                    const tcpLatency = await Promise.any(
+                        fallbackPorts.map((port) => testTcpPortFallback(cleanHost, port, 1500))
+                    );
+                    if (tcpLatency >= 0) {
+                        resolve(Math.round(tcpLatency));
+                        return;
+                    }
+                } catch (_) {
+                    // TCP fallback also failed
+                }
+
                 const errMsg = err ? (err.message || String(err)) : "";
-                if (errMsg.includes("permission denied") || errMsg.includes("Operation not permitted") || errMsg.includes("Check the path or permissions") || errMsg.includes("ENOENT")) {
-                    err.isExecutionFailure = true;
+                if (
+                    errMsg.includes("permission denied") ||
+                    errMsg.includes("Operation not permitted") ||
+                    errMsg.includes("Check the path or permissions") ||
+                    errMsg.includes("error while executing the ping program") ||
+                    errMsg.includes("ENOENT") ||
+                    errMsg.includes("EACCES") ||
+                    errMsg.includes("EPERM")
+                ) {
+                    const execErr = new Error(`Central ping execution error: ${errMsg}`);
+                    execErr.isExecutionFailure = true;
+                    reject(execErr);
+                    return;
                 }
                 reject(err);
             });
