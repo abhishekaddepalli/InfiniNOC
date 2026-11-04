@@ -1256,7 +1256,7 @@ class Monitor extends BeanModel {
             } catch (e) {
                 console.trace(e);
                 UptimeKumaServer.errorLog(e, false);
-                log.error("monitor", "Please report to https://github.com/louislam/uptime-kuma/issues");
+                log.error("monitor", "Internal monitor beat error. Please check system logs.");
 
                 if (!this.isStop) {
                     log.info("monitor", "Try to restart the monitor");

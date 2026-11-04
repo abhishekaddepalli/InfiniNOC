@@ -45,14 +45,7 @@
                         <span v-if="!running" class="remove-token" @click="removeToken">{{ $t("Remove Token") }}</span>
                     </div>
 
-                    {{ $t("Don't know how to get the token? Please read the guide:") }}
-                    <br />
-                    <a
-                        href="https://github.com/louislam/uptime-kuma/wiki/Reverse-Proxy-with-Cloudflare-Tunnel"
-                        target="_blank"
-                    >
-                        https://github.com/louislam/uptime-kuma/wiki/Reverse-Proxy-with-Cloudflare-Tunnel
-                    </a>
+                    <span class="text-muted small">{{ $t("Tokens can be generated in the Cloudflare Zero Trust dashboard under Networks > Tunnels.") }}</span>
                 </div>
             </div>
 
@@ -97,14 +90,8 @@
         </div>
 
         <h4 class="mt-4">{{ $t("Other Software") }}</h4>
-        <div>
-            {{ $t("For example: nginx, Apache and Traefik.") }}
-            <br />
-            {{ $t("Please read") }}
-            <a href="https://github.com/louislam/uptime-kuma/wiki/Reverse-Proxy" target="_blank">
-                https://github.com/louislam/uptime-kuma/wiki/Reverse-Proxy
-            </a>
-            .
+        <div class="text-muted small">
+            {{ $t("Ensure your reverse proxy (Nginx, Caddy, Traefik, Apache) forwards the Host, X-Real-IP, X-Forwarded-For, and WebSocket Upgrade/Connection headers to the InfiniNOC port.") }}
         </div>
 
         <h4 class="my-4">{{ $t("HTTP Headers") }}</h4>

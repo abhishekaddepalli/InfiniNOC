@@ -57,10 +57,8 @@
             </div>
         </div>
 
-        <div class="text-center mt-3" style="font-size: 13px">
-            <a href="https://github.com/louislam/uptime-kuma/wiki/Prometheus-API-Keys" target="_blank">
-                {{ $t("Learn More") }}
-            </a>
+        <div class="text-center mt-3 text-muted" style="font-size: 13px">
+            <span>{{ $t("API keys provide secure programmatic access to Prometheus metrics and monitoring APIs.") }}</span>
         </div>
 
         <Confirm ref="confirmPause" :yes-text="$t('Yes')" :no-text="$t('No')" @yes="disableKey">

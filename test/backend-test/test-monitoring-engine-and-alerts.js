@@ -898,6 +898,21 @@ describe("InfiniNOC Monitoring Engine, DOWN/WARNING Classification, and Alert Ge
         assert.ok(diagRoute, "/api/monitor/:id/diagnostics route must be registered");
         assert.ok(diagRoute.methods.includes("get"), "/api/monitor/:id/diagnostics must support GET");
     });
+
+    it("27. Native Ping Resolution & Diagnostics: verifies resolvePingExecutable, arguments, and direct ping results", async () => {
+        const { resolvePingExecutable, ping } = utilServer;
+
+        const exe = resolvePingExecutable(false);
+        assert.ok(exe, "Ping executable must resolve");
+        assert.ok(typeof exe === "string");
+
+        // Ping 127.0.0.1
+        const res = await ping("127.0.0.1", 1, "", true, 32, 2, 1);
+        assert.ok(typeof res === "number" || typeof res === "object", "Ping must resolve with latency");
+        const latency = typeof res === "object" ? res.time : res;
+        assert.ok(latency >= 0, "Latency must be non-negative");
+    });
 });
+
 
 

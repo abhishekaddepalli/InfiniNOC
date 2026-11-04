@@ -188,6 +188,42 @@ exports.ping = async (
  * @param {number} timeout Maximum time in seconds to wait for each response
  * @returns {Promise<number|object>} Time for ping in ms or result object
  */
+/**
+ * Authoritative Ping binary resolver across Linux, Unix and Windows
+ * Prioritizes standard system locations (/usr/bin/ping, /bin/ping)
+ * @param {boolean} v6 IPv6 flag
+ * @returns {string} Path or command for ping
+ */
+function resolvePingExecutable(v6 = false) {
+    if (isWindows) {
+        return process.env.SystemRoot ? `${process.env.SystemRoot}\\system32\\ping.exe` : "ping.exe";
+    }
+    const fs = require("fs");
+    const candidates = v6
+        ? ["/usr/bin/ping6", "/bin/ping6", "ping6", "/usr/bin/ping", "/bin/ping", "ping"]
+        : ["/usr/bin/ping", "/bin/ping", "ping"];
+    for (const c of candidates) {
+        if (c.startsWith("/") && fs.existsSync(c)) {
+            return c;
+        }
+    }
+    return v6 ? "ping6" : "ping";
+}
+
+exports.resolvePingExecutable = resolvePingExecutable;
+
+/**
+ * Ping the specified machine
+ * @param {string} destAddr Hostname / IP address of machine to ping
+ * @param {boolean} ipv6 Should IPv6 be used?
+ * @param {number} count Number of packets to send before stopping
+ * @param {string} sourceAddr Source address for sending/receiving echo requests
+ * @param {boolean} numeric If true, IP addresses will be output instead of symbolic hostnames
+ * @param {number} size Size (in bytes) of echo request to send
+ * @param {number} deadline Maximum time in seconds before ping stops, regardless of packets sent
+ * @param {number} timeout Maximum time in seconds to wait for each response
+ * @returns {Promise<number|object>} Time for ping in ms or result object
+ */
 exports.pingAsync = function (
     destAddr,
     ipv6 = false,
@@ -220,97 +256,92 @@ exports.pingAsync = function (
     // Normalize deadline to seconds (1 - 30 seconds), prevent corrupt millisecond values
     const safeDeadline = Math.min(Math.max(1, Number(deadline) || 3), 30);
     const safeTimeout = Math.min(Math.max(1, Number(timeout) || 2), 10);
+    const safeCount = Math.min(Math.max(1, Number(count) || 1), 10);
+    const safeSize = Math.min(Math.max(16, Number(size) || 32), 1472);
+
+    const { spawn } = require("child_process");
+    const exe = resolvePingExecutable(ipv6);
+    const args = [];
+
+    if (isWindows) {
+        args.push("-n", String(safeCount));
+        args.push("-w", String(safeTimeout * 1000));
+        args.push("-l", String(safeSize));
+        args.push(cleanHost);
+    } else {
+        if (numeric) {
+            args.push("-n");
+        }
+        args.push("-c", String(safeCount));
+        args.push("-W", String(safeTimeout));
+        args.push("-s", String(safeSize));
+        if (sourceAddr) {
+            args.push("-I", String(sourceAddr));
+        }
+        args.push(cleanHost);
+    }
 
     return new Promise((resolve, reject) => {
-        ping.promise
-            .probe(cleanHost, {
-                v6: ipv6,
-                min_reply: count,
-                sourceAddr: sourceAddr,
-                numeric: numeric,
-                packetSize: size,
-                deadline: safeDeadline,
-                timeout: safeTimeout,
-            })
-            .then(async (res) => {
-                if (res.alive) {
-                    const pingTime = Math.round(Number(res.time) || 0);
-                    const packetLoss = res.packetLoss !== undefined && res.packetLoss !== "unknown" ? parseFloat(res.packetLoss) : 0;
+        const startTime = Date.now();
+        let stdout = "";
+        let stderr = "";
+        let killed = false;
 
-                    if (packetLoss > 0 && packetLoss < 100) {
-                        resolve({
-                            time: pingTime,
-                            packetLoss,
-                            degraded: true,
-                            msg: `ICMP echo reply with packet loss from ${cleanHost}. Latency: ${pingTime} ms. Packet loss: ${packetLoss}%.`,
-                        });
-                        return;
-                    }
+        const proc = spawn(exe, args, {
+            windowsHide: true,
+            env: Object.assign({}, process.env, { LANG: "C", LC_ALL: "C" }),
+        });
 
-                    if (pingTime > 1000) {
-                        resolve({
-                            time: pingTime,
-                            packetLoss: 0,
-                            degraded: true,
-                            msg: `High latency warning from ${cleanHost}. Latency: ${pingTime} ms. Packet loss: 0%.`,
-                        });
-                        return;
-                    }
+        const timer = setTimeout(() => {
+            killed = true;
+            try {
+                proc.kill("SIGKILL");
+            } catch (_) {}
+        }, (safeCount * safeTimeout * 1000) + 3000);
 
-                    resolve(pingTime);
-                } else {
-                    const rawOutput = isWindows ? exports.convertToUTF8(res.output || "") : String(res.output || "");
-                    const outputStr = rawOutput.trim();
+        proc.stdout.on("data", (d) => { stdout += d.toString(); });
+        proc.stderr.on("data", (d) => { stderr += d.toString(); });
 
-                    // Check for DNS resolution failure
-                    const isDnsError = outputStr.includes("could not find host") ||
-                        outputStr.includes("Name or service not known") ||
-                        outputStr.includes("Temporary failure in name resolution");
+        proc.on("error", async (err) => {
+            clearTimeout(timer);
+            const durationMs = Date.now() - startTime;
+            log.warn("ping", `Monitor Target: ${cleanHost} | Exec: ${exe} ${args.join(" ")} | Spawn Error: ${err.message} | Duration: ${durationMs}ms`);
 
-                    if (isDnsError) {
-                        const dnsErr = new Error(`DNS resolution failed for target '${cleanHost}': Name or service not known.`);
-                        dnsErr.isDnsFailure = true;
-                        reject(dnsErr);
-                        return;
-                    }
-
-                    // Attempt fallback TCP handshake to common open ports (53 DNS, 443 HTTPS, 80 HTTP, 8080/8443 Alt Web, 22 SSH, 8291 Winbox)
-                    // whenever ICMP fails due to dropped packets, firewall filtering, or raw socket permissions.
-                    try {
-                        const fallbackPorts = [53, 443, 80, 8080, 8443, 22, 8291];
-                        const tcpLatency = await Promise.any(
-                            fallbackPorts.map((port) => testTcpPortFallback(cleanHost, port, 1500))
-                        );
-                        if (tcpLatency >= 0) {
-                            resolve(Math.round(tcpLatency));
-                            return;
-                        }
-                    } catch (_) {
-                        // All fallback ports unreachable
-                    }
-
-                    // Check for permission denied on Linux (e.g. unprivileged raw ICMP socket)
-                    const isPermDenied = outputStr.includes("Operation not permitted") ||
-                        outputStr.includes("cap_set_proc") ||
-                        outputStr.includes("Check the path or permissions") ||
-                        outputStr.includes("permission denied");
-
-                    if (isPermDenied) {
-                        const permErr = new Error(`ICMP execution error: Raw socket permission denied on central server (${outputStr || "Operation not permitted"}). Target state unknown.`);
-                        permErr.isExecutionFailure = true;
-                        reject(permErr);
-                        return;
-                    }
-
-                    // Confirmed target unreachable / timeout
-                    const targetErr = new Error(`ICMP echo request timed out for '${cleanHost}'. 100% packet loss.`);
-                    targetErr.isTargetFailure = true;
-                    reject(targetErr);
+            // Attempt TCP fallback before failing execution
+            try {
+                const fallbackPorts = [53, 443, 80, 8080, 8443, 22, 8291];
+                const tcpLatency = await Promise.any(
+                    fallbackPorts.map((port) => testTcpPortFallback(cleanHost, port, 1500))
+                );
+                if (tcpLatency >= 0) {
+                    log.info("ping", `TCP Fallback Succeeded for ${cleanHost}: ${tcpLatency}ms`);
+                    resolve(Math.round(tcpLatency));
+                    return;
                 }
-            })
-            .catch(async (err) => {
-                // If ping binary failed to execute (permissions, path, unprivileged container),
-                // attempt TCP fallback before failing execution
+            } catch (_) {}
+
+            const execErr = new Error(`Central ping execution error: ${err.message}`);
+            execErr.isExecutionFailure = true;
+            reject(execErr);
+        });
+
+        proc.on("close", async (exitCode) => {
+            clearTimeout(timer);
+            const durationMs = Date.now() - startTime;
+            const combinedOutput = (stdout + "\n" + stderr).trim();
+
+            // Check for DNS resolution failure
+            if (/could not find host|Name or service not known|Temporary failure in name resolution/i.test(combinedOutput)) {
+                log.warn("ping", `Target: ${cleanHost} | DNS resolution failure | Duration: ${durationMs}ms`);
+                const dnsErr = new Error(`DNS resolution failed for target '${cleanHost}': Name or service not known.`);
+                dnsErr.isDnsFailure = true;
+                reject(dnsErr);
+                return;
+            }
+
+            // Check for permission denied / raw socket restrictions on central server
+            if (/Operation not permitted|cap_set_proc|permission denied/i.test(combinedOutput)) {
+                log.warn("ping", `Target: ${cleanHost} | Raw socket permission denied | Duration: ${durationMs}ms`);
                 try {
                     const fallbackPorts = [53, 443, 80, 8080, 8443, 22, 8291];
                     const tcpLatency = await Promise.any(
@@ -320,27 +351,93 @@ exports.pingAsync = function (
                         resolve(Math.round(tcpLatency));
                         return;
                     }
-                } catch (_) {
-                    // TCP fallback also failed
-                }
+                } catch (_) {}
 
-                const errMsg = err ? (err.message || String(err)) : "";
-                if (
-                    errMsg.includes("permission denied") ||
-                    errMsg.includes("Operation not permitted") ||
-                    errMsg.includes("Check the path or permissions") ||
-                    errMsg.includes("error while executing the ping program") ||
-                    errMsg.includes("ENOENT") ||
-                    errMsg.includes("EACCES") ||
-                    errMsg.includes("EPERM")
-                ) {
-                    const execErr = new Error(`Central ping execution error: ${errMsg}`);
-                    execErr.isExecutionFailure = true;
-                    reject(execErr);
+                const permErr = new Error(`ICMP execution error: Raw socket permission denied on central server (${combinedOutput}). Target state unknown.`);
+                permErr.isExecutionFailure = true;
+                reject(permErr);
+                return;
+            }
+
+            // Parse latency
+            let pingMs = null;
+            // Match Linux output: time=18.2 ms or time=0.852 ms
+            const linuxMatch = stdout.match(/time=([\d.]+)\s*ms/i);
+            if (linuxMatch) {
+                pingMs = Math.round(parseFloat(linuxMatch[1]));
+            }
+            // Match Linux summary: rtt min/avg/max/mdev = 18.214/18.214/...
+            if (pingMs === null) {
+                const rttMatch = stdout.match(/rtt min\/avg\/max\/\w+\s*=\s*[\d.]+\/([\d.]+)\//i);
+                if (rttMatch) {
+                    pingMs = Math.round(parseFloat(rttMatch[1]));
+                }
+            }
+            // Match Windows output: time=23ms or time<1ms
+            if (pingMs === null) {
+                const winMatch = stdout.match(/time[<=]([\d.]+)ms/i);
+                if (winMatch) {
+                    pingMs = Math.round(parseFloat(winMatch[1]));
+                }
+            }
+
+            // Parse packet loss
+            let packetLoss = 0;
+            const lossMatch = stdout.match(/(\d+(?:\.\d+)?)%\s*(?:packet\s*)?loss/i);
+            if (lossMatch) {
+                packetLoss = parseFloat(lossMatch[1]);
+            } else if (exitCode !== 0) {
+                packetLoss = 100;
+            }
+
+            // Successful ICMP reply
+            if (exitCode === 0 && (pingMs !== null || packetLoss === 0)) {
+                const finalMs = pingMs !== null ? pingMs : durationMs;
+                log.info("ping", `Target: ${cleanHost} | ICMP UP | Latency: ${finalMs}ms | Loss: ${packetLoss}%`);
+
+                if (packetLoss > 0 && packetLoss < 100) {
+                    resolve({
+                        time: finalMs,
+                        packetLoss,
+                        degraded: true,
+                        msg: `ICMP echo reply with packet loss from ${cleanHost}. Latency: ${finalMs} ms. Packet loss: ${packetLoss}%.`,
+                    });
                     return;
                 }
-                reject(err);
-            });
+
+                if (finalMs > 1000) {
+                    resolve({
+                        time: finalMs,
+                        packetLoss: 0,
+                        degraded: true,
+                        msg: `High latency warning from ${cleanHost}. Latency: ${finalMs} ms. Packet loss: 0%.`,
+                    });
+                    return;
+                }
+
+                resolve(finalMs);
+                return;
+            }
+
+            // Fallback: If ICMP echo requests timed out or dropped by firewall, test common open service ports
+            try {
+                const fallbackPorts = [53, 443, 80, 8080, 8443, 22, 8291];
+                const tcpLatency = await Promise.any(
+                    fallbackPorts.map((port) => testTcpPortFallback(cleanHost, port, 1500))
+                );
+                if (tcpLatency >= 0) {
+                    log.info("ping", `Target: ${cleanHost} | ICMP dropped but TCP reachable (${tcpLatency}ms)`);
+                    resolve(Math.round(tcpLatency));
+                    return;
+                }
+            } catch (_) {}
+
+            // Confirmed target unreachable / timeout
+            log.warn("ping", `Target: ${cleanHost} | ICMP Timeout (100% loss) | Duration: ${durationMs}ms`);
+            const targetErr = new Error(`ICMP echo request timed out for '${cleanHost}'. 100% packet loss.`);
+            targetErr.isTargetFailure = true;
+            reject(targetErr);
+        });
     });
 };
 
