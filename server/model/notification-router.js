@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 const EmailNotificationProvider = require("./notification-providers/email-provider");
 const TelegramNotificationProvider = require("./notification-providers/telegram-provider");
 const WhatsAppCloudNotificationProvider = require("./notification-providers/whatsapp-cloud-provider");
@@ -48,7 +49,7 @@ class NotificationRouter {
 
         const provider = this.getProvider(data.channelType);
         const encryptedConfig = provider.encryptConfig(data.config || {});
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         if (data.id) {
             await R.exec(
@@ -141,7 +142,7 @@ class NotificationRouter {
             throw new Error("Rule name and channel required.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         if (data.id) {
             await R.exec(
                 `UPDATE notification_routing_rule SET
@@ -309,7 +310,7 @@ class NotificationRouter {
      * @returns {Promise<void>}
      */
     async logDelivery(orgId, eventType, severity, channelId, recipient, status, errorMsg) {
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         await R.exec(
             `INSERT INTO notification_delivery_log (
                 organization_id, event_type, severity, channel_id, recipient, status, error_message, delivered_at

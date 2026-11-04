@@ -257,33 +257,6 @@ exports.pingAsync = function (
                     const rawOutput = isWindows ? exports.convertToUTF8(res.output || "") : String(res.output || "");
                     const outputStr = rawOutput.trim();
 
-                    // Check for permission denied on Linux (e.g. unprivileged raw ICMP socket)
-                    const isPermDenied = outputStr.includes("Operation not permitted") ||
-                        outputStr.includes("cap_set_proc") ||
-                        outputStr.includes("Check the path or permissions") ||
-                        outputStr.includes("permission denied");
-
-                    if (isPermDenied) {
-                        // On Linux, attempt fallback TCP handshake to common open ports (53 DNS, 80 HTTP, 443 HTTPS)
-                        if (!isWindows) {
-                            const fallbackPorts = [53, 80, 443];
-                            for (const port of fallbackPorts) {
-                                try {
-                                    const tcpLatency = await testTcpPortFallback(cleanHost, port, 1500);
-                                    if (tcpLatency >= 0) {
-                                        resolve(Math.round(tcpLatency));
-                                        return;
-                                    }
-                                } catch (_) {}
-                            }
-                        }
-
-                        const permErr = new Error(`ICMP execution error: Raw socket permission denied on central server (${outputStr || "Operation not permitted"}). Target state unknown.`);
-                        permErr.isExecutionFailure = true;
-                        reject(permErr);
-                        return;
-                    }
-
                     // Check for DNS resolution failure
                     const isDnsError = outputStr.includes("could not find host") ||
                         outputStr.includes("Name or service not known") ||
@@ -293,6 +266,34 @@ exports.pingAsync = function (
                         const dnsErr = new Error(`DNS resolution failed for target '${cleanHost}': Name or service not known.`);
                         dnsErr.isDnsFailure = true;
                         reject(dnsErr);
+                        return;
+                    }
+
+                    // Attempt fallback TCP handshake to common open ports (53 DNS, 443 HTTPS, 80 HTTP)
+                    // whenever ICMP fails due to dropped packets, firewall filtering, or raw socket permissions.
+                    try {
+                        const fallbackPorts = [53, 443, 80];
+                        const tcpLatency = await Promise.any(
+                            fallbackPorts.map((port) => testTcpPortFallback(cleanHost, port, 1500))
+                        );
+                        if (tcpLatency >= 0) {
+                            resolve(Math.round(tcpLatency));
+                            return;
+                        }
+                    } catch (_) {
+                        // All fallback ports unreachable
+                    }
+
+                    // Check for permission denied on Linux (e.g. unprivileged raw ICMP socket)
+                    const isPermDenied = outputStr.includes("Operation not permitted") ||
+                        outputStr.includes("cap_set_proc") ||
+                        outputStr.includes("Check the path or permissions") ||
+                        outputStr.includes("permission denied");
+
+                    if (isPermDenied) {
+                        const permErr = new Error(`ICMP execution error: Raw socket permission denied on central server (${outputStr || "Operation not permitted"}). Target state unknown.`);
+                        permErr.isExecutionFailure = true;
+                        reject(permErr);
                         return;
                     }
 
@@ -1164,15 +1165,38 @@ module.exports.printServerUrls = (tag, port, hostname, isHTTPS = false) => {
 /**
  * Format a Date, timestamp, or string into standard SQL DATETIME 'YYYY-MM-DD HH:mm:ss' (UTC)
  * Safe and compliant for MySQL, MariaDB, PostgreSQL, and SQLite without syntax errors.
- * @param {Date|string|number} d Date input
- * @returns {string} Formatted UTC datetime string
+ * Preserves null values safely and avoids local timezone skew.
+ * @param {Date|string|number|null} [d] Date input
+ * @returns {string|null} Formatted UTC datetime string or null
  */
-function toSqlDatetime(d = new Date()) {
+function toSqlDatetime(d) {
+    if (arguments.length === 0) {
+        return dayjs.utc().format("YYYY-MM-DD HH:mm:ss");
+    }
+    if (d === null || d === undefined) {
+        return null;
+    }
+    if (typeof d === "string") {
+        const trimmed = d.trim();
+        if (!trimmed) {
+            return null;
+        }
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)) {
+            return trimmed;
+        }
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(trimmed)) {
+            return trimmed.slice(0, 10) + " " + trimmed.slice(11, 19);
+        }
+        const parsed = dayjs.utc(trimmed);
+        if (parsed.isValid()) {
+            return parsed.format("YYYY-MM-DD HH:mm:ss");
+        }
+    }
     const date = (d instanceof Date) ? d : new Date(d);
     if (isNaN(date.getTime())) {
-        return new Date().toISOString().slice(0, 19).replace("T", " ");
+        return dayjs.utc().format("YYYY-MM-DD HH:mm:ss");
     }
-    return date.toISOString().slice(0, 19).replace("T", " ");
+    return dayjs.utc(date).format("YYYY-MM-DD HH:mm:ss");
 }
 exports.toSqlDatetime = toSqlDatetime;
 

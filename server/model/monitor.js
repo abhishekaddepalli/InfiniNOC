@@ -41,6 +41,7 @@ const {
     checkCertificateHostname,
     encodeBase64,
     checkCertExpiryNotifications,
+    toSqlDatetime,
 } = require("../util-server");
 const { R } = require("redbean-node");
 const { BeanModel } = require("redbean-node/dist/bean-model");
@@ -1063,7 +1064,7 @@ class Monitor extends BeanModel {
 
             // InfiniNOC Guaranteed State Machine Reconciliation: Always sync Active Alerts and Incidents to ground truth
             const orgId = this.organization_id || 1;
-            const isoNow = new Date().toISOString();
+            const isoNow = toSqlDatetime();
             const monTarget = this.hostname || this.url || `Target #${this.id}`;
             const monType = (this.type || "TARGET").toUpperCase();
 
@@ -1201,7 +1202,7 @@ class Monitor extends BeanModel {
             } else if (bean.status === MAINTENANCE) {
                 log.warn("monitor", `Monitor #${this.id} '${this.name}': Under Maintenance | Type: ${this.type}`);
             } else {
-                log.warn(
+                log.error(
                     "monitor",
                     `Monitor #${this.id} '${this.name}': Failing: ${bean.msg} | Interval: ${beatInterval} seconds | Type: ${this.type} | Down Count: ${bean.down_count} | Resend Interval: ${this.resendInterval}`
                 );
@@ -2328,7 +2329,7 @@ class Monitor extends BeanModel {
         let alertsResolved = 0;
         let incidentsCreated = 0;
         let incidentsResolved = 0;
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         for (const mon of activeMonitors) {
             const orgId = mon.organization_id || 1;

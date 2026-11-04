@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 const RazorpayBilling = require("./razorpay-billing");
 
 class SaasSubscription {
@@ -9,7 +10,7 @@ class SaasSubscription {
     static async seedPlans() {
         const count = await R.getCell("SELECT COUNT(*) FROM saas_plan");
         if (Number(count) === 0) {
-            const isoNow = new Date().toISOString();
+            const isoNow = toSqlDatetime();
             const plans = [
                 { code: "STARTER", name: "Starter NOC Plan", max_devices: 25, max_monitors: 50, max_probes: 2, max_users: 5, retention: 14, max_status: 1, api_limit: 1000, price: 1999 },
                 { code: "BUSINESS", name: "Business NOC Plan", max_devices: 100, max_monitors: 250, max_probes: 5, max_users: 15, retention: 30, max_status: 3, api_limit: 5000, price: 4999 },

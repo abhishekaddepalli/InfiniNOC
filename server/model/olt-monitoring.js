@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 const OltAdapterRegistry = require("./olt-adapter-registry");
 const MetricsStore = require("./metrics-store");
 const AlertEngine = require("./alert-engine");
@@ -21,7 +22,7 @@ class OltMonitoring {
 
         let olt = await R.getRow("SELECT * FROM olt_device WHERE device_id = ? AND organization_id = ?", [devId, orgId]);
         if (!olt) {
-            const isoNow = new Date().toISOString();
+            const isoNow = toSqlDatetime();
             await R.exec(
                 `INSERT INTO olt_device (
                     organization_id, device_id, vendor_adapter_id, model, firmware_version, total_pon_ports, online_onu_count, offline_onu_count, los_count, created_at, updated_at
@@ -48,7 +49,7 @@ class OltMonitoring {
         const adapter = OltAdapterRegistry.getAdapter(olt.vendor_adapter_id);
         const parsed = adapter.parseOltMetrics(rawTelemetry);
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         await R.exec(
             `UPDATE olt_device SET
                 online_onu_count = ?, offline_onu_count = ?, los_count = ?, updated_at = ?

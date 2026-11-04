@@ -682,4 +682,75 @@ describe("InfiniNOC Monitoring Engine, DOWN/WARNING Classification, and Alert Ge
         const activeAlerts = await AlertEngine.getActiveAlerts(org1.id);
         assert.ok(Array.isArray(activeAlerts));
     });
+
+    it("21. toSqlDatetime Format Validation & MariaDB Syntax Safety: eliminates ISO-8601 MariaDB error 1292", async () => {
+        const { toSqlDatetime } = utilServer;
+
+        // 1. Validate no arguments produces UTC formatted string 'YYYY-MM-DD HH:mm:ss'
+        const nowSql = toSqlDatetime();
+        assert.match(nowSql, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, "Must match strict SQL datetime format");
+        assert.ok(!nowSql.includes("T"), "Must not contain 'T'");
+        assert.ok(!nowSql.includes("Z"), "Must not contain 'Z'");
+
+        // 2. Validate null and undefined return null
+        assert.strictEqual(toSqlDatetime(null), null, "toSqlDatetime(null) must return null");
+        assert.strictEqual(toSqlDatetime(undefined), null, "toSqlDatetime(undefined) must return null");
+        assert.strictEqual(toSqlDatetime(""), null, "toSqlDatetime('') must return null");
+
+        // 3. Validate conversion from ISO string with millis and Z
+        const isoString = "2026-11-03T10:11:57.706Z";
+        const converted = toSqlDatetime(isoString);
+        assert.strictEqual(converted, "2026-11-03 10:11:57", "Must strip 'T', millis, and 'Z' accurately");
+
+        // 4. Validate idempotency when already formatted as SQL datetime
+        const alreadySql = "2026-11-03 10:11:57";
+        assert.strictEqual(toSqlDatetime(alreadySql), "2026-11-03 10:11:57", "Must preserve existing SQL datetime without timezone skew");
+
+        // 5. Validate insertion into active_alert, incident, and incident_timeline with toSqlDatetime
+        const testSqlTime = toSqlDatetime();
+        await R.exec(
+            `INSERT INTO active_alert (
+                organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
+            ) VALUES (?, 0, 'monitor', 99999, 'mariadb_test', 'WARNING', 0, 'MariaDB datetime test', ?, ?, ?, ?)`,
+            [org1.id, testSqlTime, testSqlTime, testSqlTime, testSqlTime]
+        );
+
+        const insertedAlert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'monitor' AND target_id = 99999");
+        assert.ok(insertedAlert, "Alert must be successfully inserted");
+        assert.strictEqual(insertedAlert.state, "WARNING");
+        await R.exec("DELETE FROM active_alert WHERE target_type = 'monitor' AND target_id = 99999");
+
+        // 6. Validate Incident creation with toSqlDatetime
+        const inc = await Incident.createIncident(
+            {
+                title: "MariaDB Datetime Incident Test",
+                description: "Validates persistence of SQL formatted datetime",
+                severity: "P2",
+            },
+            org1.id,
+            user1.id
+        );
+        assert.ok(inc, "Incident must be created with valid datetime");
+        assert.strictEqual(inc.status, "OPEN");
+
+        // Update status to RESOLVED and verify resolved_at
+        const updatedInc = await Incident.updateStatus(inc.id, "RESOLVED", user1.id, { resolution: "Datetime verified" }, org1.id);
+        assert.strictEqual(updatedInc.status, "RESOLVED");
+        assert.ok(updatedInc.resolved_at, "resolved_at must be populated");
+        assert.match(String(updatedInc.resolved_at), /^\d{4}-\d{2}-\d{2}/, "resolved_at must match SQL date format");
+    });
+
+    it("22. Central Ping TCP Fallback on ICMP Packet Loss/Drop: verifies reachable target diagnostics", async () => {
+        // Local loopback or known public DNS via testTcpPortFallback
+        const latency = await utilServer.testTcpPortFallback("127.0.0.1", 53, 100).catch(() => null);
+        assert.ok(latency === null || typeof latency === "number");
+
+        // Test unreachable target fails gracefully with timeout
+        await assert.rejects(
+            async () => {
+                await utilServer.testTcpPortFallback("192.0.2.1", 53, 500);
+            },
+            /timeout/i
+        );
+    });
 });

@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 
 class OrganizationBranding {
     /**
@@ -37,7 +38,7 @@ class OrganizationBranding {
         if (!branding) {
             const org = await R.getRow("SELECT * FROM organization WHERE id = ?", [orgId]);
             const compName = org ? org.name : "InfiniNOC Platform";
-            const isoNow = new Date().toISOString();
+            const isoNow = toSqlDatetime();
 
             await R.exec(
                 `INSERT INTO organization_branding (
@@ -88,7 +89,7 @@ class OrganizationBranding {
         const customStatusDomain = OrganizationBranding.sanitizeString(data.customStatusDomain || "");
 
         const existing = await OrganizationBranding.getBranding(orgId);
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `UPDATE organization_branding SET

@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 
 class Incident {
     /**
@@ -14,7 +15,7 @@ class Incident {
             throw new Error("Incident title is required.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         const failureReason = data.failure_reason || (data.description ? data.description.substring(0, 500) : null);
 
         await R.exec(
@@ -80,7 +81,7 @@ class Incident {
             throw new Error("Incident not found or access denied.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             "UPDATE incident SET assigned_user_id = ?, updated_at = ? WHERE id = ?",
@@ -116,7 +117,7 @@ class Incident {
             throw new Error("Note content cannot be empty.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, ?, 'investigation_note', ?, ?)",
@@ -151,10 +152,10 @@ class Incident {
             throw new Error(`Invalid status: ${newStatus}`);
         }
 
-        const isoNow = new Date().toISOString();
-        let ackAt = incident.acknowledged_at;
-        let resAt = incident.resolved_at;
-        let clsAt = incident.closed_at;
+        const isoNow = toSqlDatetime();
+        let ackAt = toSqlDatetime(incident.acknowledged_at);
+        let resAt = toSqlDatetime(incident.resolved_at);
+        let clsAt = toSqlDatetime(incident.closed_at);
 
         if (normalizedStatus === "ACKNOWLEDGED" && !ackAt) {
             ackAt = isoNow;
@@ -215,7 +216,7 @@ class Incident {
             throw new Error("Incident not found or access denied.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             "UPDATE incident SET status = 'OPEN', resolved_at = NULL, closed_at = NULL, updated_at = ? WHERE id = ?",
@@ -238,7 +239,7 @@ class Incident {
      */
     static async resolveAllIncidents(userId, organizationId) {
         const orgId = organizationId || 1;
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         const activeList = await R.getAll(
             "SELECT id FROM incident WHERE (organization_id = ? OR organization_id IS NULL) AND UPPER(status) NOT IN ('RESOLVED', 'CLOSED')",
@@ -272,7 +273,7 @@ class Incident {
             return [];
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         for (const l of links) {
             if (l.entity_type && l.entity_id) {
                 const exists = await R.getCell(

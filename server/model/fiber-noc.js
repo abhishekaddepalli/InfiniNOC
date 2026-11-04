@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 const OltAdapterRegistry = require("./olt-adapter-registry");
 
 class FiberNoc {
@@ -135,7 +136,7 @@ class FiberNoc {
             return 0;
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         let syncedCount = 0;
 
         for (const p of portDataArray) {
@@ -303,7 +304,7 @@ class FiberNoc {
     static async recordOnuEvent(organizationId, onuId, eventType, status, rxPower = null, txPower = null, message = null) {
         const orgId = organizationId || 1;
         const id = Number(onuId);
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `INSERT INTO onu_event_history (
@@ -350,7 +351,7 @@ class FiberNoc {
             throw new Error("Splitter name is required.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         if (data.id) {
             await R.exec(
                 `UPDATE fiber_splitter SET
@@ -423,7 +424,7 @@ class FiberNoc {
             throw new Error("Fiber link name and event distance are required.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         await R.exec(
             `INSERT INTO otdr_measurement (
                 organization_id, fiber_fault_id, fiber_link_name, total_distance_km, event_distance_km,
@@ -439,7 +440,7 @@ class FiberNoc {
                 Number(data.loss_db) || 3.5,
                 data.reflectance_db !== undefined ? Number(data.reflectance_db) : null,
                 data.trace_file_ref || null,
-                data.tested_at || isoNow,
+                data.tested_at ? toSqlDatetime(data.tested_at) : isoNow,
                 isoNow,
             ]
         );

@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 
 class DeviceInterface {
     /**
@@ -48,7 +49,7 @@ class DeviceInterface {
             return 0;
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
         let synced = 0;
 
         for (const item of ifList) {

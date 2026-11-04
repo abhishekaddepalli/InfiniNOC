@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 
 class AlertEngine {
     /**
@@ -53,7 +54,7 @@ class AlertEngine {
         );
 
         const now = new Date();
-        const isoNow = now.toISOString();
+        const isoNow = toSqlDatetime(now);
 
         if (isBreached) {
             // 2. Cooldown & Deduplication Check
@@ -140,7 +141,7 @@ class AlertEngine {
             throw new Error("Alert not found or access denied.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             "UPDATE active_alert SET acknowledged = 1, acknowledged_by = ?, acknowledged_at = ?, updated_at = ? WHERE id = ?",
@@ -165,8 +166,8 @@ class AlertEngine {
         }
 
         const mins = Number(silenceMinutes) || 60;
-        const silencedUntil = new Date(Date.now() + mins * 60 * 1000).toISOString();
-        const isoNow = new Date().toISOString();
+        const silencedUntil = toSqlDatetime(new Date(Date.now() + mins * 60 * 1000));
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             "UPDATE active_alert SET silenced_until = ?, updated_at = ? WHERE id = ?",
@@ -188,7 +189,7 @@ class AlertEngine {
             throw new Error("Rule name, metric, and threshold are required.");
         }
 
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         await R.exec(
             `INSERT INTO alert_rule (

@@ -409,11 +409,17 @@ class Database {
             throw new Error("Unknown Database type: " + dbConfig.type);
         }
 
-        // Set to utf8mb4 for MariaDB
+        // Set to utf8mb4 and UTC timezone for MariaDB
         if (dbConfig.type.endsWith("mariadb")) {
             config.pool = {
+                ...mariadbPoolConfig,
                 afterCreate(conn, done) {
-                    conn.query("SET CHARACTER SET utf8mb4;", (err) => done(err, conn));
+                    conn.query("SET CHARACTER SET utf8mb4;", (err) => {
+                        if (err) {
+                            return done(err, conn);
+                        }
+                        conn.query("SET time_zone = '+00:00';", (tzErr) => done(tzErr, conn));
+                    });
                 },
             };
         }

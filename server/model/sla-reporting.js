@@ -1,4 +1,5 @@
 const { R } = require("redbean-node");
+const { toSqlDatetime } = require("../util-server");
 const CsvReportGenerator = require("./reports/csv-report-generator");
 const PdfReportGenerator = require("./reports/pdf-report-generator");
 
@@ -66,7 +67,7 @@ class SlaReporting {
         const name = params.name || `SLA Report ${new Date().toLocaleDateString()}`;
         const timeRange = params.timeRange || "30d";
         const window = SlaReporting.calculateRangeWindow(timeRange, params.startDate, params.endDate);
-        const isoNow = new Date().toISOString();
+        const isoNow = toSqlDatetime();
 
         // 1. Create asynchronous pending record
         await R.exec(
