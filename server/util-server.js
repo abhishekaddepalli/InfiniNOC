@@ -269,10 +269,10 @@ exports.pingAsync = function (
                         return;
                     }
 
-                    // Attempt fallback TCP handshake to common open ports (53 DNS, 443 HTTPS, 80 HTTP)
+                    // Attempt fallback TCP handshake to common open ports (53 DNS, 443 HTTPS, 80 HTTP, 8080/8443 Alt Web, 22 SSH, 8291 Winbox)
                     // whenever ICMP fails due to dropped packets, firewall filtering, or raw socket permissions.
                     try {
-                        const fallbackPorts = [53, 443, 80];
+                        const fallbackPorts = [53, 443, 80, 8080, 8443, 22, 8291];
                         const tcpLatency = await Promise.any(
                             fallbackPorts.map((port) => testTcpPortFallback(cleanHost, port, 1500))
                         );

@@ -4613,6 +4613,12 @@ let needSetup = false;
         // Put this here. Start background jobs after the db and server is ready to prevent clear up during db migration.
         await initBackgroundJobs();
 
+        log.info("server", "==================================================");
+        log.info("server", `InfiniNOC System Initialized: Database connected, ${Object.keys(monitorList).length} monitors loaded`);
+        log.info("server", "Probe health evaluator active (interval: 30s)");
+        log.info("server", "Alert engine and incident management active");
+        log.info("server", "==================================================");
+
         checkVersion.startInterval();
     });
 

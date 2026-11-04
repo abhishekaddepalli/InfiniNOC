@@ -1166,6 +1166,8 @@ router.get("/api/monitor/:id/diagnostics", async (request, response) => {
     } catch (error) {
         response.status(400).json({ ok: false, msg: error.message });
     }
+});
+
 // Authoritative NOC unified aggregation endpoint (Priority 7)
 router.get("/api/noc/stats", async (request, response) => {
     try {

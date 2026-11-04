@@ -878,5 +878,26 @@ describe("InfiniNOC Monitoring Engine, DOWN/WARNING Classification, and Alert Ge
         assert.strictEqual(toSqlDatetime(null, 3), null);
         assert.strictEqual(toSqlDatetime(undefined, 3), null);
     });
+
+    it("26. Backend Startup & Router Module Integrity: validates api-router requires cleanly and registers endpoints", () => {
+        // Require api-router to verify 0 syntax errors and clean module evaluation
+        const apiRouter = require("../../server/routers/api-router");
+        assert.ok(apiRouter, "apiRouter must load successfully");
+        assert.strictEqual(typeof apiRouter, "function", "apiRouter must be an Express router function");
+
+        // Verify key routes exist on the router stack
+        const routes = apiRouter.stack
+            .filter((s) => s.route)
+            .map((s) => ({ path: s.route.path, methods: Object.keys(s.route.methods) }));
+        
+        const nocStatsRoute = routes.find((r) => r.path === "/api/noc/stats");
+        assert.ok(nocStatsRoute, "/api/noc/stats route must be registered");
+        assert.ok(nocStatsRoute.methods.includes("get"), "/api/noc/stats must support GET");
+
+        const diagRoute = routes.find((r) => r.path === "/api/monitor/:id/diagnostics");
+        assert.ok(diagRoute, "/api/monitor/:id/diagnostics route must be registered");
+        assert.ok(diagRoute.methods.includes("get"), "/api/monitor/:id/diagnostics must support GET");
+    });
 });
+
 
