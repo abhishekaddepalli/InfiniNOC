@@ -304,6 +304,10 @@ exports.pingAsync = function (
                 }
             })
             .catch((err) => {
+                const errMsg = err ? (err.message || String(err)) : "";
+                if (errMsg.includes("permission denied") || errMsg.includes("Operation not permitted") || errMsg.includes("Check the path or permissions") || errMsg.includes("ENOENT")) {
+                    err.isExecutionFailure = true;
+                }
                 reject(err);
             });
     });
@@ -1165,13 +1169,15 @@ module.exports.printServerUrls = (tag, port, hostname, isHTTPS = false) => {
 /**
  * Format a Date, timestamp, or string into standard SQL DATETIME 'YYYY-MM-DD HH:mm:ss' (UTC)
  * Safe and compliant for MySQL, MariaDB, PostgreSQL, and SQLite without syntax errors.
- * Preserves null values safely and avoids local timezone skew.
+ * Preserves null values safely and avoids local timezone skew. Supports DATETIME vs DATETIME(3).
  * @param {Date|string|number|null} [d] Date input
+ * @param {number} [precision=0] Subsecond precision (0 or 3)
  * @returns {string|null} Formatted UTC datetime string or null
  */
-function toSqlDatetime(d) {
+function toSqlDatetime(d, precision = 0) {
+    const fmt = precision === 3 ? "YYYY-MM-DD HH:mm:ss.SSS" : "YYYY-MM-DD HH:mm:ss";
     if (arguments.length === 0) {
-        return dayjs.utc().format("YYYY-MM-DD HH:mm:ss");
+        return dayjs.utc().format(fmt);
     }
     if (d === null || d === undefined) {
         return null;
@@ -1182,21 +1188,30 @@ function toSqlDatetime(d) {
             return null;
         }
         if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)) {
-            return trimmed;
+            return precision === 3 ? `${trimmed}.000` : trimmed;
+        }
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/.test(trimmed)) {
+            return precision === 3 ? trimmed : trimmed.slice(0, 19);
         }
         if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(trimmed)) {
-            return trimmed.slice(0, 10) + " " + trimmed.slice(11, 19);
+            const base = trimmed.slice(0, 10) + " " + trimmed.slice(11, 19);
+            if (precision === 3) {
+                const m = trimmed.match(/\.(\d+)/);
+                const ms = m ? m[1].padEnd(3, "0").slice(0, 3) : "000";
+                return `${base}.${ms}`;
+            }
+            return base;
         }
         const parsed = dayjs.utc(trimmed);
         if (parsed.isValid()) {
-            return parsed.format("YYYY-MM-DD HH:mm:ss");
+            return parsed.format(fmt);
         }
     }
     const date = (d instanceof Date) ? d : new Date(d);
     if (isNaN(date.getTime())) {
-        return dayjs.utc().format("YYYY-MM-DD HH:mm:ss");
+        return dayjs.utc().format(fmt);
     }
-    return dayjs.utc(date).format("YYYY-MM-DD HH:mm:ss");
+    return dayjs.utc(date).format(fmt);
 }
 exports.toSqlDatetime = toSqlDatetime;
 

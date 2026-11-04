@@ -244,7 +244,7 @@ class Probe extends BeanModel {
             ]
         );
 
-        // If probe had an active offline alert, auto-resolve it
+        // If probe had an active offline alert or incident, auto-resolve it
         try {
             const orgId = probe.organization_id || 1;
             const existingAlert = await R.getRow(
@@ -259,11 +259,42 @@ class Probe extends BeanModel {
                 );
                 await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
             }
+
+            // Auto-resolve any open probe outage incidents
+            const openProbeIncidents = await R.getAll(
+                `SELECT incident.id FROM incident
+                JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+                WHERE (incident.organization_id = ? OR incident.organization_id IS NULL)
+                AND incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
+                AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+                [orgId, probeId]
+            );
+            for (const inc of openProbeIncidents) {
+                await R.exec(
+                    "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
+                    [isoNow, isoNow, inc.id]
+                );
+                await R.exec(
+                    "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, NULL, 'resolved', 'Auto resolved on probe reconnection (UP)', ?)",
+                    [orgId, inc.id, isoNow]
+                );
+            }
         } catch (e) {
-            // Ignore alert resolution error if table not ready
+            // Ignore alert/incident resolution error if table not ready
         }
 
         return { ok: true, timestamp: isoNow, status: "online" };
+    }
+
+    /**
+     * Ingest heartbeat alias
+     * @param {number} probeId Probe ID
+     * @param {object} telemetry Telemetry payload
+     * @param {string} apiKey API Key
+     * @returns {Promise<object>} Result
+     */
+    static async ingestHeartbeat(probeId, telemetry, apiKey) {
+        return await Probe.recordHeartbeat(probeId, apiKey, telemetry);
     }
 
     /**
@@ -514,25 +545,34 @@ class Probe extends BeanModel {
     static async checkAllProbesHealth(io) {
         try {
             const now = Date.now();
-            const probes = await R.getAll("SELECT * FROM probe WHERE status IN ('online', 'pending')");
-            let newlyOffline = 0;
+            const probes = await R.getAll("SELECT * FROM probe WHERE status NOT IN ('revoked')");
+            let stateChanges = 0;
             const isoNow = toSqlDatetime();
 
             for (const p of probes) {
-                if (p.last_heartbeat) {
-                    const hbStr = String(p.last_heartbeat);
-                    const lastBeatTime = new Date(hbStr.includes("T") ? hbStr : hbStr.replace(" ", "T") + "Z").getTime();
-                    const elapsed = now - (isNaN(lastBeatTime) ? new Date(p.last_heartbeat).getTime() : lastBeatTime);
-                    // If no heartbeat for > 60 seconds, mark offline
-                    if (elapsed > 60000 && p.status === "online") {
+                const orgId = p.organization_id || 1;
+                if (!p.last_heartbeat) {
+                    if (p.status !== "pending") {
+                        await R.exec("UPDATE probe SET status = 'pending', updated_at = ? WHERE id = ?", [isoNow, p.id]);
+                        stateChanges++;
+                    }
+                    continue;
+                }
+
+                const hbStr = String(p.last_heartbeat);
+                const lastBeatTime = new Date(hbStr.includes("T") ? hbStr : hbStr.replace(" ", "T") + "Z").getTime();
+                const elapsed = now - (isNaN(lastBeatTime) ? new Date(p.last_heartbeat).getTime() : lastBeatTime);
+
+                // Configurable thresholds: default 30s interval, warning at 35s, offline at 60s
+                if (elapsed > 60000) {
+                    if (p.status !== "offline") {
                         await R.exec(
                             "UPDATE probe SET status = 'offline', updated_at = ? WHERE id = ?",
                             [isoNow, p.id]
                         );
-                        newlyOffline++;
+                        stateChanges++;
 
                         // Raise probe offline alert
-                        const orgId = p.organization_id || 1;
                         const alertMsg = `Distributed Probe #${p.id} (${p.name}) is OFFLINE. Last heartbeat was ${Math.round(elapsed / 1000)}s ago.`;
                         const exists = await R.getCell(
                             "SELECT id FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'probe' AND target_id = ?",
@@ -547,7 +587,38 @@ class Probe extends BeanModel {
                             );
                         }
 
-                        // Distinguish UNKNOWN from DOWN: transition assigned monitors to PENDING (status 2) without false DOWN
+                        // Create open probe outage incident if not already exists
+                        const existingInc = await R.getRow(
+                            `SELECT incident.id FROM incident
+                            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+                            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL)
+                            AND incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
+                            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+                            [orgId, p.id]
+                        );
+                        if (!existingInc) {
+                            const incTitle = `[OUTAGE] Distributed Probe #${p.id} (${p.name}) is OFFLINE`;
+                            const incDesc = `Distributed Probe #${p.id} (${p.name}) has exceeded the offline threshold. Last heartbeat was ${Math.round(elapsed / 1000)}s ago.`;
+                            await R.exec(
+                                `INSERT INTO incident (
+                                    organization_id, title, content, description, failure_reason, severity, status, site_id, assigned_user_id, created_at, updated_at
+                                ) VALUES (?, ?, ?, ?, ?, 'P1', 'OPEN', ?, NULL, ?, ?)`,
+                                [orgId, incTitle, incDesc, incDesc, `Heartbeat missed for ${Math.round(elapsed / 1000)}s`, p.site_id || null, isoNow, isoNow]
+                            );
+                            const incId = await R.getCell("SELECT MAX(id) FROM incident WHERE organization_id = ?", [orgId]);
+                            if (incId) {
+                                await R.exec(
+                                    "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, NULL, 'created', 'Automated NOC probe offline outage incident created', ?)",
+                                    [orgId, incId, isoNow]
+                                );
+                                await R.exec(
+                                    "INSERT INTO incident_entity_link (organization_id, incident_id, entity_type, entity_id, created_at) VALUES (?, ?, 'probe', ?, ?)",
+                                    [orgId, incId, p.id, isoNow]
+                                );
+                            }
+                        }
+
+                        // Target Isolation: Transition assigned monitors to PENDING (status 2 / UNKNOWN) without false DOWN
                         const assignedMons = await R.getAll(
                             `SELECT DISTINCT m.id, m.user_id FROM monitor m
                             LEFT JOIN monitor_probe mp ON m.id = mp.monitor_id
@@ -561,7 +632,7 @@ class Probe extends BeanModel {
                                 let pendingBean = R.dispense("heartbeat");
                                 pendingBean.monitor_id = mon.id;
                                 pendingBean.status = 2; // PENDING / UNKNOWN
-                                pendingBean.msg = `Assigned Remote Probe #${p.id} (${p.name}) is OFFLINE - Target State Unknown`;
+                                pendingBean.msg = `Assigned Remote Probe #${p.id} (${p.name}) is OFFLINE - Target State Unknown: Monitoring unavailable — assigned probe offline`;
                                 pendingBean.ping = null;
                                 pendingBean.time = isoNow;
                                 pendingBean.duration = 0;
@@ -583,15 +654,42 @@ class Probe extends BeanModel {
                             }
                         }
                     }
+                } else if (elapsed > 35000) {
+                    // WARNING / DEGRADED state: delayed heartbeat before offline threshold
+                    if (p.status === "online") {
+                        await R.exec("UPDATE probe SET status = 'degraded', updated_at = ? WHERE id = ?", [isoNow, p.id]);
+                        stateChanges++;
+                    }
+                } else {
+                    // UP / HEALTHY state: fresh heartbeat within threshold
+                    if (p.status !== "online") {
+                        await R.exec("UPDATE probe SET status = 'online', updated_at = ? WHERE id = ?", [isoNow, p.id]);
+                        stateChanges++;
+
+                        // Resolve active probe offline alert and incidents
+                        await R.exec("DELETE FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'probe' AND target_id = ?", [orgId, p.id]);
+                        const openProbeIncidents = await R.getAll(
+                            `SELECT incident.id FROM incident
+                            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+                            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL)
+                            AND incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
+                            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+                            [orgId, p.id]
+                        );
+                        for (const inc of openProbeIncidents) {
+                            await R.exec("UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?", [isoNow, isoNow, inc.id]);
+                            await R.exec("INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, NULL, 'resolved', 'Auto resolved on probe recovery (UP)', ?)", [orgId, inc.id, isoNow]);
+                        }
+                    }
                 }
             }
 
-            if (newlyOffline > 0 && io) {
+            if (stateChanges > 0 && io) {
                 io.emit("updateActiveAlerts");
                 io.emit("updateProbeList");
             }
 
-            return newlyOffline;
+            return stateChanges;
         } catch (e) {
             return 0;
         }

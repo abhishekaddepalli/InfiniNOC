@@ -2867,8 +2867,23 @@ let needSetup = false;
         });
 
         // ===================================
-        // InfiniNOC Remote Probe Socket Endpoints
+        // InfiniNOC Remote Probe & NOC Aggregation Socket Endpoints
         // ===================================
+        socket.on("getNocStats", async (callback) => {
+            try {
+                checkLogin(socket);
+                const activeOrgId = socket.activeOrganizationId || 1;
+                const stats = await Monitor.getNocAggregatedStats(activeOrgId);
+                if (typeof callback === "function") {
+                    callback({ ok: true, stats });
+                }
+            } catch (e) {
+                if (typeof callback === "function") {
+                    callback({ ok: false, msg: e.message });
+                }
+            }
+        });
+
         socket.on("getProbeList", async (callback) => {
             try {
                 checkLogin(socket);

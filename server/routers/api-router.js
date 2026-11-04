@@ -1166,6 +1166,16 @@ router.get("/api/monitor/:id/diagnostics", async (request, response) => {
     } catch (error) {
         response.status(400).json({ ok: false, msg: error.message });
     }
+// Authoritative NOC unified aggregation endpoint (Priority 7)
+router.get("/api/noc/stats", async (request, response) => {
+    try {
+        allowDevAllOrigin(response);
+        const orgId = request.organizationID || (request.query.organizationId ? parseInt(request.query.organizationId, 10) : 1);
+        const stats = await Monitor.getNocAggregatedStats(orgId);
+        response.json({ ok: true, stats });
+    } catch (error) {
+        response.status(400).json({ ok: false, msg: error.message });
+    }
 });
 
 module.exports = router;

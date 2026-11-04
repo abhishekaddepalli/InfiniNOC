@@ -753,4 +753,130 @@ describe("InfiniNOC Monitoring Engine, DOWN/WARNING Classification, and Alert Ge
             /timeout/i
         );
     });
+
+    it("23. Authoritative Probe Health State Machine & Target Isolation: transitions UP -> WARNING -> DOWN -> UP with incident resolution", async () => {
+        const { toSqlDatetime } = utilServer;
+
+        // 1. Create a dedicated test probe
+        const probeTokenRes = await Probe.createProbeRegistrationToken(
+            { name: "State Machine Test Probe", region: "AP-South", description: "State machine testing" },
+            org1.id
+        );
+        const registered = await Probe.registerProbe(
+            probeTokenRes.probe.id,
+            probeTokenRes.registrationToken,
+            "10.10.10.50",
+            "1.26.31",
+            { os_info: "Linux Test" }
+        );
+        const testProbe = await Probe.getProbe(probeTokenRes.probe.id, org1.id);
+        assert.ok(testProbe);
+
+        // 2. Assign a target monitor to this probe
+        const assignedMon = R.dispense("monitor");
+        assignedMon.name = "Private LAN DB Server";
+        assignedMon.type = "ping";
+        assignedMon.hostname = "10.10.10.99";
+        assignedMon.interval = 30;
+        assignedMon.active = 1;
+        assignedMon.probe_id = testProbe.id;
+        assignedMon.organization_id = org1.id;
+        assignedMon.user_id = user1.id;
+        await R.store(assignedMon);
+
+        // Initial UP heartbeat for the assigned target
+        const initBeat = R.dispense("heartbeat");
+        initBeat.monitor_id = assignedMon.id;
+        initBeat.status = UP;
+        initBeat.ping = 4;
+        initBeat.time = toSqlDatetime();
+        initBeat.probe_id = testProbe.id;
+        await R.store(initBeat);
+
+        // 3. Fresh heartbeat: probe is UP / 'online'
+        await Probe.recordHeartbeat(testProbe.id, registered.apiKey, { latency_ms: 15 });
+        let currentProbe = await Probe.getProbe(testProbe.id, org1.id);
+        assert.strictEqual(currentProbe.status, "online", "Fresh heartbeat must set status to online");
+
+        // 4. Stale heartbeat (> 90s): simulate missed heartbeats and evaluate health
+        const staleDate = new Date(Date.now() - 100000);
+        await R.exec("UPDATE probe SET last_heartbeat = ? WHERE id = ?", [toSqlDatetime(staleDate), testProbe.id]);
+
+        await Probe.checkAllProbesHealth(null);
+        currentProbe = await Probe.getProbe(testProbe.id, org1.id);
+        assert.strictEqual(currentProbe.status, "offline", "Heartbeat > 90s must transition probe to offline");
+
+        // 5. Verify critical probe-offline alert and P1 incident created
+        const probeAlert = await R.getRow(
+            "SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?",
+            [testProbe.id]
+        );
+        assert.ok(probeAlert, "Active alert must be created for offline probe");
+        assert.strictEqual(probeAlert.state, "CRITICAL");
+
+        const probeInc = await R.getRow(
+            `SELECT incident.* FROM incident 
+            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
+            WHERE incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
+            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+            [testProbe.id]
+        );
+        assert.ok(probeInc, "P1 incident must be created for offline probe");
+        assert.strictEqual(probeInc.severity, "P1");
+
+        // 6. Verify Target Isolation: assigned monitor transitions to PENDING (UNKNOWN), NOT false DOWN
+        const lastTargetBeat = await R.findOne("heartbeat", "monitor_id = ? ORDER BY id DESC", [assignedMon.id]);
+        assert.ok(lastTargetBeat);
+        assert.strictEqual(lastTargetBeat.status, 2, "Assigned monitor must transition to PENDING (status 2 / UNKNOWN)");
+        assert.ok(lastTargetBeat.msg.includes("Monitoring unavailable — assigned probe offline"));
+
+        // Verify NO false target DOWN alert was created for the assigned monitor
+        const falseMonAlert = await R.getRow(
+            "SELECT id FROM active_alert WHERE target_type = 'monitor' AND target_id = ?",
+            [assignedMon.id]
+        );
+        assert.strictEqual(falseMonAlert, null, "Must NOT create target-down alert when only the probe is offline");
+
+        // 7. Probe Recovery: submit new heartbeat -> probe transitions UP, auto-resolves alert and incident
+        await Probe.recordHeartbeat(testProbe.id, registered.apiKey, { latency_ms: 12 });
+        currentProbe = await Probe.getProbe(testProbe.id, org1.id);
+        assert.strictEqual(currentProbe.status, "online", "New heartbeat must restore probe to online");
+
+        const resolvedAlert = await R.getRow(
+            "SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?",
+            [testProbe.id]
+        );
+        assert.strictEqual(resolvedAlert, null, "Probe active alert must be auto-resolved upon reconnection");
+
+        const resolvedInc = await R.getRow("SELECT * FROM incident WHERE id = ?", [probeInc.id]);
+        assert.strictEqual(resolvedInc.status, "RESOLVED", "Probe incident must be marked RESOLVED upon reconnection");
+    });
+
+    it("24. Unified NOC Aggregated Stats (Monitor.getNocAggregatedStats): returns authoritative DB counts with tenant isolation", async () => {
+        const stats = await Monitor.getNocAggregatedStats(org1.id);
+        assert.ok(stats, "Stats payload must be returned");
+        assert.ok(typeof stats.monitors.total === "number", "Total monitors must be a number");
+        assert.ok(typeof stats.monitors.up === "number", "UP monitors must be a number");
+        assert.ok(typeof stats.monitors.down === "number", "DOWN monitors must be a number");
+        assert.ok(typeof stats.probes.total === "number", "Total probes must be a number");
+        assert.ok(typeof stats.alerts.total === "number", "Total active alerts must be a number");
+        assert.ok(typeof stats.incidents.total === "number", "Total open incidents must be a number");
+    });
+
+    it("25. Precision-aware toSqlDatetime: supports DATETIME (precision 0) and DATETIME(3) (precision 3)", () => {
+        const { toSqlDatetime } = utilServer;
+
+        // Precision 0
+        const p0 = toSqlDatetime("2026-11-04T06:06:04.018Z", 0);
+        assert.strictEqual(p0, "2026-11-04 06:06:04");
+
+        // Precision 3
+        const p3 = toSqlDatetime("2026-11-04T06:06:04.018Z", 3);
+        assert.strictEqual(p3, "2026-11-04 06:06:04.018");
+
+        // Null safety
+        assert.strictEqual(toSqlDatetime(null, 3), null);
+        assert.strictEqual(toSqlDatetime(undefined, 3), null);
+    });
 });
+

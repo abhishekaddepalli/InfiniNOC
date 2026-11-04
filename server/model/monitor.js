@@ -2427,6 +2427,104 @@ class Monitor extends BeanModel {
 
         return { alertsCreated, alertsResolved, incidentsCreated, incidentsResolved };
     }
+
+    /**
+     * Authoritative backend aggregation for operational status.
+     * Computes real-time ground truth counts for monitors, probes, active alerts, and incidents
+     * scoped to organizationId with tenant isolation.
+     * @param {number|null} [organizationId] Organization ID
+     * @returns {Promise<object>} Unified NOC aggregated stats
+     */
+    static async getNocAggregatedStats(organizationId) {
+        const orgId = organizationId ? Number(organizationId) : 1;
+
+        // 1. Monitors count by status
+        const monitors = await R.getAll(
+            "SELECT id, active FROM monitor WHERE organization_id = ? OR organization_id IS NULL",
+            [orgId]
+        );
+
+        let totalMonitors = monitors.length;
+        let up = 0;
+        let down = 0;
+        let warning = 0;
+        let unknown = 0;
+        let paused = 0;
+
+        for (const m of monitors) {
+            if (!m.active) {
+                paused++;
+                continue;
+            }
+            const lastBeat = await Monitor.getPreviousHeartbeat(m.id);
+            if (!lastBeat) {
+                unknown++;
+            } else if (lastBeat.status === UP) {
+                up++;
+            } else if (lastBeat.status === DOWN) {
+                down++;
+            } else if (lastBeat.status === PENDING) {
+                warning++;
+            } else {
+                unknown++;
+            }
+        }
+
+        // 2. Probes count by status
+        const probes = await R.getAll(
+            "SELECT id, status, latency_ms FROM probe WHERE (organization_id = ? OR organization_id IS NULL) AND status NOT IN ('revoked')",
+            [orgId]
+        );
+        let totalProbes = probes.length;
+        let probesOnline = probes.filter((p) => p.status === "online").length;
+        let probesDegraded = probes.filter((p) => p.status === "degraded" || (p.status === "online" && p.latency_ms > 100)).length;
+        let probesOffline = probes.filter((p) => p.status === "offline").length;
+
+        // 3. Active alerts count
+        const activeAlerts = await R.getAll(
+            "SELECT id, state FROM active_alert WHERE organization_id = ? OR organization_id IS NULL",
+            [orgId]
+        );
+        let totalActiveAlerts = activeAlerts.length;
+        let criticalAlerts = activeAlerts.filter((a) => a.state === "CRITICAL").length;
+        let warningAlerts = activeAlerts.filter((a) => a.state === "WARNING").length;
+
+        // 4. Open incidents count
+        const openIncidents = await R.getAll(
+            "SELECT id, severity FROM incident WHERE (organization_id = ? OR organization_id IS NULL) AND UPPER(status) NOT IN ('RESOLVED', 'CLOSED')",
+            [orgId]
+        );
+        let totalOpenIncidents = openIncidents.length;
+        let p1Incidents = openIncidents.filter((i) => i.severity === "P1").length;
+        let p2Incidents = openIncidents.filter((i) => i.severity === "P2").length;
+
+        return {
+            monitors: {
+                total: totalMonitors,
+                up,
+                down,
+                warning,
+                unknown,
+                paused,
+            },
+            probes: {
+                total: totalProbes,
+                online: probesOnline,
+                warning: probesDegraded,
+                offline: probesOffline,
+            },
+            alerts: {
+                total: totalActiveAlerts,
+                critical: criticalAlerts,
+                warning: warningAlerts,
+            },
+            incidents: {
+                total: totalOpenIncidents,
+                p1: p1Incidents,
+                p2: p2Incidents,
+            },
+        };
+    }
 }
 
 module.exports = Monitor;

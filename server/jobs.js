@@ -26,7 +26,7 @@ const jobs = [
     },
     {
         name: "probe-health-checker",
-        interval: "* * * * *",
+        interval: "*/30 * * * * *",
         jobFunc: probeHealthCheckJob,
         croner: null,
     },

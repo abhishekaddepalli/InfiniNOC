@@ -943,6 +943,7 @@ export default {
                 { label: "30d", value: 720 },
             ],
             clearingAllEvents: false,
+            nocStats: null,
             activeIncidentCount: 0,
             activeAlertsCount: 0,
             activeAlertsList: [],
@@ -957,6 +958,7 @@ export default {
 
     watch: {
         "$root.activeOrganizationId"() {
+            this.loadNocStats();
             this.loadIncidentStats();
             this.loadActiveAlerts();
         },
@@ -971,9 +973,12 @@ export default {
         if (this.$route.query.status) {
             this.monitorFilterStatus = this.$route.query.status.toLowerCase();
         }
+        this.loadNocStats();
         this.loadIncidentStats();
         this.loadActiveAlerts();
         if (this.$root.getSocket()) {
+            this.$root.getSocket().on("updateNocStats", this.loadNocStats);
+            this.$root.getSocket().on("updateProbeList", this.loadNocStats);
             this.$root.getSocket().on("updateIncidentStats", this.loadIncidentStats);
             this.$root.getSocket().on("updateActiveAlerts", this.loadActiveAlerts);
         }
@@ -981,6 +986,8 @@ export default {
 
     beforeUnmount() {
         if (this.$root.getSocket()) {
+            this.$root.getSocket().off("updateNocStats", this.loadNocStats);
+            this.$root.getSocket().off("updateProbeList", this.loadNocStats);
             this.$root.getSocket().off("updateIncidentStats", this.loadIncidentStats);
             this.$root.getSocket().off("updateActiveAlerts", this.loadActiveAlerts);
         }
@@ -1018,22 +1025,22 @@ export default {
             return found ? found.label : "24h";
         },
         totalMonitors() {
-            return Object.keys(this.$root.monitorList).length;
+            return this.nocStats?.monitors?.total ?? Object.keys(this.$root.monitorList).length;
         },
         upCount() {
-            return this.$root.stats.up || 0;
+            return this.nocStats?.monitors?.up ?? (this.$root.stats.up || 0);
         },
         downCount() {
-            return this.$root.stats.down || 0;
+            return this.nocStats?.monitors?.down ?? (this.$root.stats.down || 0);
         },
         pendingCount() {
-            return this.$root.stats.pending || 0;
+            return this.nocStats?.monitors?.warning ?? (this.$root.stats.pending || 0);
         },
         maintenanceCount() {
-            return this.$root.stats.maintenance || 0;
+            return this.nocStats?.monitors?.paused ?? (this.$root.stats.maintenance || 0);
         },
         activeProbes() {
-            return this.upCount + this.downCount + this.pendingCount + this.maintenanceCount;
+            return this.nocStats?.probes?.online ?? (this.upCount + this.downCount);
         },
         upPercent() {
             if (this.totalMonitors === 0) return 100;
@@ -1291,6 +1298,22 @@ export default {
                 return beats[beats.length - 1];
             }
             return null;
+        },
+
+        loadNocStats() {
+            if (this.$root.getSocket()) {
+                this.$root.getSocket().emit("getNocStats", (res) => {
+                    if (res && res.ok && res.stats) {
+                        this.nocStats = res.stats;
+                        if (res.stats.incidents) {
+                            this.activeIncidentCount = res.stats.incidents.total || 0;
+                        }
+                        if (res.stats.alerts) {
+                            this.activeAlertsCount = res.stats.alerts.total || 0;
+                        }
+                    }
+                });
+            }
         },
 
         loadIncidentStats() {
