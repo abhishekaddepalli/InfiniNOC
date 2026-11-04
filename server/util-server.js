@@ -147,47 +147,63 @@ exports.testTcpPortFallback = testTcpPortFallback;
  * @param {number} timeout Maximum time in seconds to wait for each response
  * @returns {Promise<number|object>} Time for ping in ms or result object
  */
-exports.ping = async (
-    destAddr,
-    count = PING_COUNT_DEFAULT,
-    sourceAddr = "",
-    numeric = true,
-    size = PING_PACKET_SIZE_DEFAULT,
-    deadline = PING_GLOBAL_TIMEOUT_DEFAULT,
-    timeout = PING_PER_REQUEST_TIMEOUT_DEFAULT
-) => {
-    try {
-        return await exports.pingAsync(destAddr, false, count, sourceAddr, numeric, size, deadline, timeout);
-    } catch (e) {
-        // If the host cannot be resolved, try again with ipv6
-        log.debug("ping", "IPv6 error message: " + e.message);
-
-        // If central execution error, do not retry with ipv6 (it will fail the same way)
-        if (e.isExecutionFailure) {
-            throw e;
-        }
-
-        // As node-ping does not report a specific error for this, try again if it is an empty message with ipv6 no matter what.
-        if (!e.message) {
-            return await exports.pingAsync(destAddr, true, count, sourceAddr, numeric, size, deadline, timeout);
-        } else {
-            throw e;
-        }
-    }
-};
-
 /**
- * Ping the specified machine
- * @param {string} destAddr Hostname / IP address of machine to ping
- * @param {boolean} ipv6 Should IPv6 be used?
- * @param {number} count Number of packets to send before stopping
- * @param {string} sourceAddr Source address for sending/receiving echo requests
- * @param {boolean} numeric If true, IP addresses will be output instead of symbolic hostnames
- * @param {number} size Size (in bytes) of echo request to send
- * @param {number} deadline Maximum time in seconds before ping stops, regardless of packets sent
- * @param {number} timeout Maximum time in seconds to wait for each response
- * @returns {Promise<number|object>} Time for ping in ms or result object
+ * Normalizes ping arguments across multiple caller signatures:
+ * Signature 1: (destAddr, ipv6, count, sourceAddr, numeric, size, deadline, timeout) [Legacy pingAsync / Phase 1]
+ * Signature 2: (destAddr, count, sourceAddr, numeric, size, deadline, timeout) [Monitor beat / Standard ping]
+ * Signature 3: (destAddr, options) [Object options]
+ * @param {string} destAddr Hostname or IP
+ * @param {any[]} args Remaining arguments
+ * @returns {object} Normalized parameters
  */
+function parsePingArguments(destAddr, ...args) {
+    let ipv6 = false;
+    let count = PING_COUNT_DEFAULT;
+    let sourceAddr = "";
+    let numeric = true;
+    let size = PING_PACKET_SIZE_DEFAULT;
+    let deadline = PING_GLOBAL_TIMEOUT_DEFAULT;
+    let timeout = PING_PER_REQUEST_TIMEOUT_DEFAULT;
+
+    if (args.length === 1 && typeof args[0] === "object" && args[0] !== null) {
+        const opts = args[0];
+        if (opts.ipv6 !== undefined) ipv6 = Boolean(opts.ipv6);
+        if (opts.count !== undefined) count = opts.count;
+        if (opts.sourceAddr !== undefined) sourceAddr = opts.sourceAddr;
+        if (opts.numeric !== undefined) numeric = Boolean(opts.numeric);
+        if (opts.size !== undefined) size = opts.size;
+        if (opts.packetSize !== undefined) size = opts.packetSize;
+        if (opts.deadline !== undefined) deadline = opts.deadline;
+        if (opts.timeout !== undefined) timeout = opts.timeout;
+    } else if (typeof args[0] === "boolean") {
+        [ipv6, count, sourceAddr, numeric, size, deadline, timeout] = args;
+    } else {
+        [count, sourceAddr, numeric, size, deadline, timeout] = args;
+    }
+
+    // Sanitize sourceAddr: strictly require non-empty string that is NOT a number
+    if (typeof sourceAddr === "number" || (typeof sourceAddr === "string" && !isNaN(Number(sourceAddr.trim())) && sourceAddr.trim() !== "")) {
+        sourceAddr = "";
+    } else if (typeof sourceAddr !== "string") {
+        sourceAddr = "";
+    } else {
+        sourceAddr = sourceAddr.trim();
+    }
+
+    return {
+        destAddr,
+        ipv6: Boolean(ipv6),
+        count: Math.min(Math.max(1, parseInt(count, 10) || PING_COUNT_DEFAULT), 10),
+        sourceAddr,
+        numeric: numeric !== undefined ? Boolean(numeric) : true,
+        size: Math.min(Math.max(16, parseInt(size, 10) || PING_PACKET_SIZE_DEFAULT), 1472),
+        deadline: Math.min(Math.max(1, parseInt(deadline, 10) || PING_GLOBAL_TIMEOUT_DEFAULT), 30),
+        timeout: Math.min(Math.max(1, parseInt(timeout, 10) || PING_PER_REQUEST_TIMEOUT_DEFAULT), 10),
+    };
+}
+
+exports.parsePingArguments = parsePingArguments;
+
 /**
  * Authoritative Ping binary resolver across Linux, Unix and Windows
  * Prioritizes standard system locations (/usr/bin/ping, /bin/ping)
@@ -213,38 +229,52 @@ function resolvePingExecutable(v6 = false) {
 exports.resolvePingExecutable = resolvePingExecutable;
 
 /**
- * Ping the specified machine
- * @param {string} destAddr Hostname / IP address of machine to ping
- * @param {boolean} ipv6 Should IPv6 be used?
- * @param {number} count Number of packets to send before stopping
- * @param {string} sourceAddr Source address for sending/receiving echo requests
- * @param {boolean} numeric If true, IP addresses will be output instead of symbolic hostnames
- * @param {number} size Size (in bytes) of echo request to send
- * @param {number} deadline Maximum time in seconds before ping stops, regardless of packets sent
- * @param {number} timeout Maximum time in seconds to wait for each response
- * @returns {Promise<number|object>} Time for ping in ms or result object
+ * High-level ping wrapper with automatic IPv6 fallback on DNS resolution failure
+ * @param {string} destAddr Hostname / IP address
+ * @param  {...any} args Flexible arguments
+ * @returns {Promise<number|object>} Ping latency ms or degraded object
  */
-exports.pingAsync = function (
-    destAddr,
-    ipv6 = false,
-    count = PING_COUNT_DEFAULT,
-    sourceAddr = "",
-    numeric = true,
-    size = PING_PACKET_SIZE_DEFAULT,
-    deadline = PING_GLOBAL_TIMEOUT_DEFAULT,
-    timeout = PING_PER_REQUEST_TIMEOUT_DEFAULT
-) {
-    let cleanHost = destAddr;
+exports.ping = async (destAddr, ...args) => {
     try {
-        if (destAddr && (destAddr.startsWith("http://") || destAddr.startsWith("https://") || destAddr.includes("/"))) {
-            const url = new URL(destAddr.includes("://") ? destAddr : `http://${destAddr}`);
+        return await exports.pingAsync(destAddr, ...args);
+    } catch (e) {
+        // If central execution error or target failure, do not retry with ipv6
+        if (e.isExecutionFailure || e.isTargetFailure) {
+            throw e;
+        }
+
+        // If DNS error or empty message, try IPv6
+        const parsed = parsePingArguments(destAddr, ...args);
+        if (!parsed.ipv6 && (e.isDnsFailure || !e.message)) {
+            log.debug("ping", "Retrying ping with IPv6 for " + destAddr);
+            return await exports.pingAsync(destAddr, true, parsed.count, parsed.sourceAddr, parsed.numeric, parsed.size, parsed.deadline, parsed.timeout);
+        }
+        throw e;
+    }
+};
+
+/**
+ * Authoritative native operating-system ping executor
+ * Uses direct child_process.spawn with Linux iputils & Windows argument formatting,
+ * multi-regex response parsing, timeout watchdog, and automatic TCP fallback.
+ * @param {string} destAddr Target address
+ * @param  {...any} args Flexible arguments
+ * @returns {Promise<number|object>}
+ */
+exports.pingAsync = function (destAddr, ...args) {
+    const params = parsePingArguments(destAddr, ...args);
+    let cleanHost = params.destAddr;
+
+    try {
+        if (cleanHost && (cleanHost.startsWith("http://") || cleanHost.startsWith("https://") || cleanHost.includes("/"))) {
+            const url = new URL(cleanHost.includes("://") ? cleanHost : `http://${cleanHost}`);
             cleanHost = url.hostname;
         }
         if (cleanHost.startsWith("[") && cleanHost.endsWith("]")) {
             cleanHost = cleanHost.slice(1, -1);
         }
-    } catch (e) {
-        // use original destAddr
+    } catch (_) {
+        // use original
     }
 
     if (!cleanHost || typeof cleanHost !== "string" || cleanHost.trim() === "") {
@@ -253,32 +283,40 @@ exports.pingAsync = function (
         return Promise.reject(configErr);
     }
 
-    // Normalize deadline to seconds (1 - 30 seconds), prevent corrupt millisecond values
-    const safeDeadline = Math.min(Math.max(1, Number(deadline) || 3), 30);
-    const safeTimeout = Math.min(Math.max(1, Number(timeout) || 2), 10);
-    const safeCount = Math.min(Math.max(1, Number(count) || 1), 10);
-    const safeSize = Math.min(Math.max(16, Number(size) || 32), 1472);
-
     const { spawn } = require("child_process");
-    const exe = resolvePingExecutable(ipv6);
-    const args = [];
+    const exe = resolvePingExecutable(params.ipv6);
+    const pingArgs = [];
 
     if (isWindows) {
-        args.push("-n", String(safeCount));
-        args.push("-w", String(safeTimeout * 1000));
-        args.push("-l", String(safeSize));
-        args.push(cleanHost);
+        if (params.ipv6) {
+            pingArgs.push("-6");
+        } else {
+            pingArgs.push("-4");
+        }
+        pingArgs.push("-n", String(params.count));
+        pingArgs.push("-w", String(params.timeout * 1000));
+        pingArgs.push("-l", String(params.size));
+        if (params.sourceAddr) {
+            pingArgs.push("-S", params.sourceAddr);
+        }
+        pingArgs.push(cleanHost);
     } else {
-        if (numeric) {
-            args.push("-n");
+        if (params.ipv6) {
+            pingArgs.push("-6");
+        } else {
+            pingArgs.push("-4");
         }
-        args.push("-c", String(safeCount));
-        args.push("-W", String(safeTimeout));
-        args.push("-s", String(safeSize));
-        if (sourceAddr) {
-            args.push("-I", String(sourceAddr));
+        if (params.numeric) {
+            pingArgs.push("-n");
         }
-        args.push(cleanHost);
+        pingArgs.push("-c", String(params.count));
+        pingArgs.push("-w", String(params.deadline));
+        pingArgs.push("-W", String(params.timeout));
+        pingArgs.push("-s", String(params.size));
+        if (params.sourceAddr) {
+            pingArgs.push("-I", params.sourceAddr);
+        }
+        pingArgs.push(cleanHost);
     }
 
     return new Promise((resolve, reject) => {
@@ -287,25 +325,28 @@ exports.pingAsync = function (
         let stderr = "";
         let killed = false;
 
-        const proc = spawn(exe, args, {
+        const proc = spawn(exe, pingArgs, {
             windowsHide: true,
             env: Object.assign({}, process.env, { LANG: "C", LC_ALL: "C" }),
         });
 
+        const watchdogMs = (params.deadline * 1000) + (params.count * params.timeout * 1000) + 4000;
         const timer = setTimeout(() => {
             killed = true;
             try {
                 proc.kill("SIGKILL");
             } catch (_) {}
-        }, (safeCount * safeTimeout * 1000) + 3000);
+        }, watchdogMs);
 
         proc.stdout.on("data", (d) => { stdout += d.toString(); });
         proc.stderr.on("data", (d) => { stderr += d.toString(); });
+        proc.stdout.on("error", () => {});
+        proc.stderr.on("error", () => {});
 
         proc.on("error", async (err) => {
             clearTimeout(timer);
             const durationMs = Date.now() - startTime;
-            log.warn("ping", `Monitor Target: ${cleanHost} | Exec: ${exe} ${args.join(" ")} | Spawn Error: ${err.message} | Duration: ${durationMs}ms`);
+            log.warn("ping", `Target: ${cleanHost} | Exec: ${exe} ${pingArgs.join(" ")} | Spawn Error: ${err.message} | Duration: ${durationMs}ms`);
 
             // Attempt TCP fallback before failing execution
             try {
@@ -325,12 +366,12 @@ exports.pingAsync = function (
             reject(execErr);
         });
 
-        proc.on("close", async (exitCode) => {
+        proc.on("close", async (exitCode, signal) => {
             clearTimeout(timer);
             const durationMs = Date.now() - startTime;
             const combinedOutput = (stdout + "\n" + stderr).trim();
 
-            // Check for DNS resolution failure
+            // 1. DNS resolution failure
             if (/could not find host|Name or service not known|Temporary failure in name resolution/i.test(combinedOutput)) {
                 log.warn("ping", `Target: ${cleanHost} | DNS resolution failure | Duration: ${durationMs}ms`);
                 const dnsErr = new Error(`DNS resolution failed for target '${cleanHost}': Name or service not known.`);
@@ -339,7 +380,7 @@ exports.pingAsync = function (
                 return;
             }
 
-            // Check for permission denied / raw socket restrictions on central server
+            // 2. Permission denied / raw socket restrictions on central server
             if (/Operation not permitted|cap_set_proc|permission denied/i.test(combinedOutput)) {
                 log.warn("ping", `Target: ${cleanHost} | Raw socket permission denied | Duration: ${durationMs}ms`);
                 try {
@@ -359,7 +400,25 @@ exports.pingAsync = function (
                 return;
             }
 
-            // Parse latency
+            // 3. Process killed by watchdog timer (execution timeout, not target timeout)
+            if (killed || signal === "SIGKILL" || signal === "SIGTERM") {
+                log.warn("ping", `Target: ${cleanHost} | Process watchdog killed child after ${durationMs}ms`);
+                const timeoutErr = new Error(`Central ping execution timed out: Process exceeded ${Math.round(watchdogMs / 1000)}s deadline.`);
+                timeoutErr.isExecutionFailure = true;
+                reject(timeoutErr);
+                return;
+            }
+
+            // 4. Command syntax / invalid device / system error (Exit code 2 or SO_BINDTODEVICE)
+            if (exitCode === 2 || /SO_BINDTODEVICE|invalid option|unknown option|syntax error/i.test(combinedOutput)) {
+                log.warn("ping", `Target: ${cleanHost} | Ping binary syntax/device error | Code: ${exitCode} | Duration: ${durationMs}ms`);
+                const execErr = new Error(`Central ping execution error: ${combinedOutput || `Exit code ${exitCode}`}`);
+                execErr.isExecutionFailure = true;
+                reject(execErr);
+                return;
+            }
+
+            // 5. Parse latency
             let pingMs = null;
             // Match Linux output: time=18.2 ms or time=0.852 ms
             const linuxMatch = stdout.match(/time=([\d.]+)\s*ms/i);
@@ -368,7 +427,7 @@ exports.pingAsync = function (
             }
             // Match Linux summary: rtt min/avg/max/mdev = 18.214/18.214/...
             if (pingMs === null) {
-                const rttMatch = stdout.match(/rtt min\/avg\/max\/\w+\s*=\s*[\d.]+\/([\d.]+)\//i);
+                const rttMatch = stdout.match(/(?:rtt|round-trip)\s+min\/avg\/max\/\w+\s*=\s*[\d.]+\/([\d.]+)\//i);
                 if (rttMatch) {
                     pingMs = Math.round(parseFloat(rttMatch[1]));
                 }
@@ -380,9 +439,16 @@ exports.pingAsync = function (
                     pingMs = Math.round(parseFloat(winMatch[1]));
                 }
             }
+            // Match Windows summary: Average = 23ms
+            if (pingMs === null) {
+                const winAvgMatch = stdout.match(/Average\s*=\s*(\d+)ms/i);
+                if (winAvgMatch) {
+                    pingMs = Math.round(parseFloat(winAvgMatch[1]));
+                }
+            }
 
-            // Parse packet loss
-            let packetLoss = 0;
+            // 6. Parse packet loss
+            let packetLoss = null;
             const lossMatch = stdout.match(/(\d+(?:\.\d+)?)%\s*(?:packet\s*)?loss/i);
             if (lossMatch) {
                 packetLoss = parseFloat(lossMatch[1]);
@@ -390,32 +456,48 @@ exports.pingAsync = function (
                 packetLoss = 100;
             }
 
-            // Successful ICMP reply
-            if (exitCode === 0 && (pingMs !== null || packetLoss === 0)) {
-                const finalMs = pingMs !== null ? pingMs : durationMs;
-                log.info("ping", `Target: ${cleanHost} | ICMP UP | Latency: ${finalMs}ms | Loss: ${packetLoss}%`);
+            // 7. Parse packets received
+            let packetsReceived = null;
+            const rxMatch = stdout.match(/(\d+)\s+(?:packets\s+)?received/i);
+            if (rxMatch) {
+                packetsReceived = parseInt(rxMatch[1], 10);
+            } else {
+                const winRxMatch = stdout.match(/Received\s*=\s*(\d+)/i);
+                if (winRxMatch) {
+                    packetsReceived = parseInt(winRxMatch[1], 10);
+                }
+            }
 
-                if (packetLoss > 0 && packetLoss < 100) {
+            const hasValidLatency = pingMs !== null && !isNaN(pingMs) && pingMs >= 0;
+            const hasValidLoss = packetLoss !== null && packetLoss < 100;
+            const hasReceivedPackets = packetsReceived === null || packetsReceived > 0;
+            const isSuccess = exitCode === 0 && hasValidLatency && hasValidLoss && hasReceivedPackets;
+
+            // Successful ICMP reply
+            if (isSuccess) {
+                log.info("ping", `Target: ${cleanHost} | ICMP UP | Latency: ${pingMs}ms | Loss: ${packetLoss !== null ? packetLoss : 0}%`);
+
+                if (packetLoss !== null && packetLoss > 0) {
                     resolve({
-                        time: finalMs,
+                        time: pingMs,
                         packetLoss,
                         degraded: true,
-                        msg: `ICMP echo reply with packet loss from ${cleanHost}. Latency: ${finalMs} ms. Packet loss: ${packetLoss}%.`,
+                        msg: `ICMP echo reply with ${packetLoss}% packet loss from ${cleanHost}. Latency: ${pingMs} ms.`,
                     });
                     return;
                 }
 
-                if (finalMs > 1000) {
+                if (pingMs > 1000) {
                     resolve({
-                        time: finalMs,
+                        time: pingMs,
                         packetLoss: 0,
                         degraded: true,
-                        msg: `High latency warning from ${cleanHost}. Latency: ${finalMs} ms. Packet loss: 0%.`,
+                        msg: `High latency warning from ${cleanHost}. Latency: ${pingMs} ms. Packet loss: 0%.`,
                     });
                     return;
                 }
 
-                resolve(finalMs);
+                resolve(pingMs);
                 return;
             }
 

@@ -948,14 +948,18 @@ class Monitor extends BeanModel {
                 retries = 0;
             } catch (error) {
                 const errMsg = error ? (error.message || String(error)) : "Unknown check failure";
-                const isExecFailure = error?.isExecutionFailure ||
+                const isExecFailure = Boolean(error?.isExecutionFailure) ||
                     errMsg.includes("permission denied") ||
                     errMsg.includes("Operation not permitted") ||
                     errMsg.includes("Check the path or permissions") ||
                     errMsg.includes("error while executing the ping program") ||
                     errMsg.includes("execution error") ||
+                    errMsg.includes("execution failure") ||
+                    errMsg.includes("SO_BINDTODEVICE") ||
+                    errMsg.includes("Process exceeded") ||
+                    errMsg.includes("syntax error") ||
                     errMsg.includes("Central ping execution error");
-                const isDnsFailure = error?.isDnsFailure ||
+                const isDnsFailure = Boolean(error?.isDnsFailure) ||
                     errMsg.includes("DNS resolution failed") ||
                     errMsg.includes("could not find host") ||
                     errMsg.includes("Name or service not known");
@@ -967,7 +971,7 @@ class Monitor extends BeanModel {
                 } else if (isDnsFailure) {
                     bean.msg = errMsg;
                 } else if (this.type === "ping") {
-                    bean.msg = errMsg.includes("ICMP") ? errMsg : `ICMP request timed out for ${this.hostname || "target"}. No reply received.`;
+                    bean.msg = errMsg.includes("ICMP") || errMsg.includes("packet loss") ? errMsg : `ICMP request timed out for ${this.hostname || "target"}. ${errMsg}`;
                 } else if (this.type === "port") {
                     bean.msg = `TCP connection failed to ${this.hostname}:${this.port}. ${errMsg}`;
                 } else if (this.type === "http" || this.type === "keyword" || this.type === "json-query") {

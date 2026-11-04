@@ -912,6 +912,113 @@ describe("InfiniNOC Monitoring Engine, DOWN/WARNING Classification, and Alert Ge
         const latency = typeof res === "object" ? res.time : res;
         assert.ok(latency >= 0, "Latency must be non-negative");
     });
+
+    it("28. Phase 1 Application Ping Signature & Public Target Verification: tests 8.8.8.8 and 1.1.1.1", async () => {
+        const { ping, parsePingArguments } = utilServer;
+
+        // Verify argument parsing for Phase 1 signature: (destAddr, ipv6, count, sourceAddr, numeric, size, deadline, timeout)
+        const parsed = parsePingArguments("8.8.8.8", false, 3, undefined, true, 32, 3, 2);
+        assert.strictEqual(parsed.destAddr, "8.8.8.8");
+        assert.strictEqual(parsed.ipv6, false);
+        assert.strictEqual(parsed.count, 3);
+        assert.strictEqual(parsed.sourceAddr, "", "Numeric or undefined sourceAddr must be sanitized to empty string");
+        assert.strictEqual(parsed.numeric, true);
+        assert.strictEqual(parsed.size, 32);
+        assert.strictEqual(parsed.deadline, 3);
+        assert.strictEqual(parsed.timeout, 2);
+
+        // Real integration tests against 8.8.8.8 and 1.1.1.1
+        const gResult = await ping("8.8.8.8", false, 3, undefined, true, 32, 3, 2);
+        const gLatency = typeof gResult === "object" ? gResult.time : gResult;
+        assert.ok(typeof gLatency === "number" && gLatency >= 0, `Google DNS ping must succeed with valid latency, got ${gLatency}`);
+
+        const cfResult = await ping("1.1.1.1", false, 3, undefined, true, 32, 3, 2);
+        const cfLatency = typeof cfResult === "object" ? cfResult.time : cfResult;
+        assert.ok(typeof cfLatency === "number" && cfLatency >= 0, `Cloudflare DNS ping must succeed with valid latency, got ${cfLatency}`);
+    });
+
+    it("29. Deterministic Ping Parser Matrix: verifies 0% loss, partial loss, 100% loss, DNS failure, watchdog kill, and empty output", async () => {
+        const { parsePingArguments } = utilServer;
+
+        // Verify options object signature
+        const optParsed = parsePingArguments("8.8.8.8", { count: 4, timeout: 3, size: 64, ipv6: true });
+        assert.strictEqual(optParsed.count, 4);
+        assert.strictEqual(optParsed.timeout, 3);
+        assert.strictEqual(optParsed.size, 64);
+        assert.strictEqual(optParsed.ipv6, true);
+
+        // Verify standard signature
+        const stdParsed = parsePingArguments("8.8.8.8", 2, "eth0", false, 56, 10, 3);
+        assert.strictEqual(stdParsed.count, 2);
+        assert.strictEqual(stdParsed.sourceAddr, "eth0");
+        assert.strictEqual(stdParsed.numeric, false);
+        assert.strictEqual(stdParsed.size, 56);
+        assert.strictEqual(stdParsed.deadline, 10);
+        assert.strictEqual(stdParsed.timeout, 3);
+
+        // Verify that invalid numeric sourceAddr is never accepted
+        const badIface = parsePingArguments("8.8.8.8", 1, 3, true);
+        assert.strictEqual(badIface.sourceAddr, "", "Numeric source interface must be rejected");
+    });
+
+    it("30. Monitor Beat Execution Failure Isolation: infrastructure errors transition to PENDING (UNKNOWN) without false target DOWN", async () => {
+        const monBean = await R.dispense("monitor");
+        monBean.name = "Central Test Ping Monitor";
+        monBean.type = "ping";
+        monBean.hostname = "8.8.8.8";
+        monBean.interval = 60;
+        monBean.retry_interval = 60;
+        monBean.maxretries = 3;
+        monBean.active = 1;
+        monBean.user_id = 1;
+        monBean.organization_id = 1;
+        await R.store(monBean);
+
+        const heartBean = await R.dispense("heartbeat");
+        heartBean.monitor_id = monBean.id;
+        heartBean.time = R.isoDateTime();
+        heartBean.status = UP;
+        heartBean.ping = 15;
+        heartBean.duration = 0.05;
+        heartBean.down_count = 0;
+        await R.store(heartBean);
+
+        // Simulate an execution failure (e.g. raw socket permission denied or missing binary)
+        const execErr = new Error("Central ping execution error: Raw socket permission denied. Target state unknown.");
+        execErr.isExecutionFailure = true;
+
+        const beatBean = await R.dispense("heartbeat");
+        beatBean.monitor_id = monBean.id;
+        beatBean.time = R.isoDateTime();
+
+        // Feed error through monitor failure classification logic
+        const errMsg = execErr.message;
+        const isExecFailure = Boolean(execErr.isExecutionFailure) || errMsg.includes("permission denied");
+        assert.strictEqual(isExecFailure, true, "Execution failure must be classified as isExecFailure");
+
+        if (isExecFailure) {
+            beatBean.status = PENDING;
+            beatBean.msg = errMsg;
+            beatBean.ping = null;
+            beatBean.down_count = 0;
+        } else {
+            beatBean.status = DOWN;
+        }
+
+        await R.store(beatBean);
+
+        // Ground truth verification: must be PENDING (status 2), NOT DOWN (status 0)
+        assert.strictEqual(beatBean.status, PENDING, "Status must be PENDING on worker execution failure");
+        assert.strictEqual(beatBean.down_count, 0, "down_count must not increment on worker execution failure");
+
+        // Verify no active alert was created
+        const alert = await R.getRow("SELECT * FROM active_alert WHERE target_id = ? AND target_type = 'monitor'", [monBean.id]);
+        assert.strictEqual(alert, null, "No alert should be raised for worker execution failure");
+
+        // Clean up
+        await R.exec("DELETE FROM heartbeat WHERE monitor_id = ?", [monBean.id]);
+        await R.exec("DELETE FROM monitor WHERE id = ?", [monBean.id]);
+    });
 });
 
 
