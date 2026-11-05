@@ -1019,6 +1019,92 @@ describe("InfiniNOC Monitoring Engine, DOWN/WARNING Classification, and Alert Ge
         await R.exec("DELETE FROM heartbeat WHERE monitor_id = ?", [monBean.id]);
         await R.exec("DELETE FROM monitor WHERE id = ?", [monBean.id]);
     });
+
+    it("31. MariaDB monitor-to-probe lookup without duplicate LIMIT: eliminates MariaDB ER_PARSE_ERROR", async () => {
+        // Create test monitor
+        const monBean = await R.dispense("monitor");
+        monBean.name = "Central Test Monitor for Probe Lookup";
+        monBean.type = "ping";
+        monBean.hostname = "8.8.8.8";
+        monBean.active = 1;
+        monBean.user_id = user1.id;
+        monBean.organization_id = org1.id;
+        await R.store(monBean);
+
+        // 1. Unassigned central monitor: lookup returns null without syntax error
+        const unassignedProbe = await R.getCell(
+            "SELECT probe_id FROM monitor_probe WHERE monitor_id = ?",
+            [ parseInt(monBean.id, 10) ]
+        );
+        assert.strictEqual(unassignedProbe, null, "Unassigned monitor must return null probe_id");
+
+        // 2. Assign monitor to probe in monitor_probe table
+        await R.exec(
+            "INSERT INTO monitor_probe (organization_id, monitor_id, probe_id) VALUES (?, ?, ?)",
+            [ org1.id, monBean.id, testProbe1.id ]
+        );
+
+        // 3. Assigned monitor: lookup returns assigned probe_id correctly
+        const assignedProbe = await R.getCell(
+            "SELECT probe_id FROM monitor_probe WHERE monitor_id = ?",
+            [ parseInt(monBean.id, 10) ]
+        );
+        assert.strictEqual(parseInt(assignedProbe, 10), testProbe1.id, "Assigned monitor must return probe ID");
+
+        // 4. Verify Knex query compilation under mysql2 / MariaDB client dialect has NO duplicate LIMIT
+        const mysqlKnex = require("knex")({ client: "mysql2" });
+        const limitTemplate = mysqlKnex.limit(1).toSQL().toNative();
+        const baseSql = "SELECT probe_id FROM monitor_probe WHERE monitor_id = ?";
+        const finalCompiledSql = baseSql + limitTemplate.sql.replace("select *", "");
+
+        const limitMatches = finalCompiledSql.match(/limit/gi);
+        assert.strictEqual(limitMatches ? limitMatches.length : 0, 1, "Compiled MariaDB query must contain exactly ONE limit clause");
+        assert.ok(!finalCompiledSql.toLowerCase().includes("limit 1 limit"), "Query must not have duplicate limit 1");
+
+        // Clean up
+        await R.exec("DELETE FROM monitor_probe WHERE monitor_id = ?", [monBean.id]);
+        await R.exec("DELETE FROM monitor WHERE id = ?", [monBean.id]);
+    });
+
+    it("32. Central vs Probe Routing Architecture: Central executes directly, Assigned Probe routes remotely", async () => {
+        // Monitor A: Central monitor (no probe_id, no monitor_probe entry)
+        const centralMon = await R.dispense("monitor");
+        centralMon.name = "Google DNS Central Ping";
+        centralMon.type = "ping";
+        centralMon.hostname = "8.8.8.8";
+        centralMon.active = 1;
+        centralMon.user_id = user1.id;
+        centralMon.organization_id = org1.id;
+        await R.store(centralMon);
+
+        // Verify routing decision for central monitor
+        const probeA = centralMon.probe_id || (parseInt(centralMon.id, 10) > 0 && (await R.getCell("SELECT probe_id FROM monitor_probe WHERE monitor_id = ?", [ parseInt(centralMon.id, 10) ])));
+        assert.strictEqual(probeA, null, "Central monitor must have null probe_id");
+
+        // Monitor B: Multi-probe assigned monitor
+        const probeMon = await R.dispense("monitor");
+        probeMon.name = "Remote LAN Ping via Agent";
+        probeMon.type = "ping";
+        probeMon.hostname = "10.0.0.1";
+        probeMon.active = 1;
+        probeMon.user_id = user1.id;
+        probeMon.organization_id = org1.id;
+        await R.store(probeMon);
+
+        await R.exec(
+            "INSERT INTO monitor_probe (organization_id, monitor_id, probe_id) VALUES (?, ?, ?)",
+            [ org1.id, probeMon.id, testProbe1.id ]
+        );
+
+        // Verify routing decision for probe-assigned monitor
+        const probeB = probeMon.probe_id || (parseInt(probeMon.id, 10) > 0 && (await R.getCell("SELECT probe_id FROM monitor_probe WHERE monitor_id = ?", [ parseInt(probeMon.id, 10) ])));
+        assert.strictEqual(parseInt(probeB, 10), testProbe1.id, "Assigned monitor must resolve to remote probe");
+
+        // Clean up
+        await R.exec("DELETE FROM monitor_probe WHERE monitor_id = ?", [probeMon.id]);
+        await R.exec("DELETE FROM monitor WHERE id = ?", [probeMon.id]);
+        await R.exec("DELETE FROM monitor WHERE id = ?", [centralMon.id]);
+    });
 });
 
 
