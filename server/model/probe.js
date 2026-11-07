@@ -337,10 +337,10 @@ class Probe extends BeanModel {
         const previousBeat = await R.findOne("heartbeat", " monitor_id = ? ORDER BY time DESC", [monitor.id]);
 
         if (previousBeat && payload.timestamp) {
-            const payloadEpoch = new Date(payload.timestamp).getTime();
-            const prevEpoch = new Date(previousBeat.time).getTime();
-            // Reject stale results older than previous beat by > 15 seconds
-            if (!isNaN(payloadEpoch) && !isNaN(prevEpoch) && payloadEpoch < (prevEpoch - 15000)) {
+            const payloadEpoch = dayjs.utc(payload.timestamp).valueOf();
+            const prevEpoch = dayjs.utc(previousBeat.time).valueOf();
+            // Reject stale results older than previous beat by > 120 seconds
+            if (!isNaN(payloadEpoch) && !isNaN(prevEpoch) && payloadEpoch < (prevEpoch - 120000)) {
                 return {
                     ok: false,
                     stale: true,
@@ -467,31 +467,16 @@ class Probe extends BeanModel {
             } catch (e) {
                 console.error("[Probe.submitTaskResult] Incident/Alert error:", e.message);
             }
-        } else if (status === 1 && previousBeat?.status === 0) {
+        } else if (status === 1) {
             // Recovery: Auto-resolve incidents and alerts
             try {
                 const orgId = monitor.organization_id || 1;
-                const probe = await R.getRow("SELECT id, name, status, organization_id FROM probe WHERE id = ?", [probeId]);
-                const probeName = probe ? probe.name : `Remote Probe #${probeId}`;
-                const monTarget = monitor.hostname || monitor.url || `Target #${monitor.id}`;
-
-                // Calculate outage duration
-                let outageDurationStr = "Unknown";
-                if (previousBeat?.time) {
-                    const rawDateStr = String(previousBeat.time).replace(" ", "T");
-                    const startEpoch = new Date(rawDateStr.endsWith("Z") ? rawDateStr : rawDateStr + "Z").getTime();
-                    const nowEpoch = Date.now();
-                    if (!isNaN(startEpoch) && nowEpoch > startEpoch) {
-                        const outageMinutes = Math.max(1, Math.round((nowEpoch - startEpoch) / 60000));
-                        outageDurationStr = outageMinutes === 1 ? "1 minute" : `${outageMinutes} minutes`;
-                    }
-                }
-
-                const recoveredAt = dayjs().format("YYYY-MM-DD HH:mm:ss");
-                const formattedRecMsg = `MONITOR RECOVERED\n\nMonitor: ${monitor.name}\nTarget: ${monTarget}\nExecution Probe: ${probeName}\nMonitor Status: UP\nRecovered At: ${recoveredAt}\nOutage Duration: ${outageDurationStr}`;
-
+                const existingAlert = await R.getRow(
+                    "SELECT * FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
+                    [orgId, monitor.id]
+                );
                 const openIncidents = await R.getAll(
-                    `SELECT incident.id FROM incident 
+                    `SELECT incident.id, incident.created_at FROM incident 
                     JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
                     WHERE (incident.organization_id = ? OR incident.organization_id IS NULL) 
                     AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED') 
@@ -499,38 +484,57 @@ class Probe extends BeanModel {
                     [orgId, monitor.id]
                 );
 
-                for (const inc of openIncidents) {
-                    await R.exec(
-                        "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
-                        [isoNow, isoNow, inc.id]
-                    );
-                    await R.exec(
-                        "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, ?, 'resolved', 'Auto resolved on probe monitor recovery (UP)', ?)",
-                        [orgId, inc.id, null, isoNow]
-                    );
-                }
-                if (openIncidents.length > 0 && server && server.io) {
-                    server.io.emit("updateIncidentStats");
-                }
+                const hasActiveOutage = Boolean(existingAlert) || (openIncidents && openIncidents.length > 0) || (previousBeat && (previousBeat.status === 0 || previousBeat.status === 2));
 
-                const existingAlert = await R.getRow(
-                    "SELECT * FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
-                    [orgId, monitor.id]
-                );
-                if (existingAlert) {
-                    await R.exec(
-                        "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, ?, 'RECOVERED', ?, ?)",
-                        [orgId, existingAlert.id, existingAlert.rule_id || 0, formattedRecMsg, isoNow]
-                    );
-                    await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
-                    if (server && server.io) {
-                        server.io.emit("updateActiveAlerts");
+                if (hasActiveOutage) {
+                    const probe = await R.getRow("SELECT id, name, status, organization_id FROM probe WHERE id = ?", [probeId]);
+                    const probeName = probe ? probe.name : `Remote Probe #${probeId}`;
+                    const monTarget = monitor.hostname || monitor.url || `Target #${monitor.id}`;
+
+                    // Calculate outage duration
+                    let outageDurationStr = "Unknown";
+                    const startTimeStr = existingAlert?.first_triggered_at || (openIncidents && openIncidents[0]?.created_at) || previousBeat?.time;
+                    if (startTimeStr) {
+                        const startEpoch = dayjs.utc(startTimeStr).valueOf();
+                        const nowEpoch = Date.now();
+                        if (!isNaN(startEpoch) && nowEpoch > startEpoch) {
+                            const outageMinutes = Math.max(1, Math.round((nowEpoch - startEpoch) / 60000));
+                            outageDurationStr = outageMinutes === 1 ? "1 minute" : `${outageMinutes} minutes`;
+                        }
+                    }
+
+                    const recoveredAt = dayjs().format("YYYY-MM-DD HH:mm:ss");
+                    const formattedRecMsg = `MONITOR RECOVERED\n\nMonitor: ${monitor.name}\nTarget: ${monTarget}\nExecution Probe: ${probeName}\nMonitor Status: UP\nRecovered At: ${recoveredAt}\nOutage Duration: ${outageDurationStr}`;
+
+                    for (const inc of openIncidents) {
+                        await R.exec(
+                            "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
+                            [isoNow, isoNow, inc.id]
+                        );
+                        await R.exec(
+                            "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, ?, 'resolved', 'Auto resolved on probe monitor recovery (UP)', ?)",
+                            [orgId, inc.id, null, isoNow]
+                        );
+                    }
+                    if (openIncidents.length > 0 && server && server.io) {
+                        server.io.emit("updateIncidentStats");
+                    }
+
+                    if (existingAlert) {
+                        await R.exec(
+                            "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, ?, 'RECOVERED', ?, ?)",
+                            [orgId, existingAlert.id, existingAlert.rule_id || 0, formattedRecMsg, isoNow]
+                        );
+                        await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
+                        if (server && server.io) {
+                            server.io.emit("updateActiveAlerts");
+                        }
                     }
 
                     // Dispatch recovery notification via Monitor.sendNotification
                     try {
                         const monitorBean = await R.load("monitor", monitor.id);
-                        await Monitor.sendNotification(isFirstBeat, monitorBean.id ? monitorBean : monitor, bean);
+                        await Monitor.sendNotification(false, monitorBean.id ? monitorBean : monitor, bean);
                     } catch (notifErr) {
                         console.error(`[Probe.submitTaskResult] Failed to send monitor recovery notification for #${monitor.id}: ${notifErr.message}`);
                     }
@@ -715,8 +719,7 @@ class Probe extends BeanModel {
             const startTimeStr = existingAlert?.first_triggered_at || (openProbeIncidents && openProbeIncidents[0]?.created_at);
             let outageDurationStr = "Unknown";
             if (startTimeStr) {
-                const rawDateStr = String(startTimeStr).replace(" ", "T");
-                const startEpoch = new Date(rawDateStr.endsWith("Z") ? rawDateStr : rawDateStr + "Z").getTime();
+                const startEpoch = dayjs.utc(startTimeStr).valueOf();
                 const nowEpoch = Date.now();
                 if (!isNaN(startEpoch) && nowEpoch > startEpoch) {
                     const outageMinutes = Math.max(1, Math.round((nowEpoch - startEpoch) / 60000));
@@ -798,9 +801,8 @@ class Probe extends BeanModel {
                     continue;
                 }
 
-                const hbStr = String(p.last_heartbeat);
-                const lastBeatTime = new Date(hbStr.includes("T") ? hbStr : hbStr.replace(" ", "T") + "Z").getTime();
-                const elapsed = now - (isNaN(lastBeatTime) ? new Date(p.last_heartbeat).getTime() : lastBeatTime);
+                const lastBeatTime = p.last_heartbeat ? dayjs.utc(p.last_heartbeat).valueOf() : NaN;
+                const elapsed = isNaN(lastBeatTime) ? 999999 : (now - lastBeatTime);
 
                 // Configurable thresholds: default 30s interval, warning at 35s, offline at 60s
                 if (elapsed > 60000) {

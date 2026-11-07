@@ -478,21 +478,14 @@ class Monitor extends BeanModel {
                     bean.msg = "Monitor under maintenance";
                     bean.status = MAINTENANCE;
                 } else if (this.probe_id || (parseInt(this.id, 10) > 0 && (await R.getCell("SELECT probe_id FROM monitor_probe WHERE monitor_id = ?", [ parseInt(this.id, 10) ])))) {
-                    const assignedProbeId = this.probe_id || (await R.getCell("SELECT probe_id FROM monitor_probe WHERE monitor_id = ?", [ parseInt(this.id, 10) ]));
-                    // Delegated to remote distributed probe agent
-                    const probe = await R.getRow("SELECT id, name, status, last_heartbeat FROM probe WHERE id = ?", [assignedProbeId]);
-                    if (!probe || probe.status !== "online") {
-                        bean.status = PENDING;
-                        bean.msg = `Assigned Remote Probe #${assignedProbeId} (${probe?.name || "Unknown"}) is OFFLINE - Target State Unknown`;
-                        bean.ping = null;
-                    } else {
-                        // Remote probe is online and actively executing checks
-                        // Central server skips direct check to prevent false DOWN errors on private LAN targets
-                        if (!this.isStop) {
-                            this.heartbeatInterval = setTimeout(safeBeat, beatInterval * 1000);
-                        }
-                        return;
+                    // Delegated to remote distributed probe agent.
+                    // Central monitoring server skips direct execution to allow the remote probe
+                    // to execute checks and submit authoritative results, avoiding race conditions
+                    // or continuous PENDING overwrites.
+                    if (!this.isStop) {
+                        this.heartbeatInterval = setTimeout(safeBeat, beatInterval * 1000);
                     }
+                    return;
                 } else if (this.type === "http" || this.type === "keyword" || this.type === "json-query") {
                     // Do not do any queries/high loading things before the "bean.ping"
                     let startTime = dayjs().valueOf();
@@ -1575,7 +1568,8 @@ class Monitor extends BeanModel {
             (previousBeatStatus === MAINTENANCE && currentBeatStatus === UP) ||
             (previousBeatStatus === UP && currentBeatStatus === DOWN) ||
             (previousBeatStatus === DOWN && currentBeatStatus === UP) ||
-            (previousBeatStatus === PENDING && currentBeatStatus === DOWN)
+            (previousBeatStatus === PENDING && currentBeatStatus === DOWN) ||
+            (previousBeatStatus === PENDING && currentBeatStatus === UP)
         );
     }
 
@@ -1593,7 +1587,7 @@ class Monitor extends BeanModel {
         // UP -> UP = not important
         // PENDING -> PENDING = not important
         // * PENDING -> DOWN = important
-        // PENDING -> UP = not important
+        // * PENDING -> UP = important
         // DOWN -> PENDING = this case not exists
         // DOWN -> DOWN = not important
         // * DOWN -> UP = important
@@ -1607,7 +1601,8 @@ class Monitor extends BeanModel {
             (previousBeatStatus === MAINTENANCE && currentBeatStatus === DOWN) ||
             (previousBeatStatus === UP && currentBeatStatus === DOWN) ||
             (previousBeatStatus === DOWN && currentBeatStatus === UP) ||
-            (previousBeatStatus === PENDING && currentBeatStatus === DOWN)
+            (previousBeatStatus === PENDING && currentBeatStatus === DOWN) ||
+            (previousBeatStatus === PENDING && currentBeatStatus === UP)
         );
     }
 
@@ -2307,8 +2302,9 @@ class Monitor extends BeanModel {
         let executionSource = "central";
         let workerAvailable = true;
 
-        if (monitor.probe_id) {
-            const probe = await R.getRow("SELECT id, name, status, last_heartbeat FROM probe WHERE id = ?", [monitor.probe_id]);
+        const assignedProbeId = monitor.probe_id || (parseInt(monitor.id, 10) > 0 && (await R.getCell("SELECT probe_id FROM monitor_probe WHERE monitor_id = ?", [ parseInt(monitor.id, 10) ])));
+        if (assignedProbeId) {
+            const probe = await R.getRow("SELECT id, name, status, last_heartbeat FROM probe WHERE id = ?", [assignedProbeId]);
             if (probe) {
                 probeInfo = {
                     id: probe.id,
@@ -2318,7 +2314,7 @@ class Monitor extends BeanModel {
                 };
                 executionLocation = `Remote Probe #${probe.id} (${probe.name})`;
                 executionSource = "probe";
-                workerAvailable = probe.status === "online";
+                workerAvailable = probe.status === "online" || probe.status === "degraded";
             }
         }
 
