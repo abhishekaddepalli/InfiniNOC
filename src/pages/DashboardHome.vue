@@ -545,8 +545,8 @@
                                             </div>
                                         </td>
                                         <td class="py-2">
-                                            <span class="status-pill text-uppercase font-monospace fw-bold" :class="event.status === 1 ? 'status-up' : 'status-down'">
-                                                {{ event.status === 1 ? 'Up' : 'Down' }}
+                                            <span class="status-pill text-uppercase font-monospace fw-bold" :class="event.status === 1 ? 'status-up' : (event.status === 2 ? 'status-warning' : (event.status === 3 ? 'status-maint' : 'status-down'))">
+                                                {{ event.status === 1 ? 'Up' : (event.status === 2 ? 'Pending' : (event.status === 3 ? 'Maint' : 'Down')) }}
                                             </span>
                                         </td>
                                         <td class="text-muted font-monospace py-2 text-nowrap" style="font-size: 0.75rem;">

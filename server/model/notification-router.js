@@ -239,12 +239,67 @@ class NotificationRouter {
             `SELECT r.*, c.channel_type, c.encrypted_config, c.is_enabled as channel_enabled
              FROM notification_routing_rule r
              JOIN notification_channel c ON r.channel_id = c.id
-             WHERE r.organization_id = ? AND r.is_enabled = 1 AND c.is_enabled = 1 AND r.event_type = ?`,
-            [orgId, eventType]
+             WHERE (r.organization_id = ? OR r.organization_id IS NULL)
+               AND r.is_enabled = 1 AND c.is_enabled = 1
+               AND (
+                   r.event_type = ?
+                   OR r.event_type = 'ALL'
+                   OR (r.event_type = 'PROBE_OFFLINE' AND ? IN ('ALERT', 'PROBE_OFFLINE'))
+                   OR (r.event_type = 'ALERT' AND ? IN ('ALERT', 'PROBE_OFFLINE'))
+                   OR (r.event_type = 'RECOVERY' AND ? IN ('RESOLVED', 'RECOVERY'))
+                   OR (r.event_type = 'RESOLVED' AND ? IN ('RESOLVED', 'RECOVERY'))
+               )`,
+            [orgId, eventType, eventType, eventType, eventType, eventType]
         );
 
         if (!rules || rules.length === 0) {
-            return [{ status: "NO_MATCHING_RULES", message: "No active notification rules found." }];
+            // Fallback: If organization has enabled channels without explicit routing rules,
+            // dispatch directly to active channels so alerts are never silently dropped.
+            const channels = await R.getAll(
+                "SELECT * FROM notification_channel WHERE (organization_id = ? OR organization_id IS NULL) AND is_enabled = 1",
+                [orgId]
+            );
+            if (!channels || channels.length === 0) {
+                return [{ status: "NO_MATCHING_RULES", message: "No active notification rules found." }];
+            }
+
+            const results = [];
+            for (const ch of channels) {
+                const provider = this.getProvider(ch.channel_type);
+                const config = provider.decryptConfig(ch.encrypted_config);
+                const recipient = config.to || config.chatId || config.recipientPhoneNumber || config.url || targetEntity;
+
+                const lastLog = await R.getRow(
+                    `SELECT * FROM notification_delivery_log
+                     WHERE organization_id = ? AND channel_id = ? AND recipient = ? AND status = 'SUCCESS'
+                     ORDER BY delivered_at DESC LIMIT 1`,
+                    [orgId, ch.id, String(recipient)]
+                );
+
+                if (lastLog && lastLog.delivered_at) {
+                    const elapsedMs = new Date() - new Date(lastLog.delivered_at);
+                    if (elapsedMs < 15 * 60 * 1000) {
+                        await this.logDelivery(orgId, eventType, severity, ch.id, recipient, "SUPPRESSED_COOLDOWN", "Suppressed due to default 15m cooldown window.");
+                        results.push({ status: "SUPPRESSED_COOLDOWN", channelId: ch.id });
+                        continue;
+                    }
+                }
+
+                try {
+                    await provider.sendNotification({
+                        config,
+                        recipient,
+                        subject: event.subject || `InfiniNOC ${severity} ${eventType}`,
+                        body: event.message || `Notification event ${eventType} triggered.`,
+                    });
+                    await this.logDelivery(orgId, eventType, severity, ch.id, recipient, "SUCCESS", null);
+                    results.push({ status: "SUCCESS", channelId: ch.id, recipient });
+                } catch (e) {
+                    await this.logDelivery(orgId, eventType, severity, ch.id, targetEntity, "FAILED", e.message);
+                    results.push({ status: "FAILED", channelId: ch.id, error: e.message });
+                }
+            }
+            return results;
         }
 
         const results = [];

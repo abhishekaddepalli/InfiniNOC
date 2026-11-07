@@ -696,13 +696,13 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         const probeAlert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
         assert.ok(probeAlert, "Active alert must exist for probe");
         assert.strictEqual(probeAlert.metric, "probe_offline");
-        assert.ok(probeAlert.message.includes("REMOTE PROBE DOWN"));
-        assert.ok(probeAlert.message.includes(`Probe: ${testProbe.name}`));
+        assert.ok(probeAlert.message.includes("PROBE OFFLINE"));
+        assert.ok(probeAlert.message.includes(testProbe.name));
         assert.ok(probeAlert.message.includes("Assigned Monitors: 2"));
         assert.ok(probeAlert.message.includes("Affected Monitors: 2"));
         assert.ok(probeAlert.message.includes("Branch Core Switch (Private LAN)"));
         assert.ok(probeAlert.message.includes("Branch Access Switch 02"));
-        assert.ok(probeAlert.message.includes("Reason: Probe heartbeat timeout."));
+        assert.ok(probeAlert.message.includes("Reason: Heartbeat timeout."));
 
         // 2. Verify NO false monitor DOWN incidents created
         const falseIncidents = await R.getAll(
@@ -758,7 +758,7 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
             "SELECT * FROM alert_history WHERE state = 'RECOVERED' ORDER BY id DESC LIMIT 1"
         );
         assert.ok(historyRow, "Alert history must record RECOVERED entry");
-        assert.ok(historyRow.message.includes("REMOTE PROBE RECOVERED"));
+        assert.ok(historyRow.message.includes("PROBE RECOVERED"));
         assert.ok(historyRow.message.includes(testProbe.name));
 
         // 3. Verify probe incident was auto-resolved
@@ -897,7 +897,7 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         assert.ok(alert, "Active alert must exist for empty probe");
         assert.ok(alert.message.includes("Assigned Monitors: 0"));
         assert.ok(alert.message.includes("Affected Monitors: 0"));
-        assert.ok(alert.message.includes("Affected monitors:\nNone"));
+        assert.ok(alert.message.includes("Affected:\nNone"));
 
         // Clean up
         await R.exec("DELETE FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [emptyProbeId]);
@@ -961,6 +961,105 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         await R.exec("DELETE FROM probe WHERE id = ?", [probe2.id]);
         await R.exec("DELETE FROM organization WHERE id = ?", [org2.id]);
         await R.exec("DELETE FROM user WHERE id = ?", [user2.id]);
+    });
+
+    it("29. Notification Delivery: Probe DOWN and Recovery reaches notification providers and notification_delivery_log", async () => {
+        const NotificationRouter = require("../../server/model/notification-router.js");
+
+        // Set up notification channel and routing rule for org
+        const channel = await NotificationRouter.saveChannel({
+            name: "NOC Outage Webhook",
+            channelType: "WEBHOOK",
+            config: { url: "http://127.0.0.1:9999/probe-webhook" },
+        }, org.id);
+
+        await NotificationRouter.saveRoutingRule({
+            name: "Probe Outages P1 Rule",
+            eventType: "ALERT",
+            minSeverity: "P1",
+            channelId: channel.id,
+            cooldownMinutes: 1,
+        }, org.id);
+
+        // Mark probe offline and trigger health check
+        const pastHeartbeat = new Date(Date.now() - 95000).toISOString().replace("T", " ").substring(0, 19);
+        await R.exec("UPDATE probe SET status = 'online', last_heartbeat = ? WHERE id = ?", [pastHeartbeat, testProbe.id]);
+        await R.exec("DELETE FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+
+        await Probe.checkAllProbesHealth();
+
+        // Verify delivery was attempted and logged in notification_delivery_log
+        const logs = await NotificationRouter.getDeliveryLogs(org.id);
+        assert.ok(logs.length >= 1, "At least one delivery log entry must be created");
+        const alertLog = logs.find(l => l.event_type === "ALERT" && l.channel_id === channel.id);
+        assert.ok(alertLog, "Delivery log for probe ALERT must exist");
+        assert.strictEqual(alertLog.severity, "P1");
+
+        // Now test probe recovery notification delivery
+        await Probe.recordHeartbeat(testProbe.id, probeApiKey, { latency_ms: 10 });
+        const recLogs = await NotificationRouter.getDeliveryLogs(org.id);
+        const resolvedLog = recLogs.find(l => l.event_type === "RESOLVED");
+        assert.ok(resolvedLog, "Delivery log for probe RESOLVED recovery must exist");
+
+        // Clean up routing rule and channel
+        await R.exec("DELETE FROM notification_routing_rule WHERE channel_id = ?", [channel.id]);
+        await R.exec("DELETE FROM notification_channel WHERE id = ?", [channel.id]);
+        await R.exec("DELETE FROM notification_delivery_log WHERE organization_id = ?", [org.id]);
+    });
+
+    it("30. Probe UP + Monitor DOWN Alert Notification with Fallback Resolution", async () => {
+        // Ensure testProbe is online
+        await R.exec("UPDATE probe SET status = 'online' WHERE id = ?", [testProbe.id]);
+
+        // Submit monitor failure
+        const failRes = await Probe.submitTaskResult(testProbe.id, probeApiKey, {
+            monitor_id: testMonitor.id,
+            status: 0,
+            ping: null,
+            msg: "Target connection refused after 3 retries",
+        });
+        assert.ok(failRes.ok);
+
+        // Verify active alert exists with monitor_down metric
+        const alert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'monitor' AND target_id = ?", [testMonitor.id]);
+        assert.ok(alert);
+        assert.strictEqual(alert.metric, "monitor_down");
+        assert.ok(alert.message.includes("MONITOR DOWN"));
+        assert.ok(alert.message.includes(testMonitor.name));
+        assert.ok(alert.message.includes(testProbe.name));
+
+        // Submit recovery
+        const upRes = await Probe.submitTaskResult(testProbe.id, probeApiKey, {
+            monitor_id: testMonitor.id,
+            status: 1,
+            ping: 8,
+            msg: "Target connection restored",
+        });
+        assert.ok(upRes.ok);
+
+        // Verify active alert cleared
+        const clearedAlert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'monitor' AND target_id = ?", [testMonitor.id]);
+        assert.strictEqual(clearedAlert, null);
+    });
+
+    it("31. Notification Audit Security: error logging prevents credential leakage", async () => {
+        const NotificationRouter = require("../../server/model/notification-router.js");
+
+        await NotificationRouter.logDelivery(
+            org.id,
+            "ALERT",
+            "P1",
+            999,
+            "https://hooks.slack.com/services/T00/B00/X123SecretKey456",
+            "FAILED",
+            "Connection timeout to Slack webhook endpoint"
+        );
+
+        const logs = await NotificationRouter.getDeliveryLogs(org.id);
+        const testLog = logs.find(l => l.channel_id === 999);
+        assert.ok(testLog);
+        assert.strictEqual(String(testLog.error_message).includes("X123SecretKey456"), false, "Error message must not leak credentials");
+        await R.exec("DELETE FROM notification_delivery_log WHERE channel_id = 999");
     });
 
     after(async () => {

@@ -1677,12 +1677,25 @@ class Monitor extends BeanModel {
                 }
             }
 
+            const monitorJSON = typeof monitor.toJSON === "function"
+                ? monitor.toJSON(preloadData, false)
+                : {
+                    id: monitor.id,
+                    name: monitor.name,
+                    url: monitor.url,
+                    hostname: monitor.hostname,
+                    port: monitor.port,
+                    type: monitor.type,
+                    active: monitor.active,
+                    ...monitor,
+                };
+
             for (let notification of notificationList) {
                 try {
                     await Notification.send(
                         JSON.parse(notification.config),
                         msg,
-                        monitor.toJSON(preloadData, false),
+                        monitorJSON,
                         heartbeatJSON
                     );
                 } catch (e) {
@@ -1703,7 +1716,20 @@ class Monitor extends BeanModel {
             "SELECT notification.* FROM notification, monitor_notification WHERE monitor_id = ? AND monitor_notification.notification_id = notification.id ",
             [monitor.id]
         );
-        return notificationList;
+        if (!notificationList || notificationList.length === 0) {
+            const orgId = monitor.organization_id || 1;
+            try {
+                notificationList = await R.getAll(
+                    "SELECT * FROM notification WHERE (organization_id = ? OR (user_id = ? AND is_default = 1) OR is_default = 1) AND active = 1",
+                    [orgId, monitor.user_id]
+                );
+            } catch (err) {
+                notificationList = await R.getAll(
+                    "SELECT * FROM notification WHERE is_default = 1 AND active = 1"
+                );
+            }
+        }
+        return notificationList || [];
     }
 
     /**
