@@ -1631,7 +1631,14 @@ class Monitor extends BeanModel {
 
             let msg = `[${monitor.name}] [${text}] ${bean.msg}`;
 
-            const heartbeatJSON = await bean.toJSONAsync({ decodeResponse: true });
+            const heartbeatJSON = typeof bean.toJSONAsync === "function"
+                ? await bean.toJSONAsync({ decodeResponse: true })
+                : (typeof bean.toJSON === "function" ? bean.toJSON() : {
+                    status: bean.status,
+                    time: bean.time,
+                    ping: bean.ping,
+                    msg: bean.msg,
+                });
             const monitorData = [{ id: monitor.id, active: monitor.active, name: monitor.name }];
             const preloadData = await Monitor.preparePreloadData(monitorData);
             // Prevent if the msg is undefined, notifications such as Discord cannot send out.
@@ -1642,10 +1649,9 @@ class Monitor extends BeanModel {
             // Also provide the time in server timezone
             heartbeatJSON["timezone"] = await UptimeKumaServer.getInstance().getTimezone();
             heartbeatJSON["timezoneOffset"] = UptimeKumaServer.getInstance().getTimezoneOffset();
-            heartbeatJSON["localDateTime"] = dayjs
-                .utc(heartbeatJSON["time"])
-                .tz(heartbeatJSON["timezone"])
-                .format(SQL_DATETIME_FORMAT);
+            heartbeatJSON["localDateTime"] = typeof dayjs.utc(heartbeatJSON["time"]).tz === "function"
+                ? dayjs.utc(heartbeatJSON["time"]).tz(heartbeatJSON["timezone"]).format(SQL_DATETIME_FORMAT)
+                : dayjs(heartbeatJSON["time"]).format(SQL_DATETIME_FORMAT);
 
             // Calculate downtime tracking information when service comes back up
             // This makes downtime information available to all notification providers

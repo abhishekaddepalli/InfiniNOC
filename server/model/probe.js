@@ -244,43 +244,13 @@ class Probe extends BeanModel {
             ]
         );
 
-        // If probe had an active offline alert or incident, auto-resolve it
+        // If probe had an active offline alert or incident, auto-resolve it and dispatch recovery notification
         try {
             const orgId = probe.organization_id || 1;
-            const existingAlert = await R.getRow(
-                "SELECT * FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'probe' AND target_id = ?",
-                [orgId, probeId]
-            );
-            if (existingAlert) {
-                const recMsg = `[RECOVERED] Distributed Probe #${probeId} (${probe.name}) is back ONLINE`;
-                await R.exec(
-                    "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, 0, 'RECOVERED', ?, ?)",
-                    [orgId, existingAlert.id, recMsg, isoNow]
-                );
-                await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
-            }
-
-            // Auto-resolve any open probe outage incidents
-            const openProbeIncidents = await R.getAll(
-                `SELECT incident.id FROM incident
-                JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
-                WHERE (incident.organization_id = ? OR incident.organization_id IS NULL)
-                AND incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
-                AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
-                [orgId, probeId]
-            );
-            for (const inc of openProbeIncidents) {
-                await R.exec(
-                    "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
-                    [isoNow, isoNow, inc.id]
-                );
-                await R.exec(
-                    "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, NULL, 'resolved', 'Auto resolved on probe reconnection (UP)', ?)",
-                    [orgId, inc.id, isoNow]
-                );
-            }
+            const { UptimeKumaServer } = require("../uptime-kuma-server");
+            await Probe.resolveProbeOutage(probeId, orgId, UptimeKumaServer.getInstance()?.io);
         } catch (e) {
-            // Ignore alert/incident resolution error if table not ready
+            // Suppress resolution error if table not ready
         }
 
         return { ok: true, timestamp: isoNow, status: "online" };
@@ -414,13 +384,17 @@ class Probe extends BeanModel {
             Monitor.sendStats(server.io, monitor.id, monitor.user_id);
         }
 
-        // Auto Outage Incident and Active Alert Synchronization on probe DOWN
+        // Auto Outage Incident, Active Alert and Notification Synchronization on probe task result
         if (status === 0) {
             try {
                 const orgId = monitor.organization_id || 1;
+                const probe = await R.getRow("SELECT id, name, status, organization_id FROM probe WHERE id = ?", [probeId]);
+                const probeName = probe ? probe.name : `Remote Probe #${probeId}`;
                 const monTarget = monitor.hostname || monitor.url || `Target #${monitor.id}`;
-                const monType = (monitor.type || "TARGET").toUpperCase();
-                const failureReason = msg || `Target ${monitor.name} (${monTarget}) is DOWN via Probe #${probeId}`;
+                const failureReason = payload.msg || msg || "ICMP request timed out after the configured failure threshold.";
+                const detectedAt = dayjs().format("YYYY-MM-DD HH:mm:ss");
+
+                const formattedDownMsg = `MONITOR DOWN\n\nMonitor: ${monitor.name}\nTarget: ${monTarget}\nExecution Probe: ${probeName}\nMonitor Status: DOWN\nDetected At: ${detectedAt}\nReason: ${failureReason}`;
 
                 // 1. Ensure Active Incident exists for this outage
                 const existingInc = await R.getRow(
@@ -436,8 +410,8 @@ class Probe extends BeanModel {
                     const Incident = require("./incident");
                     await Incident.createIncident(
                         {
-                            title: `[OUTAGE] Monitor #${monitor.id} (${monitor.name}) is DOWN`,
-                            description: `Automated NOC Outage Incident raised for ${monitor.name} reported by Distributed Probe #${probeId}. Target: ${monTarget}. Protocol: ${monType}. Failure Reason: ${failureReason}`,
+                            title: `[OUTAGE] Monitor #${monitor.id} (${monitor.name}) is DOWN via ${probeName}`,
+                            description: `Automated NOC Outage Incident raised for ${monitor.name} reported by ${probeName}.\nTarget: ${monTarget}\nReason: ${failureReason}`,
                             failure_reason: failureReason,
                             severity: "P1",
                             links: [{ entity_type: "monitor", entity_id: monitor.id }],
@@ -450,22 +424,42 @@ class Probe extends BeanModel {
                     }
                 }
 
-                // 2. Ensure Active Alert exists for this outage
+                // 2. Ensure Active Alert exists for this outage (Deduplication)
                 const existingAlert = await R.getRow(
                     "SELECT id FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'monitor' AND target_id = ?",
                     [orgId, monitor.id]
                 );
 
                 if (!existingAlert) {
-                    const alertMsg = `Monitor #${monitor.id} (${monitor.name}) is DOWN via Probe #${probeId}: ${failureReason}`;
                     await R.exec(
                         `INSERT INTO active_alert (
                             organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
                         ) VALUES (?, 0, 'monitor', ?, 'monitor_down', 'CRITICAL', 0, ?, ?, ?, ?, ?)`,
-                        [orgId, monitor.id, alertMsg, isoNow, isoNow, isoNow, isoNow]
+                        [orgId, monitor.id, formattedDownMsg, isoNow, isoNow, isoNow, isoNow]
                     );
                     if (server && server.io) {
                         server.io.emit("updateActiveAlerts");
+                    }
+
+                    // Dispatch notification via Monitor.sendNotification
+                    try {
+                        await Monitor.sendNotification(isFirstBeat, monitor, bean);
+                    } catch (notifErr) {
+                        console.error(`[Probe.submitTaskResult] Failed to send monitor notification for #${monitor.id}: ${notifErr.message}`);
+                    }
+
+                    // Dispatch notification via Enterprise NotificationRouter
+                    try {
+                        const notificationRouter = require("./notification-router");
+                        await notificationRouter.dispatchNotification({
+                            eventType: "ALERT",
+                            severity: "P1",
+                            entityId: `monitor-${monitor.id}`,
+                            subject: `[MONITOR DOWN] ${monitor.name} via ${probeName}`,
+                            message: formattedDownMsg,
+                        }, orgId);
+                    } catch (routerErr) {
+                        console.error(`[Probe.submitTaskResult] Failed to route monitor notification via NotificationRouter: ${routerErr.message}`);
                     }
                 }
             } catch (e) {
@@ -475,6 +469,25 @@ class Probe extends BeanModel {
             // Recovery: Auto-resolve incidents and alerts
             try {
                 const orgId = monitor.organization_id || 1;
+                const probe = await R.getRow("SELECT id, name, status, organization_id FROM probe WHERE id = ?", [probeId]);
+                const probeName = probe ? probe.name : `Remote Probe #${probeId}`;
+                const monTarget = monitor.hostname || monitor.url || `Target #${monitor.id}`;
+
+                // Calculate outage duration
+                let outageDurationStr = "Unknown";
+                if (previousBeat?.time) {
+                    const rawDateStr = String(previousBeat.time).replace(" ", "T");
+                    const startEpoch = new Date(rawDateStr.endsWith("Z") ? rawDateStr : rawDateStr + "Z").getTime();
+                    const nowEpoch = Date.now();
+                    if (!isNaN(startEpoch) && nowEpoch > startEpoch) {
+                        const outageMinutes = Math.max(1, Math.round((nowEpoch - startEpoch) / 60000));
+                        outageDurationStr = outageMinutes === 1 ? "1 minute" : `${outageMinutes} minutes`;
+                    }
+                }
+
+                const recoveredAt = dayjs().format("YYYY-MM-DD HH:mm:ss");
+                const formattedRecMsg = `MONITOR RECOVERED\n\nMonitor: ${monitor.name}\nTarget: ${monTarget}\nExecution Probe: ${probeName}\nMonitor Status: UP\nRecovered At: ${recoveredAt}\nOutage Duration: ${outageDurationStr}`;
+
                 const openIncidents = await R.getAll(
                     `SELECT incident.id FROM incident 
                     JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id 
@@ -503,14 +516,34 @@ class Probe extends BeanModel {
                     [orgId, monitor.id]
                 );
                 if (existingAlert) {
-                    const recoveryMsg = `[RECOVERED] Monitor #${monitor.id} (${monitor.name}) returned to service (UP via Probe #${probeId})`;
                     await R.exec(
                         "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, ?, 'RECOVERED', ?, ?)",
-                        [orgId, existingAlert.id, existingAlert.rule_id || 0, recoveryMsg, isoNow]
+                        [orgId, existingAlert.id, existingAlert.rule_id || 0, formattedRecMsg, isoNow]
                     );
                     await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
                     if (server && server.io) {
                         server.io.emit("updateActiveAlerts");
+                    }
+
+                    // Dispatch recovery notification via Monitor.sendNotification
+                    try {
+                        await Monitor.sendNotification(isFirstBeat, monitor, bean);
+                    } catch (notifErr) {
+                        console.error(`[Probe.submitTaskResult] Failed to send monitor recovery notification for #${monitor.id}: ${notifErr.message}`);
+                    }
+
+                    // Dispatch recovery notification via NotificationRouter
+                    try {
+                        const notificationRouter = require("./notification-router");
+                        await notificationRouter.dispatchNotification({
+                            eventType: "RESOLVED",
+                            severity: "P1",
+                            entityId: `monitor-${monitor.id}`,
+                            subject: `[MONITOR RECOVERED] ${monitor.name} via ${probeName}`,
+                            message: formattedRecMsg,
+                        }, orgId);
+                    } catch (routerErr) {
+                        console.error(`[Probe.submitTaskResult] Failed to route monitor recovery via NotificationRouter: ${routerErr.message}`);
                     }
                 }
             } catch (e) {
@@ -535,6 +568,179 @@ class Probe extends BeanModel {
             timestamp: isoNow,
             msg,
         };
+    }
+
+    /**
+     * Send probe level notification across configured notification channels and router
+     * @param {object|number|string} probe Probe record or ID
+     * @param {string} eventType 'DOWN' or 'UP'
+     * @param {string} message Formatted alert message
+     * @param {object} meta Additional metadata
+     * @returns {Promise<number>} Number of notifications dispatched
+     */
+    static async sendProbeNotification(probe, eventType, message, meta = {}) {
+        let sentCount = 0;
+        try {
+            if (typeof probe !== "object" || !probe) {
+                probe = await R.getRow("SELECT * FROM probe WHERE id = ?", [probe]);
+            }
+            if (!probe) {
+                return 0;
+            }
+
+            const orgId = probe.organization_id || 1;
+
+            // 1. Fetch configured notification channels for this probe's organization
+            try {
+                const Notification = require("../notification");
+                let notificationList = await R.getAll(
+                    "SELECT * FROM notification WHERE (organization_id = ? OR organization_id IS NULL) AND active = 1",
+                    [orgId]
+                );
+
+                // Fall back to default notifications if no org-specific channels found
+                if (!notificationList || notificationList.length === 0) {
+                    notificationList = await R.getAll(
+                        "SELECT * FROM notification WHERE is_default = 1 AND active = 1"
+                    );
+                }
+
+                for (const notif of (notificationList || [])) {
+                    try {
+                        const config = JSON.parse(notif.config);
+                        await Notification.send(config, message);
+                        sentCount++;
+                    } catch (err) {
+                        console.error(`[Probe.sendProbeNotification] Failed to send probe notification to channel ${notif.name}: ${err.message}`);
+                    }
+                }
+            } catch (notifErr) {
+                console.error(`[Probe.sendProbeNotification] Error querying notification list for probe #${probe.id}: ${notifErr.message}`);
+            }
+
+            // 2. Dispatch via InfiniNOC Enterprise Notification Router
+            try {
+                const notificationRouter = require("./notification-router");
+                const subject = eventType === "DOWN"
+                    ? `[REMOTE PROBE DOWN] ${probe.name}`
+                    : `[REMOTE PROBE RECOVERED] ${probe.name}`;
+
+                await notificationRouter.dispatchNotification({
+                    eventType: eventType === "DOWN" ? "ALERT" : "RESOLVED",
+                    severity: "P1",
+                    entityId: `probe-${probe.id}`,
+                    subject,
+                    message,
+                }, orgId);
+            } catch (routerErr) {
+                console.error(`[Probe.sendProbeNotification] Error routing probe notification via NotificationRouter: ${routerErr.message}`);
+            }
+        } catch (e) {
+            console.error(`[Probe.sendProbeNotification] Unexpected error: ${e.message}`);
+        }
+
+        return sentCount;
+    }
+
+    /**
+     * Resolve probe outage, resolve incidents/alerts, and dispatch recovery notification
+     * @param {number} probeId Probe ID
+     * @param {number} organizationId Organization ID
+     * @param {object} io Socket.io instance
+     * @returns {Promise<boolean>} True if an outage was resolved
+     */
+    static async resolveProbeOutage(probeId, organizationId, io) {
+        try {
+            const orgId = organizationId || 1;
+            const isoNow = toSqlDatetime();
+
+            const existingAlert = await R.getRow(
+                "SELECT * FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'probe' AND target_id = ?",
+                [orgId, probeId]
+            );
+
+            const openProbeIncidents = await R.getAll(
+                `SELECT incident.id, incident.created_at FROM incident
+                JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+                WHERE (incident.organization_id = ? OR incident.organization_id IS NULL)
+                AND incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
+                AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+                [orgId, probeId]
+            );
+
+            // Deduplication: Only proceed if there was an active alert or open incident
+            if (!existingAlert && (!openProbeIncidents || openProbeIncidents.length === 0)) {
+                return false;
+            }
+
+            const probe = await R.getRow("SELECT * FROM probe WHERE id = ?", [probeId]);
+            if (!probe) {
+                return false;
+            }
+
+            // Calculate outage duration
+            const startTimeStr = existingAlert?.first_triggered_at || (openProbeIncidents && openProbeIncidents[0]?.created_at);
+            let outageDurationStr = "Unknown";
+            if (startTimeStr) {
+                const rawDateStr = String(startTimeStr).replace(" ", "T");
+                const startEpoch = new Date(rawDateStr.endsWith("Z") ? rawDateStr : rawDateStr + "Z").getTime();
+                const nowEpoch = Date.now();
+                if (!isNaN(startEpoch) && nowEpoch > startEpoch) {
+                    const outageMinutes = Math.max(1, Math.round((nowEpoch - startEpoch) / 60000));
+                    outageDurationStr = outageMinutes === 1 ? "1 minute" : `${outageMinutes} minutes`;
+                }
+            }
+
+            // Count previously affected monitors
+            const assignedMons = await R.getAll(
+                `SELECT DISTINCT m.id FROM monitor m
+                LEFT JOIN monitor_probe mp ON m.id = mp.monitor_id
+                WHERE (m.probe_id = ? OR mp.probe_id = ?) AND m.active = 1`,
+                [probeId, probeId]
+            );
+            const previouslyAffectedCount = assignedMons ? assignedMons.length : 0;
+
+            const recoveredAt = dayjs().format("YYYY-MM-DD HH:mm:ss");
+            const recoveryMsg = `REMOTE PROBE RECOVERED\n\nProbe: ${probe.name}\nStatus: UP\nRecovered At: ${recoveredAt}\nOutage Duration: ${outageDurationStr}\nPreviously Affected Monitors: ${previouslyAffectedCount}`;
+
+            // Resolve active alert
+            if (existingAlert) {
+                await R.exec(
+                    "INSERT INTO alert_history (organization_id, alert_id, rule_id, state, message, created_at) VALUES (?, ?, 0, 'RECOVERED', ?, ?)",
+                    [orgId, existingAlert.id, recoveryMsg, isoNow]
+                );
+                await R.exec("DELETE FROM active_alert WHERE id = ?", [existingAlert.id]);
+            }
+
+            // Resolve open incidents
+            for (const inc of (openProbeIncidents || [])) {
+                await R.exec(
+                    "UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?",
+                    [isoNow, isoNow, inc.id]
+                );
+                await R.exec(
+                    "INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, NULL, 'resolved', 'Auto resolved on probe reconnection (UP)', ?)",
+                    [orgId, inc.id, isoNow]
+                );
+            }
+
+            // Dispatch probe recovery notification
+            await Probe.sendProbeNotification(probe, "UP", recoveryMsg, {
+                previouslyAffectedCount,
+                outageDurationStr,
+            });
+
+            if (io) {
+                io.emit("updateActiveAlerts");
+                io.emit("updateIncidentStats");
+                io.emit("updateProbeList");
+            }
+
+            return true;
+        } catch (e) {
+            console.error(`[Probe.resolveProbeOutage] Error resolving probe outage for #${probeId}: ${e.message}`);
+            return false;
+        }
     }
 
     /**
@@ -572,19 +778,40 @@ class Probe extends BeanModel {
                         );
                         stateChanges++;
 
-                        // Raise probe offline alert
-                        const alertMsg = `Distributed Probe #${p.id} (${p.name}) is OFFLINE. Last heartbeat was ${Math.round(elapsed / 1000)}s ago.`;
-                        const exists = await R.getCell(
+                        // Query assigned and affected monitors
+                        const assignedMons = await R.getAll(
+                            `SELECT DISTINCT m.id, m.name, m.hostname, m.url, m.active, m.user_id FROM monitor m
+                            LEFT JOIN monitor_probe mp ON m.id = mp.monitor_id
+                            WHERE (m.probe_id = ? OR mp.probe_id = ?)`,
+                            [p.id, p.id]
+                        );
+                        const assignedCount = assignedMons ? assignedMons.length : 0;
+                        const affectedMons = (assignedMons || []).filter((m) => m.active === 1);
+                        const affectedCount = affectedMons.length;
+
+                        const monListText = affectedMons.length > 0
+                            ? affectedMons.map((m, idx) => `${idx + 1}. ${m.name}`).join("\n")
+                            : "None";
+
+                        const lastHbText = p.last_heartbeat ? String(p.last_heartbeat) : "Never";
+                        const detectedAtText = dayjs().format("YYYY-MM-DD HH:mm:ss");
+                        const alertMsg = `REMOTE PROBE DOWN\n\nProbe: ${p.name}\nStatus: DOWN\nLast Heartbeat: ${lastHbText}\nDetected At: ${detectedAtText}\nAssigned Monitors: ${assignedCount}\nAffected Monitors: ${affectedCount}\n\nAffected monitors:\n${monListText}\n\nReason: Probe heartbeat timeout.`;
+
+                        // Deduplication: check if active alert already exists
+                        const existingAlert = await R.getRow(
                             "SELECT id FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'probe' AND target_id = ?",
                             [orgId, p.id]
                         );
-                        if (!exists) {
+
+                        if (!existingAlert) {
                             await R.exec(
                                 `INSERT INTO active_alert (
                                     organization_id, rule_id, target_type, target_id, metric, state, trigger_value, message, first_triggered_at, last_notified_at, created_at, updated_at
-                                ) VALUES (?, 0, 'probe', ?, 'probe_offline', 'CRITICAL', 0, ?, ?, ?, ?, ?)`,
-                                [orgId, p.id, alertMsg, isoNow, isoNow, isoNow, isoNow]
+                                ) VALUES (?, 0, 'probe', ?, 'probe_offline', 'CRITICAL', ?, ?, ?, ?, ?, ?)`,
+                                [orgId, p.id, affectedCount, alertMsg, isoNow, isoNow, isoNow, isoNow]
                             );
+                            // Send probe outage notification
+                            await Probe.sendProbeNotification(p, "DOWN", alertMsg, { assignedCount, affectedCount });
                         }
 
                         // Create open probe outage incident if not already exists
@@ -598,7 +825,7 @@ class Probe extends BeanModel {
                         );
                         if (!existingInc) {
                             const incTitle = `[OUTAGE] Distributed Probe #${p.id} (${p.name}) is OFFLINE`;
-                            const incDesc = `Distributed Probe #${p.id} (${p.name}) has exceeded the offline threshold. Last heartbeat was ${Math.round(elapsed / 1000)}s ago.`;
+                            const incDesc = `Distributed Probe #${p.id} (${p.name}) has exceeded the offline threshold. Last heartbeat was ${lastHbText}.\nAssigned Monitors: ${assignedCount}, Affected Monitors: ${affectedCount}.\n\nAffected monitors:\n${monListText}`;
                             await R.exec(
                                 `INSERT INTO incident (
                                     organization_id, title, content, description, failure_reason, severity, status, site_id, assigned_user_id, created_at, updated_at
@@ -618,15 +845,8 @@ class Probe extends BeanModel {
                             }
                         }
 
-                        // Target Isolation: Transition assigned monitors to PENDING (status 2 / UNKNOWN) without false DOWN
-                        const assignedMons = await R.getAll(
-                            `SELECT DISTINCT m.id, m.user_id FROM monitor m
-                            LEFT JOIN monitor_probe mp ON m.id = mp.monitor_id
-                            WHERE (m.probe_id = ? OR mp.probe_id = ?) AND m.active = 1`,
-                            [p.id, p.id]
-                        );
-
-                        for (const mon of assignedMons) {
+                        // Target Isolation: Transition assigned active monitors to PENDING (status 2 / UNKNOWN) without false DOWN
+                        for (const mon of affectedMons) {
                             const lastBeat = await R.findOne("heartbeat", "monitor_id = ? ORDER BY time DESC", [mon.id]);
                             if (!lastBeat || lastBeat.status !== 2) {
                                 let pendingBean = R.dispense("heartbeat");
@@ -665,21 +885,7 @@ class Probe extends BeanModel {
                     if (p.status !== "online") {
                         await R.exec("UPDATE probe SET status = 'online', updated_at = ? WHERE id = ?", [isoNow, p.id]);
                         stateChanges++;
-
-                        // Resolve active probe offline alert and incidents
-                        await R.exec("DELETE FROM active_alert WHERE (organization_id = ? OR organization_id IS NULL) AND target_type = 'probe' AND target_id = ?", [orgId, p.id]);
-                        const openProbeIncidents = await R.getAll(
-                            `SELECT incident.id FROM incident
-                            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
-                            WHERE (incident.organization_id = ? OR incident.organization_id IS NULL)
-                            AND incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
-                            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
-                            [orgId, p.id]
-                        );
-                        for (const inc of openProbeIncidents) {
-                            await R.exec("UPDATE incident SET status = 'RESOLVED', resolved_at = ?, updated_at = ? WHERE id = ?", [isoNow, isoNow, inc.id]);
-                            await R.exec("INSERT INTO incident_timeline (organization_id, incident_id, user_id, event_type, message, created_at) VALUES (?, ?, NULL, 'resolved', 'Auto resolved on probe recovery (UP)', ?)", [orgId, inc.id, isoNow]);
-                        }
+                        await Probe.resolveProbeOutage(p.id, orgId, io);
                     }
                 }
             }

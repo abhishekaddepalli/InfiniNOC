@@ -3,6 +3,7 @@ const assert = require("node:assert");
 const { R } = require("redbean-node");
 const path = require("path");
 const fs = require("fs");
+const { toSqlDatetime } = require("../../server/util-server.js");
 
 describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test Suite", () => {
     let Organization;
@@ -54,6 +55,11 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         Site = require("../../server/model/site.js");
         Monitor = require("../../server/model/monitor.js");
         Incident = require("../../server/model/incident.js");
+
+        R.modelList["monitor"] = Monitor;
+        R.modelList["probe"] = Probe;
+        R.modelList["site"] = Site;
+        R.modelList["heartbeat"] = require("../../server/model/heartbeat.js");
 
         await R.exec("INSERT INTO user (username, password, active) VALUES ('probe_ops_admin', 'pass123', 1)");
         const userId = await R.getCell("SELECT id FROM user WHERE username = 'probe_ops_admin'");
@@ -662,6 +668,299 @@ describe("InfiniNOC Remote Probes, Site Management, and Private Monitoring Test 
         assert.ok(monBeats.length > 0);
         assert.strictEqual(monBeats[0].status, 2, "Latest heartbeat must be PENDING (2)");
         assert.ok(monBeats[0].msg.includes("OFFLINE - Target State Unknown"));
+    });
+
+    it("19. Probe Outage Alert Rich Aggregation: includes assigned & affected count, names, and zero false monitor DOWN incidents", async () => {
+        // Create secondary monitor assigned to testProbe
+        const mon2 = R.dispense("monitor");
+        mon2.name = "Branch Access Switch 02";
+        mon2.type = "ping";
+        mon2.hostname = "192.168.1.2";
+        mon2.active = 1;
+        mon2.user_id = user.id;
+        mon2.organization_id = org.id;
+        mon2.probe_id = testProbe.id;
+        await R.store(mon2);
+
+        // Mark probe last heartbeat to 80s ago
+        const pastHeartbeat = new Date(Date.now() - 80000).toISOString().replace("T", " ").substring(0, 19);
+        await R.exec("UPDATE probe SET status = 'online', last_heartbeat = ? WHERE id = ?", [pastHeartbeat, testProbe.id]);
+
+        // Clear active alerts for testProbe to test fresh outage
+        await R.exec("DELETE FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+
+        // Run probe health check
+        await Probe.checkAllProbesHealth();
+
+        // 1. Verify single probe alert created
+        const probeAlert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+        assert.ok(probeAlert, "Active alert must exist for probe");
+        assert.strictEqual(probeAlert.metric, "probe_offline");
+        assert.ok(probeAlert.message.includes("REMOTE PROBE DOWN"));
+        assert.ok(probeAlert.message.includes(`Probe: ${testProbe.name}`));
+        assert.ok(probeAlert.message.includes("Assigned Monitors: 2"));
+        assert.ok(probeAlert.message.includes("Affected Monitors: 2"));
+        assert.ok(probeAlert.message.includes("Branch Core Switch (Private LAN)"));
+        assert.ok(probeAlert.message.includes("Branch Access Switch 02"));
+        assert.ok(probeAlert.message.includes("Reason: Probe heartbeat timeout."));
+
+        // 2. Verify NO false monitor DOWN incidents created
+        const falseIncidents = await R.getAll(
+            `SELECT incident.* FROM incident
+            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+            WHERE incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id IN (?, ?)
+            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+            [testMonitor.id, mon2.id]
+        );
+        assert.strictEqual(falseIncidents.length, 0, "No false monitor DOWN incidents should be created during probe outage");
+
+        // Clean up mon2
+        await R.exec("DELETE FROM heartbeat WHERE monitor_id = ?", [mon2.id]);
+        await R.exec("DELETE FROM monitor WHERE id = ?", [mon2.id]);
+    });
+
+    it("20. Probe Heartbeat Timeout Deduplication: repeated evaluation cycles do NOT duplicate probe alerts or incidents", async () => {
+        // Run health check again while probe remains offline
+        await Probe.checkAllProbesHealth();
+        await Probe.checkAllProbesHealth();
+
+        // Verify still exactly ONE active alert
+        const alerts = await R.getAll("SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+        assert.strictEqual(alerts.length, 1, "Exactly one active alert must exist despite multiple evaluation cycles");
+
+        // Verify still exactly ONE open probe incident
+        const incidents = await R.getAll(
+            `SELECT incident.id FROM incident
+            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+            WHERE incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
+            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+            [testProbe.id]
+        );
+        assert.strictEqual(incidents.length, 1, "Exactly one open incident must exist despite multiple evaluation cycles");
+    });
+
+    it("21. Probe Recovery Lifecycle: authenticated heartbeat resolves probe incident, clears alert, and logs RECOVERED", async () => {
+        // Probe sends fresh heartbeat
+        const hbResult = await Probe.recordHeartbeat(testProbe.id, probeApiKey, {
+            latency_ms: 12,
+            cpu_usage: 15.0,
+            memory_usage: 40.0,
+        });
+        assert.ok(hbResult.ok);
+        assert.strictEqual(hbResult.status, "online");
+
+        // 1. Verify active alert cleared
+        const activeAlert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+        assert.strictEqual(activeAlert, null, "Active alert must be cleared on probe recovery");
+
+        // 2. Verify alert history recorded with RECOVERED state
+        const historyRow = await R.getRow(
+            "SELECT * FROM alert_history WHERE state = 'RECOVERED' ORDER BY id DESC LIMIT 1"
+        );
+        assert.ok(historyRow, "Alert history must record RECOVERED entry");
+        assert.ok(historyRow.message.includes("REMOTE PROBE RECOVERED"));
+        assert.ok(historyRow.message.includes(testProbe.name));
+
+        // 3. Verify probe incident was auto-resolved
+        const openIncidents = await R.getAll(
+            `SELECT incident.id FROM incident
+            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+            WHERE incident_entity_link.entity_type = 'probe' AND incident_entity_link.entity_id = ?
+            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+            [testProbe.id]
+        );
+        assert.strictEqual(openIncidents.length, 0, "Probe outage incident must be auto-resolved on probe recovery");
+    });
+
+    it("22. Probe Repeated Heartbeat Deduplication: subsequent heartbeats while online do NOT generate duplicate recovery notifications", async () => {
+        const countBefore = (await R.getAll("SELECT * FROM alert_history WHERE state = 'RECOVERED'")).length;
+
+        // Send two more normal heartbeats while probe is online
+        await Probe.recordHeartbeat(testProbe.id, probeApiKey, { latency_ms: 10 });
+        await Probe.recordHeartbeat(testProbe.id, probeApiKey, { latency_ms: 11 });
+
+        const countAfter = (await R.getAll("SELECT * FROM alert_history WHERE state = 'RECOVERED'")).length;
+        assert.strictEqual(countAfter, countBefore, "Subsequent heartbeats while already online must not duplicate recovery entries");
+    });
+
+    it("23. Probe UP + Individual Monitor DOWN: creates monitor-specific alert identifying monitor and probe", async () => {
+        // Ensure probe is online
+        await R.exec("UPDATE probe SET status = 'online' WHERE id = ?", [testProbe.id]);
+
+        // Submit task DOWN result
+        const res = await Probe.submitTaskResult(testProbe.id, probeApiKey, {
+            monitor_id: testMonitor.id,
+            status: 0,
+            ping: null,
+            msg: "ICMP request timed out after 5000ms",
+        });
+        assert.ok(res.ok);
+
+        // 1. Verify monitor-specific alert created
+        const monAlert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'monitor' AND target_id = ?", [testMonitor.id]);
+        assert.ok(monAlert, "Active alert must exist for down monitor");
+        assert.ok(monAlert.message.includes("MONITOR DOWN"));
+        assert.ok(monAlert.message.includes(testMonitor.name));
+        assert.ok(monAlert.message.includes(testProbe.name));
+        assert.ok(monAlert.message.includes("192.168.1.1"));
+
+        // 2. Verify probe-level alert is NOT created
+        const probeAlert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+        assert.strictEqual(probeAlert, null, "Probe alert must not be created when only a monitor fails");
+    });
+
+    it("24. Monitor DOWN Deduplication: repeated failed task submissions do NOT duplicate active alerts or incidents", async () => {
+        // Submit second failed check
+        await Probe.submitTaskResult(testProbe.id, probeApiKey, {
+            monitor_id: testMonitor.id,
+            status: 0,
+            ping: null,
+            msg: "ICMP request timed out (second check)",
+        });
+
+        // Verify still exactly ONE active alert
+        const alerts = await R.getAll("SELECT * FROM active_alert WHERE target_type = 'monitor' AND target_id = ?", [testMonitor.id]);
+        assert.strictEqual(alerts.length, 1, "Exactly one active alert for monitor must exist");
+
+        // Verify still exactly ONE open incident
+        const incidents = await R.getAll(
+            `SELECT incident.id FROM incident
+            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+            WHERE incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?
+            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+            [testMonitor.id]
+        );
+        assert.strictEqual(incidents.length, 1, "Exactly one open incident for monitor must exist");
+    });
+
+    it("25. Individual Monitor Recovery: resolves only its own incident, leaving other entities intact", async () => {
+        // Create dummy probe incident to verify it remains untouched
+        await R.exec(
+            `INSERT INTO incident (
+                organization_id, title, content, description, failure_reason, severity, status, created_at, updated_at
+            ) VALUES (?, 'Dummy Probe Incident', 'Content', 'Desc', 'Reason', 'P1', 'OPEN', ?, ?)`,
+            [org.id, toSqlDatetime(), toSqlDatetime()]
+        );
+        const dummyIncId = await R.getCell("SELECT MAX(id) FROM incident WHERE organization_id = ?", [org.id]);
+        await R.exec(
+            "INSERT INTO incident_entity_link (organization_id, incident_id, entity_type, entity_id, created_at) VALUES (?, ?, 'probe', ?, ?)",
+            [org.id, dummyIncId, testProbe.id, toSqlDatetime()]
+        );
+
+        // Submit monitor UP result (recovery)
+        const recResult = await Probe.submitTaskResult(testProbe.id, probeApiKey, {
+            monitor_id: testMonitor.id,
+            status: 1,
+            ping: 5,
+            msg: "ICMP echo reply received from 192.168.1.1. Latency: 5 ms.",
+        });
+        assert.ok(recResult.ok);
+
+        // 1. Verify monitor incident is resolved
+        const openMonInc = await R.getAll(
+            `SELECT incident.id FROM incident
+            JOIN incident_entity_link ON incident.id = incident_entity_link.incident_id
+            WHERE incident_entity_link.entity_type = 'monitor' AND incident_entity_link.entity_id = ?
+            AND UPPER(incident.status) NOT IN ('RESOLVED', 'CLOSED')`,
+            [testMonitor.id]
+        );
+        assert.strictEqual(openMonInc.length, 0, "Monitor incident must be RESOLVED");
+
+        // 2. Verify probe incident is UNTOUCHED (still OPEN)
+        const probeInc = await R.getRow("SELECT status FROM incident WHERE id = ?", [dummyIncId]);
+        assert.strictEqual(probeInc.status, "OPEN", "Probe incident must remain OPEN when only a monitor recovers");
+
+        // Clean up dummy incident
+        await R.exec("DELETE FROM incident_entity_link WHERE incident_id = ?", [dummyIncId]);
+        await R.exec("DELETE FROM incident WHERE id = ?", [dummyIncId]);
+    });
+
+    it("26. Probe with Zero Assigned Monitors: still generates probe outage alert with 0 affected monitors", async () => {
+        // Create an unassigned probe
+        const emptyProbeToken = await Probe.createProbeRegistrationToken({
+            name: "Empty Standby Probe",
+            site_id: testSite.id,
+        }, org.id);
+
+        const emptyReg = await Probe.registerProbe(emptyProbeToken.probe.id, emptyProbeToken.registrationToken, "10.10.10.1", "1.0.0");
+        const emptyProbeId = emptyProbeToken.probe.id;
+
+        // Mark heartbeat to 90s ago
+        const pastHeartbeat = new Date(Date.now() - 90000).toISOString().replace("T", " ").substring(0, 19);
+        await R.exec("UPDATE probe SET status = 'online', last_heartbeat = ? WHERE id = ?", [pastHeartbeat, emptyProbeId]);
+
+        // Run health check
+        await Probe.checkAllProbesHealth();
+
+        // Verify probe alert created with 0 assigned and 0 affected monitors
+        const alert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [emptyProbeId]);
+        assert.ok(alert, "Active alert must exist for empty probe");
+        assert.ok(alert.message.includes("Assigned Monitors: 0"));
+        assert.ok(alert.message.includes("Affected Monitors: 0"));
+        assert.ok(alert.message.includes("Affected monitors:\nNone"));
+
+        // Clean up
+        await R.exec("DELETE FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [emptyProbeId]);
+        await R.exec("DELETE FROM probe WHERE id = ?", [emptyProbeId]);
+    });
+
+    it("27. Paused and Active Monitor Aggregation: paused monitors counted in assigned, excluded from affected", async () => {
+        // Create an inactive/paused monitor assigned to testProbe
+        const pausedMon = R.dispense("monitor");
+        pausedMon.name = "Paused Maintenance Router";
+        pausedMon.type = "ping";
+        pausedMon.hostname = "192.168.10.1";
+        pausedMon.active = 0; // Paused / Inactive
+        pausedMon.user_id = user.id;
+        pausedMon.organization_id = org.id;
+        pausedMon.probe_id = testProbe.id;
+        await R.store(pausedMon);
+
+        // Mark testProbe offline again
+        const pastHeartbeat = new Date(Date.now() - 75000).toISOString().replace("T", " ").substring(0, 19);
+        await R.exec("UPDATE probe SET status = 'online', last_heartbeat = ? WHERE id = ?", [pastHeartbeat, testProbe.id]);
+        await R.exec("DELETE FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+
+        await Probe.checkAllProbesHealth();
+
+        const alert = await R.getRow("SELECT * FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+        assert.ok(alert);
+        // testMonitor is active (1), pausedMon is inactive (0). Total assigned = 2, affected = 1.
+        assert.ok(alert.message.includes("Assigned Monitors: 2"));
+        assert.ok(alert.message.includes("Affected Monitors: 1"));
+        assert.ok(!alert.message.includes("Paused Maintenance Router"), "Paused monitor must not be in affected list");
+
+        // Clean up pausedMon
+        await R.exec("DELETE FROM monitor WHERE id = ?", [pausedMon.id]);
+        await R.exec("DELETE FROM active_alert WHERE target_type = 'probe' AND target_id = ?", [testProbe.id]);
+    });
+
+    it("28. Multi-Tenant Organization Isolation: probes and alerts remain strictly partitioned by organization_id", async () => {
+        // Create Org 2 and Probe 2
+        const user2 = await R.dispense("user");
+        user2.username = "tenant_two_admin";
+        user2.password = "pass123";
+        user2.active = 1;
+        await R.store(user2);
+
+        const org2 = await Organization.createOrganization("Tenant Two Operations", "tenant-two-ops", user2.id);
+        const token2 = await Probe.createProbeRegistrationToken({ name: "Tenant 2 Edge Probe" }, org2.id);
+        const probe2 = token2.probe;
+
+        // Verify probe list for Org 1 does not leak Probe 2
+        const org1Probes = await Probe.getProbeList(org.id);
+        assert.ok(org1Probes.find(p => p.id === testProbe.id));
+        assert.ok(!org1Probes.find(p => p.id === probe2.id), "Tenant 1 must not see Tenant 2 probe");
+
+        // Verify probe list for Org 2 sees only Probe 2
+        const org2Probes = await Probe.getProbeList(org2.id);
+        assert.strictEqual(org2Probes.length, 1);
+        assert.strictEqual(org2Probes[0].id, probe2.id);
+
+        // Clean up Org 2
+        await R.exec("DELETE FROM probe WHERE id = ?", [probe2.id]);
+        await R.exec("DELETE FROM organization WHERE id = ?", [org2.id]);
+        await R.exec("DELETE FROM user WHERE id = ?", [user2.id]);
     });
 
     after(async () => {
